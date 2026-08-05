@@ -16,14 +16,6 @@ import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
 
-/// Typedef for running processes (for injection & tests).
-typedef ProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-    });
-
 /// Command that executes a shell command in all repositories of the
 /// current ticket in the order of the processing list.
 class DoExecuteCommand extends DirCommand<void> {
@@ -36,7 +28,7 @@ class DoExecuteCommand extends DirCommand<void> {
     ProcessRunner? processRunner,
   }) : _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
-       _processRunner = processRunner ?? _defaultProcessRunner {
+       _processRunner = processRunner ?? defaultProcessRunner {
     _addArgs();
   }
 
@@ -45,20 +37,6 @@ class DoExecuteCommand extends DirCommand<void> {
 
   /// The process runner used to execute commands
   final ProcessRunner _processRunner;
-
-  /// Default process runner using Process.run with runInShell: true
-  // coverage:ignore-start
-  static Future<ProcessResult> _defaultProcessRunner(
-    String executable,
-    List<String> arguments, {
-    String? workingDirectory,
-  }) => Process.run(
-    executable,
-    arguments,
-    workingDirectory: workingDirectory,
-    runInShell: true,
-  );
-  // coverage:ignore-end
 
   @override
   Future<void> exec({required Directory directory, required GgLog ggLog}) =>

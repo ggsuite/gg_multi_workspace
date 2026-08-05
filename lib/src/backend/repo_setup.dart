@@ -11,15 +11,7 @@ import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:path/path.dart' as path;
-
-/// Runs a process; the named-argument shape used across gg_multi commands.
-typedef ProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-      bool runInShell,
-    });
+import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Installs dependencies for every package manager the repo in [dir] uses.
 ///

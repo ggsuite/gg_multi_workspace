@@ -14,9 +14,8 @@ import 'package:http/http.dart' as http;
 import 'package:interact/interact.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:gg_multi_core/gg_multi_core.dart' hide ProcessRunner;
-import 'package:gg_multi_workspace/src/backend/git_handler.dart'
-    hide ProcessRunner;
+import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
 /// Lets the user pick one branch from [branches]; returns null on cancel.

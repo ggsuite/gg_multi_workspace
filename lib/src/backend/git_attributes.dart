@@ -12,9 +12,7 @@ import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart
 import 'package:gg_log/gg_log.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:gg_multi_workspace/src/backend/repo_setup.dart'
-    show ProcessRunner;
-import 'package:gg_multi_core/gg_multi_core.dart' hide ProcessRunner;
+import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// The lines `gg` and the ticket workflow require in *every* repository's
 /// `.gitattributes` file, no matter which language it is written in.

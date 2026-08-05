@@ -32,6 +32,7 @@ void main() {
       List<String> arguments, {
       String? workingDirectory,
       Map<String, String>? environment,
+      bool? runInShell,
     }) async {
       gitCalls.add(
         '${path.basename(workingDirectory!)}: ${arguments.join(' ')}',

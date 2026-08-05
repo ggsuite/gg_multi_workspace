@@ -7,10 +7,9 @@
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Typedef for a process runner function.
-typedef ProcessRunner = Future<ProcessResult> Function(String, List<String>);
-
 /// A class responsible for cloning git repositories and performing Git/utility operations.
 class GitHandler {
   /// The function used to run system processes.
