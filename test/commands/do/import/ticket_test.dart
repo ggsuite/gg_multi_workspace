@@ -37,6 +37,7 @@ class MockProcessRunner extends Mock {
     List<String> arguments, {
     String? workingDirectory,
     bool runInShell,
+    Map<String, String>? environment,
   });
 }
 

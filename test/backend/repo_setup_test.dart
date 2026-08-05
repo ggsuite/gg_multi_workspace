@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
 
 void main() {
   late Directory tmp;
@@ -37,7 +38,7 @@ void main() {
     final calls = <List<String>>[];
 
     ProcessRunner runner({int exitCode = 0}) =>
-        (exe, args, {workingDirectory, runInShell = false}) async {
+        (exe, args, {workingDirectory, runInShell = false, environment}) async {
           calls.add(<String>[exe, ...args]);
           return ProcessResult(0, exitCode, '', 'boom');
         };

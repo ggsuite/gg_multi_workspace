@@ -20,10 +20,9 @@ import 'package:pubspec_parse/pubspec_parse.dart';
 
 import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart';
 import 'package:gg_multi_workspace/src/backend/dependency_repo_url.dart';
-import 'package:gg_multi_core/gg_multi_core.dart' hide ProcessRunner;
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/backend/git_attributes.dart';
-import 'package:gg_multi_workspace/src/backend/git_handler.dart'
-    hide ProcessRunner;
+import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/gitignore_lock_files.dart';
 import 'package:gg_multi_workspace/src/backend/legacy_git_hooks.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';

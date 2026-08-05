@@ -15,10 +15,8 @@ import 'package:args/command_runner.dart';
 // ignore: lines_longer_than_80_chars
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_localize_refs/gg_localize_refs.dart';
-import 'package:gg_multi_core/gg_multi_core.dart' hide ProcessRunner;
-import 'package:gg_multi_workspace/src/backend/git_handler.dart'
-    hide ProcessRunner;
-import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/commands/do/add.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_status_printer/gg_status_printer.dart';
@@ -41,6 +39,7 @@ class MockProcessRunner extends Mock {
     List<String> arguments, {
     String? workingDirectory,
     bool runInShell,
+    Map<String, String>? environment,
   });
 }
 
