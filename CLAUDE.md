@@ -1,0 +1,69 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What This Is
+
+`gg_multi_workspace` holds the workspace-management commands of the gg_multi tool family: building the ocean, adding repositories, creating/importing/closing tickets, syncing with the git platforms and listing what a workspace contains. The workspace *model* (layout, org folders, url parsing, ticket metadata) lives in `gg_multi_core`; the daily commit/push/review flows in `gg_multi_commit`; the publish orchestrator in `gg_multi_do_publish`.
+
+All commands extend `DirCommand<T>` from `gg_args`; the primary logic lives in `get()`, and `exec()` delegates to it. `ggLog` is constructor-injected everywhere for testability.
+
+## Behavior notes
+
+### `do add`
+
+`DoAddCommand` (in `lib/src/commands/do/add.dart`, helper logic in `lib/src/backend/add_repository_helper.dart`) is context-aware: from the workspace root it clones into `.ocean/<org>/`; from inside a ticket it also copies into `tickets/<id>/<org>/` and pulls local dependencies in. It accepts a repo URL/`owner/repo`/name, or an **org** URL (`github.com/<org>` or the browser form `github.com/orgs/<org>`) to clone every repo of that org. An existing copy is looked up across the whole workspace, so a repo that is still flat is not cloned a second time. It runs `migrateToOrgFolders` first (ocean **and** ticket — moving a ticket repo invalidates the relative path refs between the ticket repos; `do add` repairs them in its closing re-localization pass, which is why the ticket is only migrated here), removes legacy git hooks, installs `.gitattributes` lines, rewrites the ticket's `ticket.json` and the `.code-workspace` file.
+
+### `.gitattributes` upkeep
+
+`installGitattributes` (in `lib/src/backend/git_attributes.dart`) ensures every ticket repo carries the lines gg depends on (`* text=auto eol=lf`, `merge=ours` for `.gg/gg.json` and the lock files of the repo's languages, `merge=union` for `CHANGELOG.md`) and that `git config merge.ours.driver true` is set locally. Missing lines are appended individually, an already complete file is left untouched, and a repo without `.git` is skipped with a warning. It used to be the `do install-gitattributes` command; `do add` was its only real caller, so it is a function called from `_writeProjectConfigFiles`.
+
+### No git hooks
+
+gg does **not** install git hooks. An earlier version made `do add` write a `pre-push` hook that ran `dart run .gg/verify_push.dart`. Because the hook lives in the untracked `.git/hooks/`, it survives in every checkout that ever ran an older `do add`. `removeLegacyGitHooks` (in `lib/src/backend/legacy_git_hooks.dart`) therefore deletes it — plus the `.gg/verify_push.dart` it invoked — from every ticket repo on each `do add`. A `pre-push` hook that does _not_ reference `.gg/verify_push.dart` is the user's own and is left alone.
+
+### `do create ticket`
+
+`TicketCommand` (in `lib/src/commands/do/create/ticket.dart`) creates `tickets/<issue-id>/` with the root `.ticket` file and the VS Code workspace `<issue-id>.code-workspace`, so `do code <ticket>` opens something before the first `do add`. It also creates the ticket's trash folder `<root>/.trash/<issue-id>/`. A ticket without repos gets the ticket folder itself (`{"path": "."}`) as its single entry — `writeCodeWorkspaceFile` never writes an empty folder list. `do add` rewrites the file with one `<org>/<repo>` entry per repository.
+
+### `do create graph`
+
+`GraphCommand` (in `lib/src/commands/do/create/graph.dart`) writes the dependency graph of the workspace to **stdout** — `mermaid` (`flowchart LR`, `--orientation=vertical` gives `TD`) or `json`. `--output <file>` (`-o`) redirects it into a file. Warnings go to stderr, so stdout stays machine readable. **Organization boxes**: repositories are wrapped in a `subgraph` per organization — only when more than one organization is shown; `--no-group-by-orgs` turns them off; box ids are prefixed with `org_` and allocated from the same used-set as the nodes. **Edge direction**: the arrow leaves the package that is depended upon and points at the one that needs it; edges are reversed once, right before both renderers. **Scope** follows the working directory: outside a ticket the graph covers `.ocean`; inside it covers the ticket repos plus everything they reach (ticket repos shadow their ocean copy, unreached ocean repos are dropped, checked-out repos are marked). `--org <name>` filters to one organization. **Edges** are built from `Node.manifests` directly so dev dependencies stay distinguishable (`--no-dev-dependencies`, dashed `-.->`) and third-party packages can be shown as leaves (`--3rdparty-deps`). **`--transitive-reduction`** (on by default) drops every edge whose target is reachable via a longer path; all removals are decided against the unreduced graph. Building across the two roots needs `Graph.get(packageDirs: …)` from gg_local_package_dependencies ≥ 2.1.0.
+
+### `do import ticket`
+
+`DoCheckoutCommand` (in `lib/src/commands/do/import/ticket.dart`) reproduces a whole ticket from a `ticket.json` — its repositories on their feature branch. `gg do import ticket <X>` resolves `<X>` in this order: (1) an `http(s)` URL → downloaded (`package:http`, injectable as `TicketJsonFetcher`); (2) a path → the file is read; a **directory** is taken as a ticket folder and its `ticket.json` is read; a path that exists but holds no `ticket.json` fails with that message. (3) _(legacy)_ a name → the marker older gg versions committed is read from `origin/<X>` across the `.ocean` repos (both `.gg/.ticket.json` and `.gg/ticket.json` are tried, with a deprecation hint). Once in hand, it recreates the ticket folder + root `.ticket` + a local `ticket.json`, clones missing repos (into `<ocean>/<org>/<repo>`), copies each into `<ticket>/<org>/<repo>`, checks out the existing feature branch, and installs deps. The ocean is migrated to org folders first (the ticket it builds is fresh).
+
+### `do rm` group
+
+**`do rm repo <name…>`** (`RemoveRepoCommand`, `lib/src/commands/do/rm/repo.dart`) deletes repositories **from the ticket it is invoked in** — outside a ticket it refuses and points at `--from-master`. Several names are processed dependents-first (reverse `SortedProcessingList` order). Repos are addressed by plain name and resolved inside their organization folder; an organization folder that loses its last repo is removed with it. **`--from-master`** deletes from the ocean instead — but only when no ticket still references them; otherwise the offending tickets are listed. **Dependency-chain guard**: a repo that _links_ two other repos of the ticket (`a → b → c`, removing `b`) is refused; the offending edges are listed. **`ticket.json` upkeep**: after a deletion the ticket's `ticket.json` is rewritten without the repo (only a ticket that already has one is touched). **Localized-overrides upkeep**: the deleted repo is removed from `pubspec_overrides.yaml` / `pnpm-workspace.yaml` of every remaining repo (`removeDependencyOverrides`, `lib/src/backend/dependency_overrides.dart`); a file whose only entries were the removed ones is deleted; an unparsable file is left untouched. The repo is matched under every name it can appear as — collected _before_ the folder is gone.
+
+**`do rm ticket [<ticket-id>...]`** (`RemoveTicketCommand`, `lib/src/commands/do/rm/ticket.dart`) closes tickets. Names are resolved against `<root>/tickets/<id>`; without arguments the ticket of the current working directory is taken; when neither applies the command names both ways instead of guessing. Names that are no ticket abort the whole call **before the first removal**. It delegates per ticket to `cleanUpTicket` (gg_multi_core), which deletes the remote feature branch of every repo and moves the **whole ticket folder** to `<root>/.trash/<ticket>`, followed by the `cd <workspace root>` command in blue. `--no-delete-remote-branch` keeps the remote branches.
+
+### `do upgrade ocean`
+
+`UpdateOceanCommand` (in `lib/src/commands/do/upgrade/ocean.dart`) brings the ocean back in sync with the git platforms. It reads every organization from `.organizations` (inside `.ocean`), asks each one for its current repository list (`fetchOrgRepos`, four organizations in parallel via `runWithLimit`), clones what the ocean lacks and trashes what the organization no longer offers. **Matching is by remote url, not folder name** (`RepoFolderResolver.resolveByRemoteUrl`). Cloning goes through `addRepositoryHelper`. **Nothing is deleted**: a dropped repo moves to `<root>/.trash/.ocean/<org>/<repo>` (`Trash.moveFromOcean`), and the organization folder that lost its last repo goes with it. **Nothing is removed on a guess**: unparsable/missing remote urls, unregistered organizations and every repo of an organization whose fetch failed are left untouched; failures are reported in red and the other organizations still run. Tickets are **not** consulted — a ticket holds its own clone. `--dry-run`/`-n` reports `Would add …`/`Would move …` and changes nothing (the flat-workspace migration is skipped too).
+
+### `do init claude`
+
+`DoClaudeCommand` (in `lib/src/commands/do/init/claude.dart`) generates an aggregated `CLAUDE.md` at the ticket-workspace root: detects the ticket path, resolves repos in dependency order with `SortedProcessingList`, reads each repo's `CLAUDE.md` (throws with a helpful message if one is missing) and writes a single `<ticket-dir>/CLAUDE.md` combining workspace overview, commands, per-repo architecture sections, and code standards.
+
+### `do exec cmd`
+
+`DoExecuteCommand` (in `lib/src/commands/do/exec/cmd.dart`) runs one shell command in every ticket repo in dependency order, logging each repo name before its output. It collects the repos whose command exited non-zero instead of stopping at the first one, then lists them and throws. The injectable `ProcessRunner` runs with `runInShell: true`; the `-l`/`--line-length` option exists only so an argument like `dart fmt -l 120` does not fail arg parsing.
+
+### `do ls`
+
+`ls` is a subcommand of `do` (listing a workspace is one of the actions `do` groups): `ls repos`, `ls organizations`, `ls deps <target>`, `ls tickets` — backed by `lib/src/backend/list_backend.dart`.
+
+## Code Standards
+
+- **Line length**: 80 characters maximum.
+- **Quotes**: Single quotes (`prefer_single_quotes`).
+- **Trailing commas**: Required in all parameter/argument lists.
+- **Return types**: Always declared explicitly.
+- **Public API docs**: All public members require dartdoc comments.
+- **Strict analyzer**: `strict-casts`, `strict-inference`, `strict-raw-types` enabled.
+- **Test coverage**: 100% required. Every file under `lib/src/` must have a matching test at the same relative path under `test/`.
+- **Mocks**: Mock classes live in the same file as the class they mock, extending `MockDirCommand`.
+- **Commits/pushes**: Always go through `gg do commit` / `gg do push`, never raw `git commit` / `git push`.
