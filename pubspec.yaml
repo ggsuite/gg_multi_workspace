@@ -14,7 +14,7 @@ dependencies:
   gg_local_package_dependencies: ^2.1.0
   gg_localize_refs: ^3.5.0
   gg_log: ^1.0.6
-  gg_multi_core: ^1.0.0
+  gg_multi_core: ^1.0.1
   gg_one: ^12.9.2
   gg_status_printer: ^1.4.2
   http: ^1.6.0
