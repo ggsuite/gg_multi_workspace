@@ -8,6 +8,7 @@
 @Timeout(Duration(minutes: 2))
 library;
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 

@@ -4,10 +4,10 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
-import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Typedef for a process runner function.
 /// A class responsible for cloning git repositories and performing Git/utility operations.
