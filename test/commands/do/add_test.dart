@@ -503,7 +503,10 @@ dev_dependencies:
           includeUntracked: any(named: 'includeUntracked'),
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
-          stateKey: any(named: 'stateKey'),
+          // Localizing rewrites the manifests, so the recorded »everything
+          // is committed« hash has to be taken anew — otherwise the next
+          // command in the ticket sees a repo that looks uncommitted.
+          stateKey: gg.GgState.doCommitKey,
         ),
       ).called(greaterThanOrEqualTo(1));
 

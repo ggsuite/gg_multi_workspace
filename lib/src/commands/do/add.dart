@@ -1046,6 +1046,9 @@ class AddCommand extends Command<dynamic> {
           ggLog: ggLog,
           message: '${gg.ggCommitPrefix}changed references to path',
           userCommitMessage: gg.readTicketDescriptionForRepo,
+          // Localizing rewrites the manifests, so the recorded »everything is
+          // committed« hash no longer matches the tree it was taken from.
+          stateKey: gg.GgState.doCommitKey,
         );
       } catch (e) {
         ggLog(cError('Failed to commit $repoName: $e'));
