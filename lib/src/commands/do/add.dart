@@ -12,7 +12,6 @@ import 'package:gg_console_colors/gg_console_colors.dart';
 // ignore: lines_longer_than_80_chars
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_localize_refs/gg_localize_refs.dart';
-import 'package:gg_git/gg_git.dart' show ggCommitPrefix;
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_status_printer/gg_status_printer.dart';
@@ -1044,7 +1043,7 @@ class AddCommand extends Command<dynamic> {
         await _systemCommit.commit(
           directory: repoDir,
           ggLog: ggLog,
-          message: '${ggCommitPrefix}changed references to path',
+          message: '${gg.ggCommitPrefix}changed references to path',
           userCommitMessage: gg.readTicketDescriptionForRepo,
         );
       } catch (e) {
