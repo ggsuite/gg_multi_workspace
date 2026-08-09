@@ -9,4 +9,4 @@
 // coverage:ignore-file
 
 /// The version of the `gg_multi_workspace` package.
-const String ggMultiWorkspaceVersion = '2.0.0';
+const String ggMultiWorkspaceVersion = '2.1.0';
