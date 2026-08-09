@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -46,7 +47,7 @@ class AddCommand extends Command<dynamic> {
     ProcessRunner? processRunner,
     String? oceanWorkspacePath,
     String? executionPath,
-    gg.DoCommit? ggDoCommit,
+    gg.GgSystemCommit? systemCommit,
     SortedProcessingList? sortedProcessingList,
     ChangeRefsToPubDev? unlocalizeRefs,
     ChangeRefsToLocal? localizeRefs,
@@ -62,7 +63,7 @@ class AddCommand extends Command<dynamic> {
        executionPath = executionPath ?? Directory.current.path,
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),
-       _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
+       _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
        _unlocalizeRefs = unlocalizeRefs ?? ChangeRefsToPubDev(ggLog: ggLog),
@@ -121,7 +122,7 @@ class AddCommand extends Command<dynamic> {
   final String executionPath;
 
   /// gg do commit used after localization with --git in ticket copies.
-  final gg.DoCommit _ggDoCommit;
+  final gg.GgSystemCommit _systemCommit;
 
   /// Sorted processing helper for ticket-wide iteration.
   final SortedProcessingList _sortedProcessingList;
@@ -1035,14 +1036,19 @@ class AddCommand extends Command<dynamic> {
         upgradeDart: true,
       );
 
-      // Commit per repo; skip changelog (gg_changelog needs pubspec.yaml).
+      // A system commit per repo: only gg's own reference files belong in
+      // it. »do add« pulls a repository into a ticket that may well carry
+      // unfinished work — that work gets its own, prefix-less commit first
+      // instead of vanishing into gg's bookkeeping.
       try {
-        await _ggDoCommit.exec(
+        await _systemCommit.commit(
           directory: repoDir,
           ggLog: ggLog,
-          message: '#gg: changed references to path',
-          force: true,
-          updateChangeLog: false,
+          message: '${gg.ggCommitPrefix}changed references to path',
+          userCommitMessage: gg.readTicketDescriptionForRepo,
+          // Localizing rewrites the manifests, so the recorded »everything is
+          // committed« hash no longer matches the tree it was taken from.
+          stateKey: gg.GgState.doCommitKey,
         );
       } catch (e) {
         ggLog(cError('Failed to commit $repoName: $e'));

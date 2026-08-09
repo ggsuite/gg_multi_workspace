@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,7 +12,6 @@ import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:path/path.dart' as path;
-import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Installs dependencies for every package manager the repo in [dir] uses.
 ///
