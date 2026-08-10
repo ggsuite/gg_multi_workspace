@@ -68,7 +68,7 @@ void main() {
 
     test('opens workspace file when ticket exists but is empty', () async {
       Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T1'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'),
       ).createSync(recursive: true);
 
       await runner.run(<String>['code', 'T1']);
@@ -77,7 +77,7 @@ void main() {
       expect(launched[0][0], 'code');
       final expectedWorkspace = path.join(
         tempRoot.path,
-        ggMultiTicketFolder,
+        ggMultiLegacyTicketFolder,
         'T1',
         'T1.code-workspace',
       );
@@ -88,7 +88,7 @@ void main() {
 
     test('opens workspace file for ticket with repos', () async {
       final tdir = Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T2'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T2'),
       )..createSync(recursive: true);
       final a = Directory(path.join(tdir.path, 'A'))..createSync();
       File(path.join(a.path, 'pubspec.yaml')).writeAsStringSync('name: A');
@@ -107,7 +107,7 @@ void main() {
 
     test('opens single repo when specified', () async {
       final tdir = Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T3'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T3'),
       )..createSync(recursive: true);
       final r = Directory(path.join(tdir.path, 'MyRepo'))..createSync();
       File(path.join(r.path, 'pubspec.yaml')).writeAsStringSync('name: MyRepo');
@@ -122,7 +122,7 @@ void main() {
 
     test('opens single repo when specified with backslash separator', () async {
       final tdir = Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T5'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T5'),
       )..createSync(recursive: true);
       final r = Directory(path.join(tdir.path, 'SlashRepo'))..createSync();
       File(
@@ -140,7 +140,7 @@ void main() {
     test('opens a repo that sits in an organization folder', () async {
       // `<ticket>/<repo>` addresses the repo wherever it is in the ticket.
       final tdir = Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T_ORG'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T_ORG'),
       )..createSync(recursive: true);
       final r = Directory(path.join(tdir.path, 'ggsuite', 'OrgRepo'))
         ..createSync(recursive: true);
@@ -157,7 +157,7 @@ void main() {
 
     test('logs error when specified repo missing', () async {
       Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T4'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T4'),
       ).createSync(recursive: true);
       await runner.run(<String>['code', 'T4/NoRepo']);
       expect(
@@ -181,7 +181,7 @@ void main() {
     test('opens workspace inside ticket dir when no args', () async {
       // Create a ticket folder under the temp root.
       final ticketDir = Directory(
-        path.join(tempRoot.path, ggMultiTicketFolder, 'T_noArgs'),
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T_noArgs'),
       )..createSync(recursive: true);
       final a = Directory(path.join(ticketDir.path, 'A'))..createSync();
       File(path.join(a.path, 'pubspec.yaml')).writeAsStringSync('name: A');

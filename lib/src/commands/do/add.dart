@@ -191,9 +191,11 @@ class AddCommand extends Command<dynamic> {
     // below sees a single layout.
     migrateToOrgFolders(workspacePath: oceanWorkspacePath, ggLog: ggLog);
     if (ticketPath != null) {
-      // The ticket is re-localized at the end of this run, which repairs the
-      // relative path references the move invalidates.
-      migrateToOrgFolders(workspacePath: ticketPath, ggLog: ggLog);
+      // A ticket goes the opposite way: it holds its repos flat, so the ones
+      // an older gg put into organization folders move back up. The ticket is
+      // re-localized at the end of this run, which repairs the relative path
+      // references the move invalidates.
+      migrateTicketToFlatFolders(ticketPath: ticketPath, ggLog: ggLog);
     }
 
     // If not in a ticket workspace: keep original behaviour (no graph logic).
@@ -217,10 +219,19 @@ class AddCommand extends Command<dynamic> {
 
     // Ticket mode: ensure requested repos are present in ocean first.
     final requestedRepoNames = <String>{};
+
+    // The organization a target names is the only thing that tells two
+    // same-named ocean repos apart — the name alone would always resolve to
+    // the first of them. Kept per repo name for the copy step below.
+    final requestedRepoUrls = <String, String>{};
+
     for (final targetArg in targets) {
       final repoName = extractRepoName(targetArg);
       if (repoName != null) {
         requestedRepoNames.add(repoName);
+        if (RepoFolderResolver.urlIdentity(targetArg) != null) {
+          requestedRepoUrls[repoName] = targetArg;
+        }
       }
     }
 
@@ -324,6 +335,7 @@ class AddCommand extends Command<dynamic> {
     await _copyReposToTicket(
       ticketPath: ticketPath,
       repoNames: finalToCopy,
+      repoUrls: requestedRepoUrls,
       ggLog: taskLog,
       reportLog: ggLog,
     );
@@ -642,6 +654,7 @@ class AddCommand extends Command<dynamic> {
   Future<void> _copyReposToTicket({
     required String ticketPath,
     required Set<String> repoNames,
+    required Map<String, String> repoUrls,
     required GgLog ggLog,
     required GgLog reportLog,
     int maxParallel = 4,
@@ -659,6 +672,7 @@ class AddCommand extends Command<dynamic> {
         final repoName = queue[index];
         final copied = await _copyRepoToTicket(
           repoName: repoName,
+          repoUrl: repoUrls[repoName],
           ticketPath: ticketPath,
           ggLog: ggLog,
         );
@@ -686,25 +700,41 @@ class AddCommand extends Command<dynamic> {
   /// Returns false when the repository is not in the ocean at all.
   Future<bool> _copyRepoToTicket({
     required String repoName,
+    required String? repoUrl,
     required String ticketPath,
     required GgLog ggLog,
   }) async {
-    final srcDir = RepoFolderResolver.resolve(
-      workspacePath: oceanWorkspacePath,
-      repoName: repoName,
-    );
+    // A repo the user addressed by url is looked up by that url: two
+    // organizations can own a repository of this name, and the name alone
+    // would always find the same one of them.
+    final srcDir =
+        (repoUrl == null
+            ? null
+            : RepoFolderResolver.resolveByRemoteUrl(
+                workspacePath: oceanWorkspacePath,
+                repoUrl: repoUrl,
+              )) ??
+        RepoFolderResolver.resolve(
+          workspacePath: oceanWorkspacePath,
+          repoName: repoName,
+        );
     if (srcDir == null) {
       ggLog(cError('Repository $repoName not found in ocean.'));
       return false;
     }
 
-    // The ticket copy keeps the location the repo has in the ocean
-    // workspace, i.e. `<ticket>/<org>/<repo>`.
-    final relativePath = RepoFolderResolver.relativePath(
-      workspacePath: oceanWorkspacePath,
-      repoDir: srcDir,
+    // The ticket holds its repos flat — it only falls back to an organization
+    // folder when the name is already taken by a repo of another one.
+    final destDir = Directory(
+      RepoFolderResolver.ticketDestination(
+        ticketPath: ticketPath,
+        repoUrl: RepoFolderResolver.remoteUrl(srcDir) ?? '',
+        // The folder name of the ocean copy, not the requested name: for a
+        // cross-language bridge repo the package name differs from it, and
+        // the ticket keeps the name the repository has on disk.
+        repoName: path.basename(srcDir.path),
+      ),
     );
-    final destDir = Directory(path.join(ticketPath, relativePath));
     if (destDir.existsSync() && destDir.listSync().isNotEmpty) {
       ggLog(darkGray('$repoName already exists in ticket workspace.'));
       return true;
