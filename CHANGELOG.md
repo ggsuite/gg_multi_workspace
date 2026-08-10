@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Refactor commit messages, version increment
+
 ## 3.0.0 - 2026-08-10
 
 ## 2.3.3 - 2026-08-10
