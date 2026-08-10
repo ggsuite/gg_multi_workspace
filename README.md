@@ -18,7 +18,7 @@ underlying model lives in `gg_multi_core`.
 | `do import ticket <path\|url>`      | reproduce a whole ticket from a `ticket.json`                                            |
 | `do create ticket <id>`             | create `tickets/<id>/` with `ticket.json` file and `.code-workspace`                         |
 | `do create graph`                   | write the dependency graph of the workspace as mermaid or json                           |
-| `do rm repo <name…>`                | delete repos from the current ticket (or, with `--from-master`, from the ocean)          |
+| `do rm repo <name…>`                | delete repos from the current ticket (never from the ocean)                              |
 | `do rm ticket [<id>...]`            | close tickets: delete remote branches, move the whole folder to `.trash`                 |
 | `do upgrade ocean`                  | sync `.ocean` with every registered organisation: clone new repos, trash gone ones       |
 | `do code`                           | open the current ticket in VS Code                                                       |
