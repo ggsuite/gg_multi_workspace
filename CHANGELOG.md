@@ -6,6 +6,7 @@
 
 - Various log and color fixes across the gg command output
 - Fix org-url repo add, code-workspace upkeep on rm and the auto-merge PR hint
+- Various fixes
 
 ## 2.3.2 - 2026-08-10
 
