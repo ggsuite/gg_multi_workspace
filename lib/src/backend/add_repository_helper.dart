@@ -39,7 +39,7 @@ Future<Organization?> defaultSelectOrganization(
     'the organization prompt',
     'pass the full repository url instead of the plain name "$repoName"',
   );
-  final index = gg.GgPrompts.current.select(
+  final index = await gg.GgPrompts.current.select(
     prompt: '$repoName exists in several organizations. Which one?',
     options: <String>[for (final org in organizations) '${org.name}/$repoName'],
   );

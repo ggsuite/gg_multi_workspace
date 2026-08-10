@@ -123,7 +123,7 @@ class DoCheckoutCommand extends Command<dynamic> {
       'the ticket branch prompt',
       'pass the branch explicitly instead of a bare repository name',
     );
-    final index = GgPrompts.current.select(
+    final index = await GgPrompts.current.select(
       prompt: 'Select a ticket branch',
       options: branches,
     );
