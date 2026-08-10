@@ -96,8 +96,9 @@ bool _removeDartOverrides(File file, Set<String> packageNames) {
 /// `overrides: {<name>: link:../<repo>}`, and a repo that leaves the ticket
 /// turns its entry into a dangling symlink target every `pnpm install` of
 /// the remaining repos fails on. Delegates to
-/// [PnpmWorkspaceIo.removeOwnedOverrides], so foreign settings and hand
-/// written overrides survive and the file is deleted only when
+/// [PnpmWorkspaceIo.removeOwnedOverrides] with `restrictToNames`, so foreign
+/// settings, hand written overrides and — crucially — the links to the repos
+/// that stay in the ticket survive; the file is deleted only when
 /// gg_localize_refs created it. An unparsable file is the user's and is
 /// left untouched.
 bool _removePnpmOverrides(Directory repoDir, Set<String> packageNames) {
@@ -109,6 +110,10 @@ bool _removePnpmOverrides(Directory repoDir, Set<String> packageNames) {
     edit = io.removeOwnedOverrides(
       projectDir: repoDir,
       dependencyNames: packageNames,
+      // Only the names of the repo that left the ticket. Without this the
+      // call also sweeps every other override linking a sibling checkout —
+      // and those siblings are the repos that stay.
+      restrictToNames: true,
     );
   } on Exception {
     return false;
