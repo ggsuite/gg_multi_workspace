@@ -105,9 +105,7 @@ class AddCommand extends Command<dynamic> {
     );
     argParser.addFlag(
       'transitive-repos',
-      help:
-          'Also add the repos that lie between the ticket repos in the '
-          'dependency graph (default)',
+      help: 'Also add the repos between the ticket repos (default)',
       defaultsTo: true,
       negatable: true,
     );

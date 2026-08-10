@@ -2408,22 +2408,27 @@ version: 1.0.0
         final cDir = Directory(path.join(oceanWorkspacePath, 'c'))
           ..createSync(recursive: true);
 
-        File(path.join(aDir.path, 'pubspec.yaml')).writeAsStringSync('''
-name: a
-version: 1.0.0
-dependencies:
-  b: ^1.0.0
-''');
-        File(path.join(bDir.path, 'pubspec.yaml')).writeAsStringSync('''
-name: b
-version: 1.0.0
-dependencies:
-  c: ^1.0.0
-''');
-        File(path.join(cDir.path, 'pubspec.yaml')).writeAsStringSync('''
-name: c
-version: 1.0.0
-''');
+        File(path.join(aDir.path, 'pubspec.yaml')).writeAsStringSync(
+          [
+            'name: a',
+            'version: 1.0.0',
+            'dependencies:',
+            '  b: ^1.0.0',
+            '',
+          ].join('\n'),
+        );
+        File(path.join(bDir.path, 'pubspec.yaml')).writeAsStringSync(
+          [
+            'name: b',
+            'version: 1.0.0',
+            'dependencies:',
+            '  c: ^1.0.0',
+            '',
+          ].join('\n'),
+        );
+        File(
+          path.join(cDir.path, 'pubspec.yaml'),
+        ).writeAsStringSync(['name: c', 'version: 1.0.0', ''].join('\n'));
 
         final ticketDir = Directory(
           path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ'),
