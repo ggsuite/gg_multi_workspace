@@ -16,7 +16,7 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Closes one or more tickets: deletes the remote feature branches of their
 /// repositories and moves each whole ticket — repositories as they are, plus
-/// `ticket.json`, `.ticket`, `.gg/` and the `.code-workspace` file — to
+/// `ticket.json`, `.gg/` and the `.code-workspace` file — to
 /// `<root>/.trash/<ticket>`.
 ///
 /// The tickets to close are named as arguments (`gg do rm ticket 88 92`).

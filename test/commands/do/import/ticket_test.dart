@@ -7,6 +7,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:args/command_runner.dart';
 import 'package:gg_git/gg_git.dart' as gg_git;
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
@@ -216,7 +217,10 @@ void main() {
         await runCmd(build(), [file.path]);
 
         final tdir = ticketDirOf('feat_x');
-        expect(File(path.join(tdir.path, '.ticket')).existsSync(), isTrue);
+        expect(
+          File(path.join(tdir.path, ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
         expect(File(path.join(tdir.path, 'ticket.json')).existsSync(), isTrue);
         expect(logged('Checked out ticket feat_x'), isTrue);
       });
@@ -347,7 +351,10 @@ void main() {
 
         final tdir = ticketDirOf('feat_x');
         expect(tdir.existsSync(), isTrue);
-        expect(File(path.join(tdir.path, '.ticket')).existsSync(), isTrue);
+        expect(
+          File(path.join(tdir.path, ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
         expect(
           File(path.join(tdir.path, 'feat_x.code-workspace')).existsSync(),
           isTrue,
