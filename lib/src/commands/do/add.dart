@@ -14,6 +14,7 @@ import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart
 import 'package:gg_localize_refs/gg_localize_refs.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
+import 'package:gg_process/gg_process.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 import 'package:pubspec_parse/pubspec_parse.dart';
@@ -58,7 +59,7 @@ class AddCommand extends Command<dynamic> {
   }) : _selectOrganization = selectOrganization ?? defaultSelectOrganization,
        gitCloner = gitCloner ?? GitHandler(),
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
-       processRunner = processRunner ?? Process.run,
+       processRunner = processRunner ?? ggRunProcess,
        executionPath = executionPath ?? Directory.current.path,
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),

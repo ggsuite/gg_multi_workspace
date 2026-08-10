@@ -6,6 +6,8 @@
 
 import 'dart:io';
 
+import 'package:gg_process/gg_process.dart';
+
 /// Typedef for launching a process, mainly for testability.
 typedef ProcessStarter =
     Future<void> Function(
@@ -25,7 +27,7 @@ typedef ProcessStarter =
 /// ```
 class VSCodeLauncher {
   /// Constructs a VSCodeLauncher with optional [processStarter] injection.
-  /// The default starts VS Code using [Process.start] with
+  /// The default starts VS Code using [GgProcessDelegate.current] with
   /// `runInShell: true`.
   VSCodeLauncher({ProcessStarter? processStarter})
     : _starter = processStarter ?? _defaultStarter;
@@ -62,7 +64,7 @@ class VSCodeLauncher {
     // matters here — its stdio is not connected to our terminal. An attached
     // `code` writes into the same line gg just printed and cuts the
     // confirmation in half.
-    await Process.start(
+    await ggStartProcess(
       executable,
       arguments,
       runInShell: runInShell,

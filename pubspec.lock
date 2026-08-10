@@ -302,7 +302,7 @@ packages:
     source: path
     version: "1.0.1"
   gg_process:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "../gg_process"
       relative: true
@@ -376,7 +376,7 @@ packages:
     source: hosted
     version: "4.1.2"
   interact:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: interact
       sha256: b1abf79334bec42e58496a054cb7ee7ca74da6181f6a1fb6b134f1aa22bc4080

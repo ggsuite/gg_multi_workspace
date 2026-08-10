@@ -10,7 +10,6 @@ import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_one/gg_one.dart' as gg;
-import 'package:interact/interact.dart';
 import 'package:path/path.dart' as path;
 import 'package:pubspec_parse/pubspec_parse.dart';
 
@@ -40,11 +39,10 @@ Future<Organization?> defaultSelectOrganization(
     'the organization prompt',
     'pass the full repository url instead of the plain name "$repoName"',
   );
-  final index = Select(
+  final index = gg.GgPrompts.current.select(
     prompt: '$repoName exists in several organizations. Which one?',
     options: <String>[for (final org in organizations) '${org.name}/$repoName'],
-    initialIndex: 0,
-  ).interact();
+  );
   return organizations[index];
 }
 // coverage:ignore-end
