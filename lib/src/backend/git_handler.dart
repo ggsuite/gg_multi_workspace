@@ -23,11 +23,12 @@ class GitHandler {
   /// Clones the repository from [repoUrl] into [targetDirectory].
   /// Throws an exception if cloning fails.
   Future<void> cloneRepo(String repoUrl, String targetDirectory) async {
-    // Ensure the parent directory exists.
+    // Ensure the parent directory exists. A clone that fails must not leave
+    // the folders behind that were created for it, so the outermost folder
+    // created here is remembered and removed again below.
     final directory = Directory(targetDirectory);
-    if (!directory.parent.existsSync()) {
-      await directory.parent.create(recursive: true);
-    }
+    final createdRoot = _createParentDirectories(directory);
+
     // Run the git clone command using the injected process runner.
     final result = await processRunner('git', <String>[
       'clone',
@@ -35,9 +36,61 @@ class GitHandler {
       targetDirectory,
     ]);
     if (result.exitCode != 0) {
+      _removeLeftovers(target: directory, createdRoot: createdRoot);
+
       throw Exception(
         cError('Failed to clone repo from $repoUrl: ${result.stderr}'),
       );
+    }
+  }
+
+  /// Creates the parent folders of [directory] and returns the outermost one
+  /// that had to be created, or null when they all existed already.
+  Directory? _createParentDirectories(Directory directory) {
+    final parent = directory.parent;
+    if (parent.existsSync()) {
+      return null;
+    }
+
+    // Walk up to the first existing ancestor: everything below it is new and
+    // belongs to this clone alone.
+    var outermost = parent;
+    while (!outermost.parent.existsSync() &&
+        outermost.parent.path != outermost.path) {
+      outermost = outermost.parent;
+    }
+
+    parent.createSync(recursive: true);
+    return outermost;
+  }
+
+  /// Removes what a failed clone left behind: the target folder when git
+  /// created but did not fill it, and the folders [_createParentDirectories]
+  /// made for it. Only empty folders are deleted, so a folder that meanwhile
+  /// holds another repository survives.
+  void _removeLeftovers({
+    required Directory target,
+    required Directory? createdRoot,
+  }) {
+    _deleteIfEmpty(target);
+    if (createdRoot != null) {
+      _deleteIfEmpty(createdRoot);
+    }
+  }
+
+  /// Deletes [directory] when it is empty, after doing the same for its
+  /// subfolders — so a tree of empty folders vanishes bottom up.
+  void _deleteIfEmpty(Directory directory) {
+    if (!directory.existsSync()) {
+      return;
+    }
+    for (final entry in directory.listSync()) {
+      if (entry is Directory) {
+        _deleteIfEmpty(entry);
+      }
+    }
+    if (directory.listSync().isEmpty) {
+      directory.deleteSync();
     }
   }
 

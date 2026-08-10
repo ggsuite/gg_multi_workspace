@@ -71,7 +71,7 @@ class TicketCommand extends DirCommand<void> {
     // root, independent from the execution directory).
     final ticketsPath = path.join(rootPath, ggMultiTicketFolder, issueId);
     final dir = directoryFactory(ticketsPath);
-    final ticketFile = File(path.join(ticketsPath, '.ticket'));
+    final ticketFile = File(path.join(ticketsPath, ticketJsonFileName));
 
     final relPath = p.relative(ticketsPath, from: directory.path);
 
@@ -89,11 +89,16 @@ class TicketCommand extends DirCommand<void> {
       dir.createSync(recursive: true);
     }
 
-    // Write the .ticket file as JSON.
-    writeRootTicket(
+    // Write the ticket.json. It carries the ticket id and its description
+    // from the very first moment; `do add` later fills in the repositories.
+    writeTicketJson(
       Directory(ticketsPath),
-      issueId: issueId,
-      description: description,
+      TicketJson(
+        issueId: issueId,
+        description: description,
+        repositories: const <TicketRepo>[],
+        ggVersion: ggCliVersion,
+      ),
     );
 
     // Write the VS Code workspace so `do code <ticket>` opens the fresh

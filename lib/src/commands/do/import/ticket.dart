@@ -354,11 +354,6 @@ class DoCheckoutCommand extends Command<dynamic> {
     if (!ticketDir.existsSync()) {
       ticketDir.createSync(recursive: true);
     }
-    writeRootTicket(
-      ticketDir,
-      issueId: ticket.issueId,
-      description: ticket.description,
-    );
     // Keep the ticket.json in the reproduced workspace so it can be handed on
     // from here as well.
     writeTicketJson(ticketDir, ticket);

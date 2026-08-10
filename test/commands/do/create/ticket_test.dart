@@ -7,6 +7,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:args/command_runner.dart';
 import 'package:gg_capture_print/gg_capture_print.dart';
 import 'package:gg_multi_workspace/src/commands/do/create/ticket.dart';
@@ -43,7 +44,7 @@ void main() {
       }
     });
 
-    test('creates folder and writes .ticket file', () async {
+    test('creates folder and writes ticket.json file', () async {
       const issueId = 'CDM-128';
       const description = 'Fix some ugly bug';
       final ticketRelPath = path.join('tickets', issueId);
@@ -66,7 +67,7 @@ void main() {
         isTrue,
       );
 
-      final ticketFile = File(path.join(ticketDir.path, '.ticket'));
+      final ticketFile = File(path.join(ticketDir.path, ticketJsonFileName));
       expect(ticketFile.existsSync(), isTrue);
 
       final content = ticketFile.readAsStringSync();
@@ -156,7 +157,7 @@ void main() {
         description,
       ]);
       final ticketDir = Directory(path.join(tempDir.path, 'tickets', issueId));
-      final ticketFile = File(path.join(ticketDir.path, '.ticket'));
+      final ticketFile = File(path.join(ticketDir.path, ticketJsonFileName));
       expect(ticketFile.existsSync(), isTrue);
 
       // Try to create same ticket again
