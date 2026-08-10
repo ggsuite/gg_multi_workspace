@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Provide gg via npm
+
+## 3.1.0 - 2026-08-10
+
+### Changed
+
+- Refactor commit messages, version increment
+
 ## 3.0.0 - 2026-08-10
 
 ## 2.3.3 - 2026-08-10
