@@ -316,7 +316,14 @@ void main() {
       setUp(() {
         alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
           ..createSync();
-        writeRootTicket(alphaDir, issueId: 'alpha', description: 'Some ticket');
+        writeTicketJson(
+          alphaDir,
+          const TicketJson(
+            issueId: 'alpha',
+            description: 'Some ticket',
+            repositories: <TicketRepo>[],
+          ),
+        );
         a = makePackage(alphaDir, 'a');
         b = makePackage(alphaDir, 'b');
         writeMarker(alphaDir, ['a', 'b']);

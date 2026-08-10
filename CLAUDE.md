@@ -26,7 +26,7 @@ gg does **not** install git hooks. An earlier version made `do add` write a `pre
 
 ### `do create ticket`
 
-`TicketCommand` (in `lib/src/commands/do/create/ticket.dart`) creates `tickets/<issue-id>/` with the root `.ticket` file and the VS Code workspace `<issue-id>.code-workspace`, so `do code <ticket>` opens something before the first `do add`. It also creates the ticket's trash folder `<root>/.trash/<issue-id>/`. A ticket without repos gets the ticket folder itself (`{"path": "."}`) as its single entry — `writeCodeWorkspaceFile` never writes an empty folder list. `do add` rewrites the file with one `<org>/<repo>` entry per repository.
+`TicketCommand` (in `lib/src/commands/do/create/ticket.dart`) creates `tickets/<issue-id>/` with the root `ticket.json` file and the VS Code workspace `<issue-id>.code-workspace`, so `do code <ticket>` opens something before the first `do add`. It also creates the ticket's trash folder `<root>/.trash/<issue-id>/`. A ticket without repos gets the ticket folder itself (`{"path": "."}`) as its single entry — `writeCodeWorkspaceFile` never writes an empty folder list. `do add` rewrites the file with one `<org>/<repo>` entry per repository.
 
 ### `do create graph`
 
@@ -34,7 +34,7 @@ gg does **not** install git hooks. An earlier version made `do add` write a `pre
 
 ### `do import ticket`
 
-`DoCheckoutCommand` (in `lib/src/commands/do/import/ticket.dart`) reproduces a whole ticket from a `ticket.json` — its repositories on their feature branch. `gg do import ticket <X>` resolves `<X>` in this order: (1) an `http(s)` URL → downloaded (`package:http`, injectable as `TicketJsonFetcher`); (2) a path → the file is read; a **directory** is taken as a ticket folder and its `ticket.json` is read; a path that exists but holds no `ticket.json` fails with that message. (3) _(legacy)_ a name → the marker older gg versions committed is read from `origin/<X>` across the `.ocean` repos (both `.gg/.ticket.json` and `.gg/ticket.json` are tried, with a deprecation hint). Once in hand, it recreates the ticket folder + root `.ticket` + a local `ticket.json`, clones missing repos (into `<ocean>/<org>/<repo>`), copies each into `<ticket>/<org>/<repo>`, checks out the existing feature branch, and installs deps. The ocean is migrated to org folders first (the ticket it builds is fresh).
+`DoCheckoutCommand` (in `lib/src/commands/do/import/ticket.dart`) reproduces a whole ticket from a `ticket.json` — its repositories on their feature branch. `gg do import ticket <X>` resolves `<X>` in this order: (1) an `http(s)` URL → downloaded (`package:http`, injectable as `TicketJsonFetcher`); (2) a path → the file is read; a **directory** is taken as a ticket folder and its `ticket.json` is read; a path that exists but holds no `ticket.json` fails with that message. (3) _(legacy)_ a name → the marker older gg versions committed is read from `origin/<X>` across the `.ocean` repos (both `.gg/.ticket.json` and `.gg/ticket.json` are tried, with a deprecation hint). Once in hand, it recreates the ticket folder + a local `ticket.json`, clones missing repos (into `<ocean>/<org>/<repo>`), copies each into `<ticket>/<org>/<repo>`, checks out the existing feature branch, and installs deps. The ocean is migrated to org folders first (the ticket it builds is fresh).
 
 ### `do rm` group
 

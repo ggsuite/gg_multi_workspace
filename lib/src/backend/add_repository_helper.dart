@@ -176,10 +176,19 @@ Future<void> addRepositoryHelper({
         }
       }
       if (!anySuccess) {
+        // A repository nobody owns is a typo in the name much more often than
+        // it is a broken remote, so the run stops here instead of continuing
+        // with a repository that will be missing from every following step.
         ggLog(
           cError(
             'Failed to clone repository '
             '$repoName from any known organizations.',
+          ),
+        );
+        throw Exception(
+          cError(
+            'Repository "$repoName" was not found. Check the name, or pass '
+            'the full repository url.',
           ),
         );
       }
