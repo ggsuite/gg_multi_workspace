@@ -36,8 +36,9 @@ void main() {
       tempDir = Directory.systemTemp.createTempSync('remove_test_');
       oceanWs = Directory(path.join(tempDir.path, ggMultiOceanFolder))
         ..createSync(recursive: true);
-      ticketsRoot = Directory(path.join(tempDir.path, ggMultiTicketFolder))
-        ..createSync(recursive: true);
+      ticketsRoot = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder),
+      )..createSync(recursive: true);
     });
 
     tearDown(() {

@@ -84,10 +84,14 @@ class CodeCommand extends Command<void> {
     final ticketName = parts[0];
     final repoName = parts.length == 2 ? parts[1] : null;
 
-    final ticketsDir = _dirFactory(
-      path.join(workspacePath, ggMultiTicketFolder),
+    // Tickets sit directly in the workspace root; a legacy `tickets` folder
+    // is still resolved.
+    final ticketDir = _dirFactory(
+      WorkspaceUtils.ticketDir(
+        rootPath: workspacePath,
+        ticketName: ticketName,
+      ).path,
     );
-    final ticketDir = Directory(path.join(ticketsDir.path, ticketName));
 
     if (!ticketDir.existsSync()) {
       ggLog(cError('Ticket $ticketName not found at ${_rel(ticketDir.path)}'));

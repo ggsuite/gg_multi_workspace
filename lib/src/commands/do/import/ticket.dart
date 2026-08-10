@@ -348,8 +348,9 @@ class DoCheckoutCommand extends Command<dynamic> {
     }
 
     final root = path.dirname(oceanWorkspacePath);
-    final ticketDir = Directory(
-      path.join(root, ggMultiTicketFolder, ticketName),
+    final ticketDir = WorkspaceUtils.ticketDir(
+      rootPath: root,
+      ticketName: ticketName,
     );
     if (!ticketDir.existsSync()) {
       ticketDir.createSync(recursive: true);
@@ -437,13 +438,19 @@ class DoCheckoutCommand extends Command<dynamic> {
     required String branch,
     required String repoName,
   }) async {
-    // The ticket mirrors the layout of the ocean, so the repo ends
-    // up in the organization folder it has there.
-    final relativePath = RepoFolderResolver.relativePath(
-      workspacePath: oceanWorkspacePath,
-      repoDir: oceanRepoDir,
+    // The ticket holds its repos flat, independent of the organization
+    // folders the ocean groups them in.
+    final destDir = Directory(
+      RepoFolderResolver.ticketDestination(
+        ticketPath: ticketDir.path,
+        repoUrl: RepoFolderResolver.remoteUrl(oceanRepoDir) ?? '',
+        repoName: path.basename(oceanRepoDir.path),
+      ),
     );
-    final destDir = Directory(path.join(ticketDir.path, relativePath));
+    final relativePath = RepoFolderResolver.relativePath(
+      workspacePath: ticketDir.path,
+      repoDir: destDir,
+    );
 
     if (!(destDir.existsSync() && destDir.listSync().isNotEmpty)) {
       // Fetch the master clone so its `origin/<branch>` is available in the

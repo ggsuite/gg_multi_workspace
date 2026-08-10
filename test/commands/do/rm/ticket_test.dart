@@ -65,8 +65,9 @@ void main() {
       coloredMessages.clear();
       gitCalls.clear();
       tempDir = Directory.systemTemp.createTempSync('rm_ticket_test_');
-      ticketDir = Directory(path.join(tempDir.path, ggMultiTicketFolder, 'T88'))
-        ..createSync(recursive: true);
+      ticketDir = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T88'),
+      )..createSync(recursive: true);
     });
 
     tearDown(() {
@@ -164,7 +165,7 @@ void main() {
       /// Creates `<root>/tickets/<name>` holding one repo.
       Directory makeTicket(String name) {
         final dir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, name),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, name),
         )..createSync(recursive: true);
         final repoDir = Directory(path.join(dir.path, 'ggsuite', 'a'))
           ..createSync(recursive: true);

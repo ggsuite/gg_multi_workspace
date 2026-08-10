@@ -47,7 +47,7 @@ void main() {
     test('creates folder and writes ticket.json file', () async {
       const issueId = 'CDM-128';
       const description = 'Fix some ugly bug';
-      final ticketRelPath = path.join('tickets', issueId);
+      const ticketRelPath = issueId;
 
       await runner.run([
         'ticket',
@@ -58,7 +58,7 @@ void main() {
         description,
       ]);
 
-      final ticketDir = Directory(path.join(tempDir.path, 'tickets', issueId));
+      final ticketDir = Directory(path.join(tempDir.path, issueId));
       expect(ticketDir.existsSync(), isTrue);
 
       // Every ticket gets its trash folder right away.
@@ -82,7 +82,7 @@ void main() {
       expect(messages, [
         '✓ Created ticket CDM-128',
         '  Please run:',
-        '    cd tickets/CDM-128',
+        '    cd CDM-128',
         '    gg do add <repo1> <repo2> ...',
         '    code CDM-128.code-workspace',
       ]);
@@ -103,7 +103,7 @@ void main() {
       ]);
 
       final wsFile = File(
-        path.join(tempDir.path, 'tickets', issueId, '$issueId.code-workspace'),
+        path.join(tempDir.path, issueId, '$issueId.code-workspace'),
       );
       expect(wsFile.existsSync(), isTrue);
       final ws = jsonDecode(wsFile.readAsStringSync()) as Map<String, dynamic>;
@@ -115,10 +115,11 @@ void main() {
       );
     });
 
-    test('creates relative paths based on execution directory when already '
-        'inside tickets folder', () async {
+    test('creates relative paths based on the execution directory', () async {
       const issueId = 'INSIDE-1';
-      final ticketsDir = Directory(path.join(tempDir.path, 'tickets'))
+      // The ticket is created from within another ticket of the same
+      // workspace, so the `cd` command has to lead out of that one first.
+      final otherTicket = Directory(path.join(tempDir.path, 'OTHER-1'))
         ..createSync(recursive: true);
 
       await runner.run(<String>[
@@ -126,26 +127,53 @@ void main() {
         '-m',
         'message',
         '--input',
-        ticketsDir.path,
+        otherTicket.path,
         issueId,
       ]);
 
-      final ticketDir = Directory(path.join(tempDir.path, 'tickets', issueId));
+      // The new ticket is a sibling of the one it was created from — never a
+      // folder inside it.
+      final ticketDir = Directory(path.join(tempDir.path, issueId));
       expect(ticketDir.existsSync(), isTrue);
 
       expect(messages, [
         '✓ Created ticket INSIDE-1',
         '  Please run:',
-        '    cd INSIDE-1',
+        '    cd ${path.join('..', issueId)}',
         '    gg do add <repo1> <repo2> ...',
         '    code INSIDE-1.code-workspace',
       ]);
     });
 
+    test('creates a ticket beside an existing legacy tickets folder', () async {
+      // A workspace of an older gg still groups its tickets in a `tickets`
+      // folder; new tickets are created in the root next to it all the same.
+      final legacy = Directory(path.join(tempDir.path, 'tickets', 'OLD-1'))
+        ..createSync(recursive: true);
+      File(
+        path.join(legacy.path, ticketJsonFileName),
+      ).writeAsStringSync('{"issue_id": "OLD-1"}');
+
+      await runner.run(<String>[
+        'ticket',
+        '-m',
+        'message',
+        '--input',
+        tempDir.path,
+        'NEW-1',
+      ]);
+
+      expect(Directory(path.join(tempDir.path, 'NEW-1')).existsSync(), isTrue);
+      expect(
+        Directory(path.join(tempDir.path, 'tickets', 'NEW-1')).existsSync(),
+        isFalse,
+      );
+    });
+
     test('does not create ticket if it already exists', () async {
       const issueId = 'DUP-1';
       const description = 'duplicate ticket';
-      final ticketRelPath = path.join('tickets', issueId);
+      const ticketRelPath = issueId;
 
       // First creation
       await runner.run([
@@ -156,7 +184,7 @@ void main() {
         '-m',
         description,
       ]);
-      final ticketDir = Directory(path.join(tempDir.path, 'tickets', issueId));
+      final ticketDir = Directory(path.join(tempDir.path, issueId));
       final ticketFile = File(path.join(ticketDir.path, ticketJsonFileName));
       expect(ticketFile.existsSync(), isTrue);
 

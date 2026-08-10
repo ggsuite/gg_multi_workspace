@@ -391,7 +391,7 @@ dev_dependencies:
       pubspecFile.writeAsStringSync(pubspecContent);
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET'),
       )..createSync(recursive: true);
 
       final mockDoCommit = MockGgSystemCommit();
@@ -562,7 +562,7 @@ dev_dependencies:
         File(path.join(ggDir.path, '.gg.json')).writeAsStringSync('{}');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET'),
         )..createSync(recursive: true);
 
         final mockDoCommit = MockGgSystemCommit();
@@ -704,7 +704,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -779,7 +779,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_HOSTED_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_HOSTED_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -864,7 +864,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_KNOWN_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_KNOWN_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -940,7 +940,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_UNKNOWN_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_UNKNOWN_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1007,7 +1007,7 @@ version: 1.0.0
 ''');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_WS'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_WS'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1124,7 +1124,7 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_DIRTY'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_DIRTY'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1191,7 +1191,11 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_STATUS_FAIL'),
+        path.join(
+          tempDir.path,
+          ggMultiLegacyTicketFolder,
+          'TICKET_STATUS_FAIL',
+        ),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1237,7 +1241,7 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_PULL_FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_PULL_FAIL'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1416,7 +1420,7 @@ version: 1.0.0
 
     test('logs error when repo not found in ocean', () async {
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-MISSING'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-MISSING'),
       )..createSync(recursive: true);
       createRunner(executionPath: ticketDir.path);
       await runner.run(['add', '--verbose', 'nonexistent']);
@@ -1433,7 +1437,7 @@ version: 1.0.0
       File(path.join(repoDir.path, 'foo.txt')).writeAsStringSync('hi');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'ALREADY'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'ALREADY'),
       )..createSync(recursive: true);
       createRunner(executionPath: ticketDir.path);
       final destination = Directory(path.join(ticketDir.path, repoName));
@@ -1456,7 +1460,7 @@ version: 1.0.0
       File(path.join(repoDir.path, 'dummy.txt')).writeAsStringSync('data');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-FAIL'),
       )..createSync(recursive: true);
       final mockDoCommit = MockGgSystemCommit();
       when(
@@ -1509,7 +1513,7 @@ version: 1.0.0
           ..createSync(recursive: true);
         File(path.join(repoDir.path, 'dummy.txt')).writeAsStringSync('data');
         ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-PUBGET'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-PUBGET'),
         )..createSync(recursive: true);
         final mockDoCommit = MockGgSystemCommit();
         when(
@@ -1740,7 +1744,11 @@ version: 1.0.0
           );
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'NPM_SCAN_TICKET'),
+            path.join(
+              tempDir.path,
+              ggMultiLegacyTicketFolder,
+              'NPM_SCAN_TICKET',
+            ),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1832,7 +1840,7 @@ version: 1.0.0
           ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'ARRAY_TICKET'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'ARRAY_TICKET'),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1903,7 +1911,7 @@ version: 1.0.0
           ).writeAsStringSync('{}');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'BRIDGE_TICKET'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'BRIDGE_TICKET'),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1994,7 +2002,11 @@ version: 1.0.0
       ).writeAsStringSync('name: x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-COMMIT-FAIL'),
+        path.join(
+          tempDir.path,
+          ggMultiLegacyTicketFolder,
+          'TICKET-COMMIT-FAIL',
+        ),
       )..createSync(recursive: true);
 
       final mockDoCommit = MockGgSystemCommit();
@@ -2157,7 +2169,7 @@ version: 1.0.0
       ).writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-LOCFAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-LOCFAIL'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
@@ -2300,7 +2312,7 @@ version: 1.0.0
 ''');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
         )..createSync(recursive: true);
 
         final mockRunner = MockProcessRunner();
@@ -2431,7 +2443,7 @@ version: 1.0.0
         ).writeAsStringSync(['name: c', 'version: 1.0.0', ''].join('\n'));
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
         )..createSync(recursive: true);
 
         final mockRunner = MockProcessRunner();
@@ -2553,7 +2565,7 @@ version: 1.0.0
 ''');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ_EXISTING'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ_EXISTING'),
         )..createSync(recursive: true);
 
         final existingC = Directory(path.join(ticketDir.path, 'c'))
@@ -2655,7 +2667,7 @@ version: 1.0.0
       File(path.join(repoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'T-DFG'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-DFG'),
       )..createSync(recursive: true);
 
       final mockGraph = MockGraph();
@@ -2712,7 +2724,7 @@ version: 1.0.0
           ).writeAsStringSync('name: $repoName');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'T-UPG'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG'),
           )..createSync(recursive: true);
 
           final mockSorted = MockSortedProcessingList();
@@ -2831,7 +2843,7 @@ version: 1.0.0
         ).writeAsStringSync('name: $repoName');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'T-UPG-FAIL'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG-FAIL'),
         )..createSync(recursive: true);
 
         final mockSorted = MockSortedProcessingList();
@@ -2957,7 +2969,7 @@ version: 1.0.0
       ).writeAsStringSync('{}');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-BACKUP'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-BACKUP'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
@@ -3089,7 +3101,7 @@ version: 1.0.0
       ).writeAsStringSync('{}');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-UNLOC-FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-UNLOC-FAIL'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
@@ -3244,7 +3256,7 @@ version: 1.0.0
         ).writeAsStringSync('#!/bin/sh\necho "my own hook"');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-HOOKS'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-HOOKS'),
         )..createSync(recursive: true);
 
         final mockProc = MockProcessRunner();
@@ -3380,7 +3392,7 @@ version: 1.0.0
       ).writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'T-BACKUP'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-BACKUP'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
@@ -3535,10 +3547,10 @@ version: 1.0.0
       }
 
       Directory makeTicketDir(String name) =>
-          Directory(path.join(tempDir.path, ggMultiTicketFolder, name))
+          Directory(path.join(tempDir.path, ggMultiLegacyTicketFolder, name))
             ..createSync(recursive: true);
 
-      test('copies an ocean repo into its org folder of the ticket', () async {
+      test('copies an ocean org repo flat into the ticket', () async {
         makeMasterRepo(
           path.join('ggsuite', 'gg_foo'),
           'https://github.com/ggsuite/gg_foo.git',
@@ -3553,15 +3565,16 @@ version: 1.0.0
 
         await runner.run(['add', 'gg_foo']);
 
+        // The ocean groups the repo by organization; the ticket does not.
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
+        expect(
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
+          isFalse,
+        );
 
-        // The VS Code workspace addresses the repo through its org folder,
-        // always with forward slashes.
         final ws =
             jsonDecode(
                   File(
@@ -3573,7 +3586,88 @@ version: 1.0.0
             .cast<Map<String, dynamic>>()
             .map((f) => f['path'] as String)
             .toSet();
-        expect(paths, <String>{'ggsuite/gg_foo'});
+        expect(paths, <String>{'gg_foo'});
+      });
+
+      test('gives the second repo of a name its own org folder', () async {
+        // Two organizations own a `gg_foo` — the only case a ticket still
+        // needs an organization folder for.
+        makeMasterRepo(
+          path.join('ggsuite', 'gg_foo'),
+          'https://github.com/ggsuite/gg_foo.git',
+        );
+        makeMasterRepo(
+          path.join('other', 'gg_foo'),
+          'https://github.com/other/gg_foo.git',
+        );
+        final ticketDir = makeTicketDir('TICKET_CLASH');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+          systemCommit: anyDoCommit(),
+        );
+
+        // Localizing is off: two Dart packages of one name in a ticket are
+        // a conflict of their own, and this test is about the folders.
+        // The first one lands flat ...
+        await runner.run([
+          'add',
+          '--no-localize',
+          'https://github.com/ggsuite/gg_foo.git',
+        ]);
+        expect(
+          File(
+            path.join(ticketDir.path, 'gg_foo', 'pubspec.yaml'),
+          ).existsSync(),
+          isTrue,
+        );
+
+        // ... the second one, whose flat spot is taken, into its org folder.
+        await runner.run([
+          'add',
+          '--no-localize',
+          'https://github.com/other/gg_foo.git',
+        ]);
+        expect(
+          File(
+            path.join(ticketDir.path, 'other', 'gg_foo', 'pubspec.yaml'),
+          ).existsSync(),
+          isTrue,
+        );
+      });
+
+      test('does not copy a ticket repo a second time', () async {
+        makeMasterRepo(
+          path.join('ggsuite', 'gg_foo'),
+          'https://github.com/ggsuite/gg_foo.git',
+        );
+        final ticketDir = makeTicketDir('TICKET_TWICE');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+          systemCommit: anyDoCommit(),
+        );
+
+        await runner.run(['add', 'gg_foo']);
+        File(
+          path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
+        ).writeAsStringSync('keep');
+        await runner.run(['add', 'gg_foo']);
+
+        // The repo is recognized by its remote, so it is left alone instead
+        // of being copied into an organization folder beside itself.
+        expect(
+          File(
+            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
+          ).readAsStringSync(),
+          'keep',
+        );
+        expect(
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
+          isFalse,
+        );
       });
 
       test('moves the repos of an old ocean into their org folders', () async {
@@ -3599,24 +3693,24 @@ version: 1.0.0
           isFalse,
         );
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
         expect(logMessages, contains('✓ ggsuite/gg_foo'));
       });
 
-      test('moves the repos of an old ticket into their org folders', () async {
+      test('moves the repos of an old ticket out of their org '
+          'folders', () async {
         makeMasterRepo(
           path.join('ggsuite', 'gg_foo'),
           'https://github.com/ggsuite/gg_foo.git',
         );
         final ticketDir = makeTicketDir('TICKET_OLD');
 
-        // The ticket still holds its copy directly in the ticket folder.
-        final oldCopy = Directory(path.join(ticketDir.path, 'gg_foo'))
-          ..createSync(recursive: true);
+        // The ticket still holds its copy in an organization folder.
+        final oldCopy = Directory(
+          path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
+        )..createSync(recursive: true);
         File(
           path.join(oldCopy.path, 'pubspec.yaml'),
         ).writeAsStringSync('name: gg_foo\nversion: 1.0.0\n');
@@ -3637,12 +3731,13 @@ version: 1.0.0
         // The existing copy is moved, not replaced by a fresh one.
         expect(
           File(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo', 'marker.txt'),
+            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
           ).readAsStringSync(),
           'keep',
         );
+        // The organization folder that lost its last repo is gone.
         expect(
-          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
           isFalse,
         );
       });
@@ -3733,7 +3828,7 @@ version: 1.0.0
       }
 
       Directory makeTicketDir(String name) =>
-          Directory(path.join(tempDir.path, ggMultiTicketFolder, name))
+          Directory(path.join(tempDir.path, ggMultiLegacyTicketFolder, name))
             ..createSync(recursive: true);
 
       void createTicketRunner(Directory ticketDir) => createRunner(
@@ -3760,10 +3855,14 @@ version: 1.0.0
         );
       }
 
+      // The repos of the ticket, addressed the way the ticket holds them —
+      // flat, so plain names.
       Set<String> ticketRepoPaths(Directory ticketDir) => <String>{
-        for (final org in ticketDir.listSync().whereType<Directory>())
-          for (final repo in org.listSync().whereType<Directory>())
-            '${path.basename(org.path)}/${path.basename(repo.path)}',
+        for (final repo in RepoFolderResolver.repoDirs(ticketDir.path))
+          RepoFolderResolver.relativePath(
+            workspacePath: ticketDir.path,
+            repoDir: repo,
+          ),
       };
 
       test('localizes the refs by default', () async {
@@ -3796,9 +3895,7 @@ version: 1.0.0
 
         // The repo is copied ...
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
 
@@ -3846,7 +3943,7 @@ version: 1.0.0
 
         await runner.run(['add', '--org', 'orgA']);
 
-        expect(ticketRepoPaths(ticketDir), {'orgA/repo1', 'orgA/repo2'});
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2'});
       });
 
       test('--org is repeatable', () async {
@@ -3856,11 +3953,7 @@ version: 1.0.0
 
         await runner.run(['add', '--org', 'orgA', '--org', 'orgB']);
 
-        expect(ticketRepoPaths(ticketDir), {
-          'orgA/repo1',
-          'orgA/repo2',
-          'orgB/repo3',
-        });
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2', 'repo3'});
       });
 
       test('--org warns about an unknown organization', () async {
@@ -3888,11 +3981,7 @@ version: 1.0.0
 
         await runner.run(['add', '--all']);
 
-        expect(ticketRepoPaths(ticketDir), {
-          'orgA/repo1',
-          'orgA/repo2',
-          'orgB/repo3',
-        });
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2', 'repo3'});
       });
 
       test('--all and --org are refused outside a ticket', () async {

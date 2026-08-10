@@ -31,9 +31,8 @@ void main() {
       ggMultiWorkspaceDir = Directory(
         path.join(tempDir.path, 'ggMultiWorkspace'),
       )..createSync(recursive: true);
-      ticketsDir = Directory(
-        path.join(ggMultiWorkspaceDir.path, ggMultiTicketFolder),
-      )..createSync(recursive: true);
+      // Tickets sit directly in the workspace root.
+      ticketsDir = ggMultiWorkspaceDir;
       runner = CommandRunner<void>('test', 'Test ListTicketsCommand')
         ..addCommand(
           ListTicketsCommand(
@@ -63,24 +62,38 @@ void main() {
       expect(messages, contains('T2    Feature XY'));
     });
 
-    test('no tickets found when tickets folder is missing', () async {
-      ticketsDir.deleteSync(recursive: true);
+    test('no tickets found when the workspace root is missing', () async {
+      ggMultiWorkspaceDir.deleteSync(recursive: true);
       await runner.run(['tickets']);
       expect(messages, contains('No tickets found.'));
     });
 
-    test('no tickets found when tickets folder is empty', () async {
-      // ticketsDir exists but has no subfolders
+    test('no tickets found when the workspace holds none', () async {
+      // The root exists but has no ticket folders
       await runner.run(['tickets']);
       expect(messages, contains('No tickets found.'));
     });
 
-    test('missing ticket.json file logs error and skips', () async {
+    test('a folder without a ticket.json is no ticket', () async {
+      // The workspace root holds more than tickets — `.ocean`, `.trash` and
+      // whatever else the user keeps there. The ticket.json is what tells
+      // them apart.
       Directory(path.join(ticketsDir.path, 'T3')).createSync();
+      Directory(path.join(ticketsDir.path, '.ocean')).createSync();
       await runner.run(['tickets']);
-      expect(messages, contains('Missing ticket.json file for ticket T3'));
-      // Should not log an entry line for T3
-      expect(messages.any((m) => m.startsWith('T3    ')), isFalse);
+      expect(messages, contains('No tickets found.'));
+      expect(messages.any((m) => m.startsWith('T3')), isFalse);
+    });
+
+    test('lists the tickets of a legacy tickets folder too', () async {
+      final legacy = Directory(
+        path.join(ggMultiWorkspaceDir.path, ggMultiLegacyTicketFolder, 'T9'),
+      )..createSync(recursive: true);
+      File(path.join(legacy.path, ticketJsonFileName)).writeAsStringSync(
+        jsonEncode({'issue_id': 'T9', 'description': 'Old home'}),
+      );
+      await runner.run(['tickets']);
+      expect(messages, contains('T9    Old home'));
     });
 
     test('invalid JSON in ticket.json logs parsing error', () async {

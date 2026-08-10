@@ -42,7 +42,7 @@ class TicketCommand extends DirCommand<void> {
     );
   }
 
-  /// Base path that contains the `tickets` folder.
+  /// The workspace root the ticket folder is created in, beside `.ocean`.
   final String rootPath;
 
   /// Factory to create Directory instances
@@ -67,9 +67,12 @@ class TicketCommand extends DirCommand<void> {
     // The description might be null if the user did not pass --message / -m.
     final String description = (argResults!['message'] as String?) ?? '';
 
-    // Build the directory path for the ticket (always under the workspace
-    // root, independent from the execution directory).
-    final ticketsPath = path.join(rootPath, ggMultiTicketFolder, issueId);
+    // Build the directory path for the ticket (always directly in the
+    // workspace root, independent from the execution directory).
+    final ticketsPath = WorkspaceUtils.ticketDir(
+      rootPath: rootPath,
+      ticketName: issueId,
+    ).path;
     final dir = directoryFactory(ticketsPath);
     final ticketFile = File(path.join(ticketsPath, ticketJsonFileName));
 

@@ -113,12 +113,13 @@ class RemoveTicketCommand extends Command<void> {
     final workspacePath = WorkspaceUtils.defaultGgMultiWorkspacePath(
       workingDir: rootPath,
     );
-    final ticketsRoot = path.join(workspacePath, ggMultiTicketFolder);
-
     final dirs = <Directory>[];
     final missing = <String>[];
     for (final name in names) {
-      final dir = Directory(path.join(ticketsRoot, name));
+      final dir = WorkspaceUtils.ticketDir(
+        rootPath: workspacePath,
+        ticketName: name,
+      );
       if (dir.existsSync()) {
         dirs.add(dir);
       } else {
@@ -129,7 +130,7 @@ class RemoveTicketCommand extends Command<void> {
     if (missing.isNotEmpty) {
       throw Exception(
         cError(
-          'These tickets do not exist in $ticketsRoot: '
+          'These tickets do not exist in $workspacePath: '
           '${missing.join(', ')}.',
         ),
       );
