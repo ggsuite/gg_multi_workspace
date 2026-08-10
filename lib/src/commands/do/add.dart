@@ -38,6 +38,8 @@ typedef FetchRepoUrl = Future<String?> Function(String packageName);
 /// `--organization` may be given multiple times to add all repos of several
 /// organization folders of the ocean at once. `--no-localize`
 /// copies the repos without rewriting their references to local paths.
+/// `--no-transitive-repos` copies only the requested repos and leaves the
+/// repos between them in the dependency graph out of the ticket.
 class AddCommand extends Command<dynamic> {
   /// Constructor for AddCommand.
   AddCommand({
@@ -101,6 +103,12 @@ class AddCommand extends Command<dynamic> {
       defaultsTo: false,
       negatable: false,
     );
+    argParser.addFlag(
+      'transitive-repos',
+      help: 'Also add the repos between the ticket repos (default)',
+      defaultsTo: true,
+      negatable: true,
+    );
   }
 
   /// The log function.
@@ -162,6 +170,8 @@ class AddCommand extends Command<dynamic> {
     final bool localize = argResults!['localize'] as bool? ?? true;
     final orgs = argResults!['org'] as List<String>;
     final bool all = argResults!['all'] as bool;
+    final bool transitiveRepos =
+        argResults!['transitive-repos'] as bool? ?? true;
 
     if (targets.isEmpty && !all && orgs.isEmpty) {
       throw UsageException('Missing target parameter.', usage);
@@ -245,52 +255,61 @@ class AddCommand extends Command<dynamic> {
       ),
     );
 
-    // Clone missing transitive deps so the graph can resolve between-nodes.
-    await _cloneMissingTransitiveDeps(ggLog: ggLog);
+    // The whole graph machinery below exists to find the repos that lie
+    // between the ticket repos. With --no-transitive-repos only the requested
+    // repos are copied, so neither the clone step nor the graph is needed.
+    final betweenNodes = <Node>[];
+
+    if (transitiveRepos) {
+      // Clone missing transitive deps so the graph can resolve between-nodes.
+      await _cloneMissingTransitiveDeps(ggLog: ggLog);
+
+      // Build dep graph of ocean + compute nodes between endpoints.
+      Map<String, Node> allNodes = const {};
+      try {
+        allNodes = await _graph.get(
+          directory: Directory(oceanWorkspacePath),
+          ggLog: ggLog,
+        );
+      } catch (e) {
+        ggLog(cError('Failed to build dependency graph: $e'));
+        allNodes = const {};
+      }
+
+      // Endpoints = CLI-requested repos + repos already in the ticket.
+      final endpointsByName = <String, Node>{};
+
+      // Endpoints based on requested repositories ----------------------------
+      for (final name in requestedRepoNames) {
+        final node = findNode(packageName: name, nodes: allNodes);
+        if (node != null) {
+          endpointsByName.putIfAbsent(node.name, () => node);
+        }
+      }
+
+      // Additional endpoints from existing ticket repositories ---------------
+      final existingTicketRepos = RepoFolderResolver.repoDirs(ticketPath);
+
+      for (final repoDir in existingTicketRepos) {
+        final repoName =
+            RepoFolderResolver.packageName(repoDir) ??
+            path.basename(repoDir.path);
+        final node = findNode(packageName: repoName, nodes: allNodes);
+        if (node != null) {
+          endpointsByName.putIfAbsent(node.name, () => node);
+        }
+      }
+
+      final endpoints = endpointsByName.values.toList();
+
+      if (endpoints.length >= 2) {
+        betweenNodes.addAll(_graph.getNodesBetween(allNodes, endpoints));
+      }
+    } else {
+      ggLog(cDetail('Skip adding transitive repos (--no-transitive-repos).'));
+    }
 
     final ticketDir = Directory(ticketPath);
-
-    // Build dep graph of ocean + compute nodes between endpoints.
-    Map<String, Node> allNodes = const {};
-    try {
-      allNodes = await _graph.get(
-        directory: Directory(oceanWorkspacePath),
-        ggLog: ggLog,
-      );
-    } catch (e) {
-      ggLog(cError('Failed to build dependency graph: $e'));
-      allNodes = const {};
-    }
-
-    // Endpoints = CLI-requested repos + repos already in the ticket.
-    final endpointsByName = <String, Node>{};
-
-    // Endpoints based on requested repositories ------------------------------
-    for (final name in requestedRepoNames) {
-      final node = findNode(packageName: name, nodes: allNodes);
-      if (node != null) {
-        endpointsByName.putIfAbsent(node.name, () => node);
-      }
-    }
-
-    // Additional endpoints from existing ticket repositories -----------------
-    final existingTicketRepos = RepoFolderResolver.repoDirs(ticketPath);
-
-    for (final repoDir in existingTicketRepos) {
-      final repoName =
-          RepoFolderResolver.packageName(repoDir) ??
-          path.basename(repoDir.path);
-      final node = findNode(packageName: repoName, nodes: allNodes);
-      if (node != null) {
-        endpointsByName.putIfAbsent(node.name, () => node);
-      }
-    }
-
-    final endpoints = endpointsByName.values.toList();
-
-    final betweenNodes = endpoints.length >= 2
-        ? _graph.getNodesBetween(allNodes, endpoints)
-        : <Node>[];
 
     final finalToCopy = <String>{
       ...requestedRepoNames,
