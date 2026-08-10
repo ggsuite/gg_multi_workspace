@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -39,8 +40,11 @@ class DoExecuteCommand extends DirCommand<void> {
   final ProcessRunner _processRunner;
 
   @override
-  Future<void> exec({required Directory directory, required GgLog ggLog}) =>
-      get(directory: directory, ggLog: ggLog);
+  Future<void> exec({
+    required Directory directory,
+    required GgLog ggLog,
+    Map<String, dynamic> options = const {},
+  }) => get(directory: directory, ggLog: ggLog);
 
   @override
   Future<void> get({required Directory directory, required GgLog ggLog}) async {

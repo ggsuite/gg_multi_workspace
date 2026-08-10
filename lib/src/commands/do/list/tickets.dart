@@ -39,31 +39,25 @@ class ListTicketsCommand extends Command<void> {
 
   @override
   Future<void> run() async {
-    final ticketsDir = Directory(path.join(workspacePath, ggMultiTicketFolder));
-    if (!ticketsDir.existsSync()) {
-      ggLog(cDetail('No tickets found.'));
-      return;
-    }
-    final subs = ticketsDir.listSync().whereType<Directory>().toList()
-      ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+    // Tickets sit directly in the workspace root; a legacy `tickets` folder
+    // is still read.
+    final subs = WorkspaceUtils.ticketDirs(workspacePath);
     if (subs.isEmpty) {
       ggLog(cDetail('No tickets found.'));
       return;
     }
     for (final d in subs) {
       final ticketName = path.basename(d.path);
-      final ticketFile = File(path.join(d.path, '.ticket'));
-      if (!ticketFile.existsSync()) {
-        ggLog(cError('Missing .ticket file for ticket $ticketName'));
-        continue;
-      }
+      // The ticket.json is what made the folder a ticket in the first place,
+      // so it is there — only its content can still disappoint.
+      final ticketFile = File(path.join(d.path, ticketJsonFileName));
       try {
         final content = ticketFile.readAsStringSync();
         final data = jsonDecode(content) as Map<String, dynamic>;
         final desc = data['description'] as String? ?? '';
         ggLog('$ticketName    $desc'); // four spaces between name and desc
       } catch (e) {
-        ggLog(cError('Error parsing .ticket for ticket $ticketName: $e'));
+        ggLog(cError('Error parsing ticket.json for ticket $ticketName: $e'));
       }
     }
   }

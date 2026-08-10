@@ -11,9 +11,9 @@ import 'package:gg_multi_workspace/src/commands/do/rm/repo.dart';
 import 'package:gg_multi_workspace/src/commands/do/rm/ticket.dart';
 
 /// Command group for removing things from the workspace:
-/// `rm repo <name…>` deletes repositories from the current ticket (or, with
-/// `--from-master`, from the master workspace), `rm ticket` closes the
-/// current ticket by moving it to the trash.
+/// `rm repo <name…>` deletes repositories from the current ticket — never
+/// from the master workspace — `rm ticket` closes the current ticket by
+/// moving it to the trash.
 class RmCommand extends Command<void> {
   /// Constructor accepting a log function.
   RmCommand({required this.ggLog}) {

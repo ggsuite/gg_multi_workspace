@@ -4,13 +4,13 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
-import 'package:gg_multi_core/gg_multi_core.dart';
 
 void main() {
   late Directory tmp;

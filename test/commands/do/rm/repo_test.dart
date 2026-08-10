@@ -4,10 +4,12 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 import 'package:gg_multi_workspace/src/commands/do/rm/repo.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
@@ -34,8 +36,9 @@ void main() {
       tempDir = Directory.systemTemp.createTempSync('remove_test_');
       oceanWs = Directory(path.join(tempDir.path, ggMultiOceanFolder))
         ..createSync(recursive: true);
-      ticketsRoot = Directory(path.join(tempDir.path, ggMultiTicketFolder))
-        ..createSync(recursive: true);
+      ticketsRoot = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder),
+      )..createSync(recursive: true);
     });
 
     tearDown(() {
@@ -45,10 +48,9 @@ void main() {
     });
 
     group('invoked outside a ticket', () {
-      test('refuses without --from-master and names the flag', () async {
-        Directory(
-          path.join(oceanWs.path, 'project'),
-        ).createSync(recursive: true);
+      test('refuses and keeps the ocean copy', () async {
+        final oceanRepo = Directory(path.join(oceanWs.path, 'project'))
+          ..createSync(recursive: true);
 
         await expectLater(
           runnerAt(tempDir.path).run(['repo', 'project']),
@@ -58,100 +60,47 @@ void main() {
               'message',
               allOf(
                 contains('must be called inside a ticket folder'),
-                contains('--from-master'),
+                contains('never deletes repos from the master workspace'),
               ),
             ),
           ),
         );
+
+        expect(oceanRepo.existsSync(), isTrue);
       });
     });
 
-    group('invoked with --from-master', () {
-      test('deletes repo when only in master', () async {
-        final repoDir = Directory(path.join(oceanWs.path, 'project'))
+    group('the ocean', () {
+      test('is never deleted from — there is no flag that would', () async {
+        final oceanRepo = Directory(path.join(oceanWs.path, 'project'))
           ..createSync(recursive: true);
 
-        await runnerAt(tempDir.path).run(['repo', 'project', '--from-master']);
-
-        expect(repoDir.existsSync(), isFalse);
-        expect(messages, ['✓ Deleted repository project from ocean.']);
-      });
-
-      test('deletes several repos in one call', () async {
-        final repo1 = Directory(path.join(oceanWs.path, 'one'))..createSync();
-        final repo2 = Directory(path.join(oceanWs.path, 'two'))..createSync();
-
-        await runnerAt(
-          tempDir.path,
-        ).run(['repo', 'one', 'two', '--from-master']);
-
-        expect(repo1.existsSync(), isFalse);
-        expect(repo2.existsSync(), isFalse);
-        expect(messages, [
-          '✓ Deleted repository one from ocean.',
-          '✓ Deleted repository two from ocean.',
-        ]);
-      });
-
-      test('refuses to delete the master copy when the repo is also in a '
-          'ticket — and lists the offending tickets', () async {
-        // Repo in ocean + in ticket "alpha".
-        final oceanRepo = Directory(path.join(oceanWs.path, 'shared'))
-          ..createSync();
-        final alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
-          ..createSync();
-        Directory(path.join(alphaDir.path, 'shared')).createSync();
-
-        await runnerAt(tempDir.path).run(['repo', 'shared', '--from-master']);
+        await expectLater(
+          runnerAt(tempDir.path).run(['repo', 'project', '--from-master']),
+          throwsA(
+            isA<UsageException>().having(
+              (e) => e.message,
+              'message',
+              contains('from-master'),
+            ),
+          ),
+        );
 
         expect(oceanRepo.existsSync(), isTrue);
-        expect(
-          messages,
-          contains('Repository shared is used by the following tickets:'),
-        );
-        expect(messages, contains(' - alpha'));
-        expect(
-          messages.any((m) => m.contains('Please remove it from those')),
-          isTrue,
-        );
-        expect(messages.any((m) => m.contains('gg do rm repo shared')), isTrue);
       });
 
-      test('lists multiple tickets that reference the repo', () async {
-        Directory(path.join(oceanWs.path, 'r1')).createSync();
-        final t1 = Directory(path.join(ticketsRoot.path, 't1'))..createSync();
-        Directory(path.join(t1.path, 'r1')).createSync();
-        final t2 = Directory(path.join(ticketsRoot.path, 't2'))..createSync();
-        Directory(path.join(t2.path, 'r1')).createSync();
-
-        await runnerAt(tempDir.path).run(['repo', 'r1', '--from-master']);
-
-        expect(messages, contains(' - t1'));
-        expect(messages, contains(' - t2'));
-      });
-
-      test('reports not-found when repo lives nowhere', () async {
-        await runnerAt(tempDir.path).run(['repo', 'ghost', '--from-master']);
-
-        expect(
-          messages,
-          contains('Repository ghost not found in any workspace.'),
-        );
-      });
-
-      test('works from a sub-folder of the workspace root', () async {
-        final repoDir = Directory(path.join(oceanWs.path, 'ggsuite', 'project'))
+      test('keeps its copy when the ticket copy is deleted', () async {
+        final oceanRepo = Directory(path.join(oceanWs.path, 'shared'))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: project\nversion: 1.0.0\n');
-        final subDir = Directory(path.join(repoDir.path, 'lib'))
-          ..createSync(recursive: true);
+        final alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
+          ..createSync();
+        final ticketRepo = Directory(path.join(alphaDir.path, 'shared'))
+          ..createSync();
 
-        await runnerAt(subDir.path).run(['repo', 'project', '--from-master']);
+        await runnerAt(alphaDir.path).run(['repo', 'shared']);
 
-        expect(repoDir.existsSync(), isFalse);
-        expect(messages, contains('✓ Deleted repository project from ocean.'));
+        expect(ticketRepo.existsSync(), isFalse);
+        expect(oceanRepo.existsSync(), isTrue);
       });
     });
 
@@ -370,7 +319,14 @@ void main() {
       setUp(() {
         alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
           ..createSync();
-        writeRootTicket(alphaDir, issueId: 'alpha', description: 'Some ticket');
+        writeTicketJson(
+          alphaDir,
+          const TicketJson(
+            issueId: 'alpha',
+            description: 'Some ticket',
+            repositories: <TicketRepo>[],
+          ),
+        );
         a = makePackage(alphaDir, 'a');
         b = makePackage(alphaDir, 'b');
         writeMarker(alphaDir, ['a', 'b']);
@@ -468,6 +424,30 @@ void main() {
         );
         expect(messages.any((m) => m.contains('from ticket.json')), isFalse);
       });
+
+      test('drops the deleted repo from the .code-workspace', () async {
+        final wsFile = File(path.join(alphaDir.path, 'alpha.code-workspace'));
+        writeCodeWorkspaceFile(alphaDir, ['a', 'b']);
+
+        await runnerAt(alphaDir.path).run(['repo', 'a']);
+
+        final folders =
+            (jsonDecode(wsFile.readAsStringSync())
+                    as Map<String, dynamic>)['folders']
+                as List<dynamic>;
+        expect(folders.map((f) => (f as Map<String, dynamic>)['path']), ['b']);
+        expect(messages, contains('✓ Removed a from alpha.code-workspace.'));
+      });
+
+      test('writes no .code-workspace into a ticket that has none', () async {
+        await runnerAt(alphaDir.path).run(['repo', 'a']);
+
+        expect(
+          File(path.join(alphaDir.path, 'alpha.code-workspace')).existsSync(),
+          isFalse,
+        );
+        expect(messages.any((m) => m.contains('.code-workspace')), isFalse);
+      });
     });
 
     group('org-prefixed folders', () {
@@ -481,36 +461,6 @@ void main() {
         ).writeAsStringSync('name: $pkg\nversion: 1.0.0\n');
         return dir;
       }
-
-      test(
-        'deletes a prefixed master folder addressed by package name',
-        () async {
-          final dir = makePrefixed(oceanWs, 'ggsuite_foo', 'foo');
-
-          await runnerAt(tempDir.path).run(['repo', 'foo', '--from-master']);
-
-          expect(dir.existsSync(), isFalse);
-          expect(messages, contains('✓ Deleted repository foo from ocean.'));
-        },
-      );
-
-      test(
-        'finds a prefixed ticket copy when refusing master deletion',
-        () async {
-          makePrefixed(oceanWs, 'ggsuite_foo', 'foo');
-          final alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
-            ..createSync();
-          makePrefixed(alphaDir, 'ggsuite_foo', 'foo');
-
-          await runnerAt(tempDir.path).run(['repo', 'foo', '--from-master']);
-
-          expect(
-            messages,
-            contains('Repository foo is used by the following tickets:'),
-          );
-          expect(messages, contains(' - alpha'));
-        },
-      );
 
       test('deletes a prefixed folder from inside a ticket', () async {
         final alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
@@ -538,42 +488,19 @@ void main() {
         return dir;
       }
 
-      test('deletes a repo from its org folder in the master', () async {
-        final repo = makeOrgRepo(oceanWs, 'ggsuite', 'project');
-
-        await runnerAt(tempDir.path).run(['repo', 'project', '--from-master']);
-
-        expect(repo.existsSync(), isFalse);
-        // The organization folder is gone with its last repo.
-        expect(
-          Directory(path.join(oceanWs.path, 'ggsuite')).existsSync(),
-          isFalse,
-        );
-      });
-
       test('keeps the org folder while it holds other repos', () async {
-        final repo = makeOrgRepo(oceanWs, 'ggsuite', 'project');
-        makeOrgRepo(oceanWs, 'ggsuite', 'other');
-
-        await runnerAt(tempDir.path).run(['repo', 'project', '--from-master']);
-
-        expect(repo.existsSync(), isFalse);
-        expect(
-          Directory(path.join(oceanWs.path, 'ggsuite')).existsSync(),
-          isTrue,
-        );
-      });
-
-      test('finds a ticket that holds the repo in an org folder', () async {
-        final oceanRepo = makeOrgRepo(oceanWs, 'ggsuite', 'shared');
         final alphaDir = Directory(path.join(ticketsRoot.path, 'alpha'))
           ..createSync();
-        makeOrgRepo(alphaDir, 'ggsuite', 'shared');
+        final repo = makeOrgRepo(alphaDir, 'ggsuite', 'project');
+        makeOrgRepo(alphaDir, 'ggsuite', 'other');
 
-        await runnerAt(tempDir.path).run(['repo', 'shared', '--from-master']);
+        await runnerAt(alphaDir.path).run(['repo', 'project']);
 
-        expect(oceanRepo.existsSync(), isTrue);
-        expect(messages, contains(' - alpha'));
+        expect(repo.existsSync(), isFalse);
+        expect(
+          Directory(path.join(alphaDir.path, 'ggsuite')).existsSync(),
+          isTrue,
+        );
       });
 
       test('deletes a repo from its org folder in a ticket', () async {

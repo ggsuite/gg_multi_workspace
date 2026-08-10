@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -348,17 +349,13 @@ class DoCheckoutCommand extends Command<dynamic> {
     }
 
     final root = path.dirname(oceanWorkspacePath);
-    final ticketDir = Directory(
-      path.join(root, ggMultiTicketFolder, ticketName),
+    final ticketDir = WorkspaceUtils.ticketDir(
+      rootPath: root,
+      ticketName: ticketName,
     );
     if (!ticketDir.existsSync()) {
       ticketDir.createSync(recursive: true);
     }
-    writeRootTicket(
-      ticketDir,
-      issueId: ticket.issueId,
-      description: ticket.description,
-    );
     // Keep the ticket.json in the reproduced workspace so it can be handed on
     // from here as well.
     writeTicketJson(ticketDir, ticket);
@@ -442,13 +439,19 @@ class DoCheckoutCommand extends Command<dynamic> {
     required String branch,
     required String repoName,
   }) async {
-    // The ticket mirrors the layout of the ocean, so the repo ends
-    // up in the organization folder it has there.
-    final relativePath = RepoFolderResolver.relativePath(
-      workspacePath: oceanWorkspacePath,
-      repoDir: oceanRepoDir,
+    // The ticket holds its repos flat, independent of the organization
+    // folders the ocean groups them in.
+    final destDir = Directory(
+      RepoFolderResolver.ticketDestination(
+        ticketPath: ticketDir.path,
+        repoUrl: RepoFolderResolver.remoteUrl(oceanRepoDir) ?? '',
+        repoName: path.basename(oceanRepoDir.path),
+      ),
     );
-    final destDir = Directory(path.join(ticketDir.path, relativePath));
+    final relativePath = RepoFolderResolver.relativePath(
+      workspacePath: ticketDir.path,
+      repoDir: destDir,
+    );
 
     if (!(destDir.existsSync() && destDir.listSync().isNotEmpty)) {
       // Fetch the master clone so its `origin/<branch>` is available in the

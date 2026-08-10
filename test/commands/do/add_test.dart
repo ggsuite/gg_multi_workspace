@@ -8,6 +8,7 @@
 @Timeout(Duration(minutes: 2))
 library;
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -43,7 +44,7 @@ class MockProcessRunner extends Mock {
   });
 }
 
-class MockGgDoCommit extends Mock implements gg.DoCommit {}
+class MockGgSystemCommit extends Mock implements gg.GgSystemCommit {}
 
 class MockSortedProcessingList extends Mock implements SortedProcessingList {}
 
@@ -67,7 +68,7 @@ void main() {
       String? executionPath,
       Future<void> Function(String repoPath)? localizeRefsFn,
       ProcessRunner? processRunner,
-      gg.DoCommit? ggDoCommit,
+      gg.GgSystemCommit? systemCommit,
       SortedProcessingList? sortedProcessingList,
       ChangeRefsToPubDev? unlocalizeRefs,
       ChangeRefsToLocal? localizeRefs,
@@ -84,7 +85,7 @@ void main() {
           processRunner: processRunner,
           oceanWorkspacePath: oceanWorkspacePath,
           executionPath: executionPath ?? execPath,
-          ggDoCommit: ggDoCommit,
+          systemCommit: systemCommit,
           sortedProcessingList: sortedProcessingList,
           unlocalizeRefs: unlocalizeRefs,
           localizeRefs: localizeRefs,
@@ -105,18 +106,27 @@ void main() {
       tempDir = Directory.systemTemp.createTempSync('add_test');
       oceanWorkspacePath = path.join(tempDir.path, ggMultiOceanFolder);
       Directory(oceanWorkspacePath).createSync(recursive: true);
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
-      createRunner(ggDoCommit: mockDoCommit);
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
+      createRunner(systemCommit: mockDoCommit);
     });
 
     tearDown(() {
@@ -221,17 +231,26 @@ void main() {
       ).thenAnswer((_) async => repoList);
 
       final orgRunner = CommandRunner<void>('test', 'Test for AddCommand Org');
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
       orgRunner.addCommand(
         AddCommand(
           ggLog: ggLog,
@@ -241,7 +260,7 @@ void main() {
           // Without an execution path the command would resolve the ticket
           // of the checkout the tests run in and modify it.
           executionPath: tempDir.path,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
         ),
       );
       const orgUrl = 'https://github.com/myorganization';
@@ -286,17 +305,26 @@ void main() {
           'test',
           'Test for AddCommand Invalid Org',
         );
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
         invalidRunner.addCommand(
           AddCommand(
             ggLog: ggLog,
@@ -305,7 +333,7 @@ void main() {
             // Without an execution path the command would resolve the ticket of
             // the checkout the tests run in and modify it.
             executionPath: tempDir.path,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
           ),
         );
         const invalidOrgUrl = 'https://github.com/';
@@ -363,20 +391,29 @@ dev_dependencies:
       pubspecFile.writeAsStringSync(pubspecContent);
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET'),
       )..createSync(recursive: true);
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       final mockProc = MockProcessRunner();
       when(
@@ -446,7 +483,7 @@ dev_dependencies:
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
       createRunner(
         executionPath: ticketDir.path,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         processRunner: mockProc.call,
       );
 
@@ -458,13 +495,18 @@ dev_dependencies:
       expect(copiedFileInTicket.existsSync(), isTrue);
 
       verify(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: '#gg: changed references to path',
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: true,
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          // Localizing rewrites the manifests, so the recorded »everything
+          // is committed« hash has to be taken anew — otherwise the next
+          // command in the ticket sees a repo that looks uncommitted.
+          stateKey: gg.GgState.doCommitKey,
         ),
       ).called(greaterThanOrEqualTo(1));
 
@@ -520,20 +562,29 @@ dev_dependencies:
         File(path.join(ggDir.path, '.gg.json')).writeAsStringSync('{}');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET'),
         )..createSync(recursive: true);
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
         final mockProc = MockProcessRunner();
         when(
@@ -603,7 +654,7 @@ dev_dependencies:
         ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
         createRunner(
           executionPath: ticketDir.path,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
           processRunner: mockProc.call,
         );
 
@@ -653,7 +704,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -666,17 +717,26 @@ dev_dependencies:
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -689,7 +749,7 @@ dev_dependencies:
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
       );
 
       await runner.run(['add', existingRepoName]);
@@ -719,7 +779,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_HOSTED_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_HOSTED_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -732,17 +792,26 @@ dev_dependencies:
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       var fetchCalls = 0;
       when(
@@ -756,7 +825,7 @@ dev_dependencies:
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         fetchRepoUrl: (pkg) async {
           fetchCalls++;
           throw Exception('boom: $pkg not reachable');
@@ -795,7 +864,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_KNOWN_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_KNOWN_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -808,17 +877,26 @@ dev_dependencies:
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       const repoUrl = '${orgUrl}tx_known_org_dep.git';
       when(
@@ -832,7 +910,7 @@ dev_dependencies:
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         fetchRepoUrl: (pkg) async => repoUrl,
       );
 
@@ -862,7 +940,7 @@ dev_dependencies:
       );
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TX_UNKNOWN_TICKET'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TX_UNKNOWN_TICKET'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -875,17 +953,26 @@ dev_dependencies:
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -898,7 +985,7 @@ dev_dependencies:
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         fetchRepoUrl: (pkg) async => 'https://github.com/dart-lang/$pkg.git',
       );
 
@@ -920,7 +1007,7 @@ version: 1.0.0
 ''');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_WS'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_WS'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -981,17 +1068,26 @@ version: 1.0.0
         ),
       ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -1004,7 +1100,7 @@ version: 1.0.0
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
       );
 
       await runner.run(['add', repoName]);
@@ -1028,7 +1124,7 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_DIRTY'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_DIRTY'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1095,7 +1191,11 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_STATUS_FAIL'),
+        path.join(
+          tempDir.path,
+          ggMultiLegacyTicketFolder,
+          'TICKET_STATUS_FAIL',
+        ),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
@@ -1141,24 +1241,33 @@ version: 1.0.0
       File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET_PULL_FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_PULL_FAIL'),
       )..createSync(recursive: true);
 
       final mockProc = MockProcessRunner();
       final mockSorted = MockSortedProcessingList();
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       final mockGraph = MockGraph();
 
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockGraph.get(
@@ -1248,7 +1357,7 @@ version: 1.0.0
             processRunner: mockProc.call,
             oceanWorkspacePath: oceanWorkspacePath,
             executionPath: ticketDir.path,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
             sortedProcessingList: mockSorted,
             graph: mockGraph,
           ),
@@ -1311,7 +1420,7 @@ version: 1.0.0
 
     test('logs error when repo not found in ocean', () async {
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-MISSING'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-MISSING'),
       )..createSync(recursive: true);
       createRunner(executionPath: ticketDir.path);
       await runner.run(['add', '--verbose', 'nonexistent']);
@@ -1328,7 +1437,7 @@ version: 1.0.0
       File(path.join(repoDir.path, 'foo.txt')).writeAsStringSync('hi');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'ALREADY'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'ALREADY'),
       )..createSync(recursive: true);
       createRunner(executionPath: ticketDir.path);
       final destination = Directory(path.join(ticketDir.path, repoName));
@@ -1351,32 +1460,43 @@ version: 1.0.0
       File(path.join(repoDir.path, 'dummy.txt')).writeAsStringSync('data');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-FAIL'),
       )..createSync(recursive: true);
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
-      createRunner(executionPath: ticketDir.path, ggDoCommit: mockDoCommit);
+      createRunner(executionPath: ticketDir.path, systemCommit: mockDoCommit);
 
       await runner.run(['add', repoName]);
 
       verifyNever(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       );
     });
@@ -1393,19 +1513,28 @@ version: 1.0.0
           ..createSync(recursive: true);
         File(path.join(repoDir.path, 'dummy.txt')).writeAsStringSync('data');
         ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-PUBGET'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-PUBGET'),
         )..createSync(recursive: true);
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
         when(
           () => mockProcessRunner(
             'git',
@@ -1457,7 +1586,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockProcessRunner.call,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
         );
       });
 
@@ -1615,7 +1744,11 @@ version: 1.0.0
           );
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'NPM_SCAN_TICKET'),
+            path.join(
+              tempDir.path,
+              ggMultiLegacyTicketFolder,
+              'NPM_SCAN_TICKET',
+            ),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1628,17 +1761,26 @@ version: 1.0.0
             ),
           ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-          final mockDoCommit = MockGgDoCommit();
+          final mockDoCommit = MockGgSystemCommit();
           when(
-            () => mockDoCommit.exec(
+            () => mockDoCommit.commit(
               directory: any(named: 'directory'),
               ggLog: any(named: 'ggLog'),
               message: any(named: 'message'),
-              logType: any(named: 'logType'),
-              updateChangeLog: any(named: 'updateChangeLog'),
-              force: any(named: 'force'),
+              paths: any(named: 'paths'),
+              includeUntracked: any(named: 'includeUntracked'),
+              ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+              userCommitMessage: any(named: 'userCommitMessage'),
+              stateKey: any(named: 'stateKey'),
             ),
-          ).thenAnswer((_) async {});
+          ).thenAnswer(
+            (_) async => const gg.GgSystemCommitResult(
+              userCommitCreated: false,
+              systemCommitCreated: true,
+              ggOwnedPaths: ['pubspec_overrides.yaml'],
+              foreignPaths: [],
+            ),
+          );
 
           when(
             () => mockProc(
@@ -1651,7 +1793,7 @@ version: 1.0.0
           createRunner(
             executionPath: ticketDir.path,
             processRunner: mockProc.call,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
           );
 
           await runner.run(['add', targetName]);
@@ -1698,7 +1840,7 @@ version: 1.0.0
           ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'ARRAY_TICKET'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'ARRAY_TICKET'),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1711,17 +1853,26 @@ version: 1.0.0
             ),
           ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-          final mockDoCommit = MockGgDoCommit();
+          final mockDoCommit = MockGgSystemCommit();
           when(
-            () => mockDoCommit.exec(
+            () => mockDoCommit.commit(
               directory: any(named: 'directory'),
               ggLog: any(named: 'ggLog'),
               message: any(named: 'message'),
-              logType: any(named: 'logType'),
-              updateChangeLog: any(named: 'updateChangeLog'),
-              force: any(named: 'force'),
+              paths: any(named: 'paths'),
+              includeUntracked: any(named: 'includeUntracked'),
+              ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+              userCommitMessage: any(named: 'userCommitMessage'),
+              stateKey: any(named: 'stateKey'),
             ),
-          ).thenAnswer((_) async {});
+          ).thenAnswer(
+            (_) async => const gg.GgSystemCommitResult(
+              userCommitCreated: false,
+              systemCommitCreated: true,
+              ggOwnedPaths: ['pubspec_overrides.yaml'],
+              foreignPaths: [],
+            ),
+          );
 
           when(
             () => mockProc(
@@ -1734,7 +1885,7 @@ version: 1.0.0
           createRunner(
             executionPath: ticketDir.path,
             processRunner: mockProc.call,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
           );
 
           // Must not throw despite the malformed package.json.
@@ -1760,7 +1911,7 @@ version: 1.0.0
           ).writeAsStringSync('{}');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'BRIDGE_TICKET'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'BRIDGE_TICKET'),
           )..createSync(recursive: true);
 
           final mockProc = MockProcessRunner();
@@ -1773,17 +1924,26 @@ version: 1.0.0
             ),
           ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-          final mockDoCommit = MockGgDoCommit();
+          final mockDoCommit = MockGgSystemCommit();
           when(
-            () => mockDoCommit.exec(
+            () => mockDoCommit.commit(
               directory: any(named: 'directory'),
               ggLog: any(named: 'ggLog'),
               message: any(named: 'message'),
-              logType: any(named: 'logType'),
-              updateChangeLog: any(named: 'updateChangeLog'),
-              force: any(named: 'force'),
+              paths: any(named: 'paths'),
+              includeUntracked: any(named: 'includeUntracked'),
+              ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+              userCommitMessage: any(named: 'userCommitMessage'),
+              stateKey: any(named: 'stateKey'),
             ),
-          ).thenAnswer((_) async {});
+          ).thenAnswer(
+            (_) async => const gg.GgSystemCommitResult(
+              userCommitCreated: false,
+              systemCommitCreated: true,
+              ggOwnedPaths: ['pubspec_overrides.yaml'],
+              foreignPaths: [],
+            ),
+          );
 
           when(
             () => mockProc(
@@ -1796,7 +1956,7 @@ version: 1.0.0
           createRunner(
             executionPath: ticketDir.path,
             processRunner: mockProc.call,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
           );
 
           await runner.run(['add', repoName]);
@@ -1842,18 +2002,24 @@ version: 1.0.0
       ).writeAsStringSync('name: x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-COMMIT-FAIL'),
+        path.join(
+          tempDir.path,
+          ggMultiLegacyTicketFolder,
+          'TICKET-COMMIT-FAIL',
+        ),
       )..createSync(recursive: true);
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).thenThrow(Exception('commit error'));
 
@@ -1925,7 +2091,7 @@ version: 1.0.0
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
       createRunner(
         executionPath: ticketDir.path,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         processRunner: mockProc.call,
       );
 
@@ -1947,19 +2113,28 @@ version: 1.0.0
           () => mockGitCloner.cloneRepo(any(), any()),
         ).thenAnswer((_) async {});
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
-        createRunner(ggDoCommit: mockDoCommit);
+        createRunner(systemCommit: mockDoCommit);
 
         await runner.run(['add', 'repoA', 'repoB']);
         verify(
@@ -1994,24 +2169,33 @@ version: 1.0.0
       ).writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-LOCFAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-LOCFAIL'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
       final mockUnloc = MockUnlocalizeRefs();
       final mockLoc = MockLocalizeRefs();
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
 
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       Future<List<Node>> futureNode() async => [
         Node(
@@ -2078,7 +2262,7 @@ version: 1.0.0
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockRunner.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
         unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
@@ -2128,7 +2312,7 @@ version: 1.0.0
 ''');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
         )..createSync(recursive: true);
 
         final mockRunner = MockProcessRunner();
@@ -2157,17 +2341,26 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
         when(
           () => mockRunner(
@@ -2180,7 +2373,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockRunner.call,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
         );
 
         await runner.run(['add', '--verbose', 'a', 'c']);
@@ -2218,6 +2411,133 @@ version: 1.0.0
     );
 
     test(
+      '--no-transitive leaves the between nodes out of the ticket',
+      () async {
+        final aDir = Directory(path.join(oceanWorkspacePath, 'a'))
+          ..createSync(recursive: true);
+        final bDir = Directory(path.join(oceanWorkspacePath, 'b'))
+          ..createSync(recursive: true);
+        final cDir = Directory(path.join(oceanWorkspacePath, 'c'))
+          ..createSync(recursive: true);
+
+        File(path.join(aDir.path, 'pubspec.yaml')).writeAsStringSync(
+          [
+            'name: a',
+            'version: 1.0.0',
+            'dependencies:',
+            '  b: ^1.0.0',
+            '',
+          ].join('\n'),
+        );
+        File(path.join(bDir.path, 'pubspec.yaml')).writeAsStringSync(
+          [
+            'name: b',
+            'version: 1.0.0',
+            'dependencies:',
+            '  c: ^1.0.0',
+            '',
+          ].join('\n'),
+        );
+        File(
+          path.join(cDir.path, 'pubspec.yaml'),
+        ).writeAsStringSync(['name: c', 'version: 1.0.0', ''].join('\n'));
+
+        final ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
+        )..createSync(recursive: true);
+
+        final mockRunner = MockProcessRunner();
+        when(
+          () => mockRunner(
+            'git',
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+        when(
+          () => mockRunner(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+        when(
+          () => mockRunner(
+            'dart',
+            ['pub', 'upgrade'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+
+        final mockDoCommit = MockGgSystemCommit();
+        when(
+          () => mockDoCommit.commit(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
+          ),
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
+
+        when(
+          () => mockRunner(
+            'git',
+            ['status', '--porcelain', '--untracked-files=no'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockRunner.call,
+          systemCommit: mockDoCommit,
+        );
+
+        await runner.run(['add', '--verbose', '--no-transitive', 'a', 'c']);
+
+        expect(Directory(path.join(ticketDir.path, 'a')).existsSync(), isTrue);
+        expect(Directory(path.join(ticketDir.path, 'c')).existsSync(), isTrue);
+
+        // b lies between a and c and is therefore not copied.
+        expect(Directory(path.join(ticketDir.path, 'b')).existsSync(), isFalse);
+
+        expect(
+          logMessages.any(
+            (m) =>
+                m.contains('Skip adding transitive repos (--no-transitive).'),
+          ),
+          isTrue,
+        );
+
+        final workspaceFile = File(
+          path.join(ticketDir.path, 'TXYZ.code-workspace'),
+        );
+        expect(workspaceFile.existsSync(), isTrue);
+        final workspaceJson =
+            jsonDecode(workspaceFile.readAsStringSync())
+                as Map<String, dynamic>;
+        final folders = (workspaceJson['folders'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        final folderPaths = folders.map((f) => f['path'] as String).toSet();
+        expect(folderPaths, equals(<String>{'a', 'c'}));
+      },
+    );
+
+    test(
       'adds between nodes using existing ticket repos as endpoints',
       () async {
         final aDir = Directory(path.join(oceanWorkspacePath, 'a'))
@@ -2245,7 +2565,7 @@ version: 1.0.0
 ''');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ_EXISTING'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ_EXISTING'),
         )..createSync(recursive: true);
 
         final existingC = Directory(path.join(ticketDir.path, 'c'))
@@ -2278,17 +2598,26 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
         when(
           () => mockRunner(
@@ -2301,7 +2630,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockRunner.call,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
         );
 
         await runner.run(['add', '--verbose', 'a']);
@@ -2338,7 +2667,7 @@ version: 1.0.0
       File(path.join(repoDir.path, 'file.txt')).writeAsStringSync('x');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'T-DFG'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-DFG'),
       )..createSync(recursive: true);
 
       final mockGraph = MockGraph();
@@ -2395,7 +2724,7 @@ version: 1.0.0
           ).writeAsStringSync('name: $repoName');
 
           final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiTicketFolder, 'T-UPG'),
+            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG'),
           )..createSync(recursive: true);
 
           final mockSorted = MockSortedProcessingList();
@@ -2455,17 +2784,26 @@ version: 1.0.0
             ),
           ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
 
-          final mockDoCommit = MockGgDoCommit();
+          final mockDoCommit = MockGgSystemCommit();
           when(
-            () => mockDoCommit.exec(
+            () => mockDoCommit.commit(
               directory: any(named: 'directory'),
               ggLog: any(named: 'ggLog'),
               message: any(named: 'message'),
-              logType: any(named: 'logType'),
-              updateChangeLog: any(named: 'updateChangeLog'),
-              force: any(named: 'force'),
+              paths: any(named: 'paths'),
+              includeUntracked: any(named: 'includeUntracked'),
+              ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+              userCommitMessage: any(named: 'userCommitMessage'),
+              stateKey: any(named: 'stateKey'),
             ),
-          ).thenAnswer((_) async {});
+          ).thenAnswer(
+            (_) async => const gg.GgSystemCommitResult(
+              userCommitCreated: false,
+              systemCommitCreated: true,
+              ggOwnedPaths: ['pubspec_overrides.yaml'],
+              foreignPaths: [],
+            ),
+          );
 
           when(
             () => mockProc(
@@ -2478,7 +2816,7 @@ version: 1.0.0
           createRunner(
             executionPath: ticketDir.path,
             processRunner: mockProc.call,
-            ggDoCommit: mockDoCommit,
+            systemCommit: mockDoCommit,
             sortedProcessingList: mockSorted,
             unlocalizeRefs: mockUnloc,
             localizeRefs: mockLoc,
@@ -2505,7 +2843,7 @@ version: 1.0.0
         ).writeAsStringSync('name: $repoName');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'T-UPG-FAIL'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG-FAIL'),
         )..createSync(recursive: true);
 
         final mockSorted = MockSortedProcessingList();
@@ -2565,17 +2903,26 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async => ProcessResult(1, 1, '', 'Upgrade error'));
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
         when(
           () => mockProc(
@@ -2588,7 +2935,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockProc.call,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
           sortedProcessingList: mockSorted,
           unlocalizeRefs: mockUnloc,
           localizeRefs: mockLoc,
@@ -2622,25 +2969,34 @@ version: 1.0.0
       ).writeAsStringSync('{}');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-BACKUP'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-BACKUP'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
       final mockUnloc = MockUnlocalizeRefs();
       final mockLoc = MockLocalizeRefs();
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       final mockProc = MockProcessRunner();
 
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -2709,7 +3065,7 @@ version: 1.0.0
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
         unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
@@ -2745,25 +3101,34 @@ version: 1.0.0
       ).writeAsStringSync('{}');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-UNLOC-FAIL'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-UNLOC-FAIL'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
       final mockUnloc = MockUnlocalizeRefs();
       final mockLoc = MockLocalizeRefs();
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       final mockProc = MockProcessRunner();
 
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -2832,7 +3197,7 @@ version: 1.0.0
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
         unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
@@ -2891,7 +3256,7 @@ version: 1.0.0
         ).writeAsStringSync('#!/bin/sh\necho "my own hook"');
 
         final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiTicketFolder, 'TICKET-HOOKS'),
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-HOOKS'),
         )..createSync(recursive: true);
 
         final mockProc = MockProcessRunner();
@@ -2960,17 +3325,26 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-        final mockDoCommit = MockGgDoCommit();
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
 
         when(
           () => mockProc(
@@ -2983,7 +3357,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockProc.call,
-          ggDoCommit: mockDoCommit,
+          systemCommit: mockDoCommit,
         );
 
         await runner.run(['add', repoName]);
@@ -3018,7 +3392,7 @@ version: 1.0.0
       ).writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiTicketFolder, 'T-BACKUP'),
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-BACKUP'),
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
@@ -3075,17 +3449,26 @@ version: 1.0.0
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      final mockDoCommit = MockGgDoCommit();
+      final mockDoCommit = MockGgSystemCommit();
       when(
-        () => mockDoCommit.exec(
+        () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
 
       when(
         () => mockProc(
@@ -3098,7 +3481,7 @@ version: 1.0.0
       createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
         unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
@@ -3125,18 +3508,27 @@ version: 1.0.0
         return mockProc;
       }
 
-      MockGgDoCommit anyDoCommit() {
-        final mockDoCommit = MockGgDoCommit();
+      MockGgSystemCommit anyDoCommit() {
+        final mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
         return mockDoCommit;
       }
 
@@ -3155,10 +3547,10 @@ version: 1.0.0
       }
 
       Directory makeTicketDir(String name) =>
-          Directory(path.join(tempDir.path, ggMultiTicketFolder, name))
+          Directory(path.join(tempDir.path, ggMultiLegacyTicketFolder, name))
             ..createSync(recursive: true);
 
-      test('copies an ocean repo into its org folder of the ticket', () async {
+      test('copies an ocean org repo flat into the ticket', () async {
         makeMasterRepo(
           path.join('ggsuite', 'gg_foo'),
           'https://github.com/ggsuite/gg_foo.git',
@@ -3168,20 +3560,21 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: anyProcessRunner().call,
-          ggDoCommit: anyDoCommit(),
+          systemCommit: anyDoCommit(),
         );
 
         await runner.run(['add', 'gg_foo']);
 
+        // The ocean groups the repo by organization; the ticket does not.
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
+        expect(
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
+          isFalse,
+        );
 
-        // The VS Code workspace addresses the repo through its org folder,
-        // always with forward slashes.
         final ws =
             jsonDecode(
                   File(
@@ -3193,7 +3586,88 @@ version: 1.0.0
             .cast<Map<String, dynamic>>()
             .map((f) => f['path'] as String)
             .toSet();
-        expect(paths, <String>{'ggsuite/gg_foo'});
+        expect(paths, <String>{'gg_foo'});
+      });
+
+      test('gives the second repo of a name its own org folder', () async {
+        // Two organizations own a `gg_foo` — the only case a ticket still
+        // needs an organization folder for.
+        makeMasterRepo(
+          path.join('ggsuite', 'gg_foo'),
+          'https://github.com/ggsuite/gg_foo.git',
+        );
+        makeMasterRepo(
+          path.join('other', 'gg_foo'),
+          'https://github.com/other/gg_foo.git',
+        );
+        final ticketDir = makeTicketDir('TICKET_CLASH');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+          systemCommit: anyDoCommit(),
+        );
+
+        // Localizing is off: two Dart packages of one name in a ticket are
+        // a conflict of their own, and this test is about the folders.
+        // The first one lands flat ...
+        await runner.run([
+          'add',
+          '--no-localize',
+          'https://github.com/ggsuite/gg_foo.git',
+        ]);
+        expect(
+          File(
+            path.join(ticketDir.path, 'gg_foo', 'pubspec.yaml'),
+          ).existsSync(),
+          isTrue,
+        );
+
+        // ... the second one, whose flat spot is taken, into its org folder.
+        await runner.run([
+          'add',
+          '--no-localize',
+          'https://github.com/other/gg_foo.git',
+        ]);
+        expect(
+          File(
+            path.join(ticketDir.path, 'other', 'gg_foo', 'pubspec.yaml'),
+          ).existsSync(),
+          isTrue,
+        );
+      });
+
+      test('does not copy a ticket repo a second time', () async {
+        makeMasterRepo(
+          path.join('ggsuite', 'gg_foo'),
+          'https://github.com/ggsuite/gg_foo.git',
+        );
+        final ticketDir = makeTicketDir('TICKET_TWICE');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+          systemCommit: anyDoCommit(),
+        );
+
+        await runner.run(['add', 'gg_foo']);
+        File(
+          path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
+        ).writeAsStringSync('keep');
+        await runner.run(['add', 'gg_foo']);
+
+        // The repo is recognized by its remote, so it is left alone instead
+        // of being copied into an organization folder beside itself.
+        expect(
+          File(
+            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
+          ).readAsStringSync(),
+          'keep',
+        );
+        expect(
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
+          isFalse,
+        );
       });
 
       test('moves the repos of an old ocean into their org folders', () async {
@@ -3203,7 +3677,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: anyProcessRunner().call,
-          ggDoCommit: anyDoCommit(),
+          systemCommit: anyDoCommit(),
         );
 
         await runner.run(['add', 'gg_foo']);
@@ -3219,24 +3693,24 @@ version: 1.0.0
           isFalse,
         );
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
         expect(logMessages, contains('✓ ggsuite/gg_foo'));
       });
 
-      test('moves the repos of an old ticket into their org folders', () async {
+      test('moves the repos of an old ticket out of their org '
+          'folders', () async {
         makeMasterRepo(
           path.join('ggsuite', 'gg_foo'),
           'https://github.com/ggsuite/gg_foo.git',
         );
         final ticketDir = makeTicketDir('TICKET_OLD');
 
-        // The ticket still holds its copy directly in the ticket folder.
-        final oldCopy = Directory(path.join(ticketDir.path, 'gg_foo'))
-          ..createSync(recursive: true);
+        // The ticket still holds its copy in an organization folder.
+        final oldCopy = Directory(
+          path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
+        )..createSync(recursive: true);
         File(
           path.join(oldCopy.path, 'pubspec.yaml'),
         ).writeAsStringSync('name: gg_foo\nversion: 1.0.0\n');
@@ -3249,7 +3723,7 @@ version: 1.0.0
         createRunner(
           executionPath: ticketDir.path,
           processRunner: anyProcessRunner().call,
-          ggDoCommit: anyDoCommit(),
+          systemCommit: anyDoCommit(),
         );
 
         await runner.run(['add', 'gg_foo']);
@@ -3257,12 +3731,13 @@ version: 1.0.0
         // The existing copy is moved, not replaced by a fresh one.
         expect(
           File(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo', 'marker.txt'),
+            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
           ).readAsStringSync(),
           'keep',
         );
+        // The organization folder that lost its last repo is gone.
         expect(
-          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
+          Directory(path.join(ticketDir.path, 'ggsuite')).existsSync(),
           isFalse,
         );
       });
@@ -3287,7 +3762,7 @@ version: 1.0.0
     group('--localize, --org and --all', () {
       late MockLocalizeRefs mockLoc;
       late MockUnlocalizeRefs mockUnloc;
-      late MockGgDoCommit mockDoCommit;
+      late MockGgSystemCommit mockDoCommit;
       late MockProcessRunner mockProc;
 
       setUp(() {
@@ -3317,17 +3792,26 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async {});
 
-        mockDoCommit = MockGgDoCommit();
+        mockDoCommit = MockGgSystemCommit();
         when(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
-        ).thenAnswer((_) async {});
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
       });
 
       // Creates an ocean repo at [relativePath] carrying a git remote.
@@ -3344,13 +3828,13 @@ version: 1.0.0
       }
 
       Directory makeTicketDir(String name) =>
-          Directory(path.join(tempDir.path, ggMultiTicketFolder, name))
+          Directory(path.join(tempDir.path, ggMultiLegacyTicketFolder, name))
             ..createSync(recursive: true);
 
       void createTicketRunner(Directory ticketDir) => createRunner(
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
-        ggDoCommit: mockDoCommit,
+        systemCommit: mockDoCommit,
         unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
       );
@@ -3371,10 +3855,14 @@ version: 1.0.0
         );
       }
 
+      // The repos of the ticket, addressed the way the ticket holds them —
+      // flat, so plain names.
       Set<String> ticketRepoPaths(Directory ticketDir) => <String>{
-        for (final org in ticketDir.listSync().whereType<Directory>())
-          for (final repo in org.listSync().whereType<Directory>())
-            '${path.basename(org.path)}/${path.basename(repo.path)}',
+        for (final repo in RepoFolderResolver.repoDirs(ticketDir.path))
+          RepoFolderResolver.relativePath(
+            workspacePath: ticketDir.path,
+            repoDir: repo,
+          ),
       };
 
       test('localizes the refs by default', () async {
@@ -3407,9 +3895,7 @@ version: 1.0.0
 
         // The repo is copied ...
         expect(
-          Directory(
-            path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(ticketDir.path, 'gg_foo')).existsSync(),
           isTrue,
         );
 
@@ -3427,13 +3913,15 @@ version: 1.0.0
           ),
         );
         verifyNever(
-          () => mockDoCommit.exec(
+          () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
             message: any(named: 'message'),
-            logType: any(named: 'logType'),
-            updateChangeLog: any(named: 'updateChangeLog'),
-            force: any(named: 'force'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
           ),
         );
 
@@ -3455,7 +3943,7 @@ version: 1.0.0
 
         await runner.run(['add', '--org', 'orgA']);
 
-        expect(ticketRepoPaths(ticketDir), {'orgA/repo1', 'orgA/repo2'});
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2'});
       });
 
       test('--org is repeatable', () async {
@@ -3465,11 +3953,7 @@ version: 1.0.0
 
         await runner.run(['add', '--org', 'orgA', '--org', 'orgB']);
 
-        expect(ticketRepoPaths(ticketDir), {
-          'orgA/repo1',
-          'orgA/repo2',
-          'orgB/repo3',
-        });
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2', 'repo3'});
       });
 
       test('--org warns about an unknown organization', () async {
@@ -3497,11 +3981,7 @@ version: 1.0.0
 
         await runner.run(['add', '--all']);
 
-        expect(ticketRepoPaths(ticketDir), {
-          'orgA/repo1',
-          'orgA/repo2',
-          'orgB/repo3',
-        });
+        expect(ticketRepoPaths(ticketDir), {'repo1', 'repo2', 'repo3'});
       });
 
       test('--all and --org are refused outside a ticket', () async {

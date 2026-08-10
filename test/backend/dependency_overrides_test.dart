@@ -165,10 +165,32 @@ dependency_overrides:
       expect(changed, [a]);
       final content = pnpmFileOf(a).readAsStringSync();
       expect(content, isNot(contains('link:../b')));
-      // The other override is a dead link now that its target never existed
-      // in this fixture — but it is not named, so only the named entry and
-      // provably dead siblings go. Here `c` is a dead sibling and goes too.
+      // Only the named entry goes. `c` was not removed from the ticket, so
+      // its override stays — as does the foreign `allowBuilds` setting.
+      expect(content, contains('link:../c'));
       expect(content, contains('allowBuilds'));
+    });
+
+    test('keeps the link overrides of the repos that stay in the ticket', () {
+      // The regression: `c` is still checked out next to `a` and its
+      // override is gg-owned — exactly the shape the ownership sweep of
+      // `removeOwnedOverrides` would have taken along with `b`.
+      final c = Directory(path.join(tempDir.path, 'c'))..createSync();
+      File(
+        path.join(c.path, 'package.json'),
+      ).writeAsStringSync('{"name": "c"}');
+
+      final a = tsRepo('a', 'overrides:\n  b: link:../b\n  c: link:../c\n');
+
+      final changed = removeDependencyOverrides(
+        repoDirs: [a],
+        packageNames: {'b'},
+      );
+
+      expect(changed, [a]);
+      final content = pnpmFileOf(a).readAsStringSync();
+      expect(content, isNot(contains('link:../b')));
+      expect(content, contains('c: link:../c'));
     });
 
     test('deletes a file gg created once nothing is left', () {

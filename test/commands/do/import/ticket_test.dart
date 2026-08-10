@@ -7,6 +7,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:args/command_runner.dart';
 import 'package:gg_git/gg_git.dart' as gg_git;
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
@@ -182,8 +183,9 @@ void main() {
     await runner.run(['ticket', ...args]);
   }
 
+  // A ticket sits directly in the workspace root.
   Directory ticketDirOf(String name) =>
-      Directory(path.join(tempDir.path, 'tickets', name));
+      Directory(path.join(tempDir.path, name));
 
   bool logged(String fragment) => messages.any((m) => m.contains(fragment));
 
@@ -216,7 +218,10 @@ void main() {
         await runCmd(build(), [file.path]);
 
         final tdir = ticketDirOf('feat_x');
-        expect(File(path.join(tdir.path, '.ticket')).existsSync(), isTrue);
+        expect(
+          File(path.join(tdir.path, ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
         expect(File(path.join(tdir.path, 'ticket.json')).existsSync(), isTrue);
         expect(logged('Checked out ticket feat_x'), isTrue);
       });
@@ -347,7 +352,10 @@ void main() {
 
         final tdir = ticketDirOf('feat_x');
         expect(tdir.existsSync(), isTrue);
-        expect(File(path.join(tdir.path, '.ticket')).existsSync(), isTrue);
+        expect(
+          File(path.join(tdir.path, ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
         expect(
           File(path.join(tdir.path, 'feat_x.code-workspace')).existsSync(),
           isTrue,
@@ -635,9 +643,8 @@ void main() {
 
       test('does not re-copy a repo already present in the ticket', () async {
         final repoA = makeMasterRepo('repo_a');
-        final dest = Directory(
-          path.join(tempDir.path, 'tickets', 'feat_x', 'repo_a'),
-        )..createSync(recursive: true);
+        final dest = Directory(path.join(tempDir.path, 'feat_x', 'repo_a'))
+          ..createSync(recursive: true);
         File(path.join(dest.path, 'pubspec.yaml')).writeAsStringSync('name: x');
         await runCmd(build(executionPath: repoA.path), ['feat_x']);
         expect(copyCalls.any((p) => p.endsWith('repo_a')), isFalse);
@@ -745,17 +752,16 @@ void main() {
         return d;
       }
 
-      test('reproduces the ticket with its organization folders', () async {
+      test('reproduces an ocean org repo flat in the ticket', () async {
         makeOrgRepo('ggsuite', 'repo_a');
 
         await runCmd(build(executionPath: tempDir.path), ['feat_x']);
 
-        final ticketDir = Directory(
-          path.join(tempDir.path, 'tickets', 'feat_x'),
-        );
-        expect(copyCalls, [path.join(ticketDir.path, 'ggsuite', 'repo_a')]);
+        // The ocean groups the repo by organization; the ticket does not.
+        final ticketDir = Directory(path.join(tempDir.path, 'feat_x'));
+        expect(copyCalls, [path.join(ticketDir.path, 'repo_a')]);
 
-        // The VS Code workspace addresses the repo through its org folder.
+        // The VS Code workspace addresses the repo without an org folder.
         final ws =
             jsonDecode(
                   File(
@@ -767,7 +773,7 @@ void main() {
           (ws['folders'] as List<dynamic>).cast<Map<String, dynamic>>().map(
             (f) => f['path'] as String,
           ),
-          <String>['ggsuite/repo_a'],
+          <String>['repo_a'],
         );
       });
 

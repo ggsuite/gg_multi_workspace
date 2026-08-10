@@ -42,15 +42,18 @@ class TicketCommand extends DirCommand<void> {
     );
   }
 
-  /// Base path that contains the `tickets` folder.
+  /// The workspace root the ticket folder is created in, beside `.ocean`.
   final String rootPath;
 
   /// Factory to create Directory instances
   final DirectoryFactory directoryFactory;
 
   @override
-  Future<void> exec({required Directory directory, required GgLog ggLog}) =>
-      get(directory: directory, ggLog: ggLog);
+  Future<void> exec({
+    required Directory directory,
+    required GgLog ggLog,
+    Map<String, dynamic> options = const {},
+  }) => get(directory: directory, ggLog: ggLog);
 
   @override
   Future<void> get({required Directory directory, required GgLog ggLog}) async {
@@ -64,11 +67,14 @@ class TicketCommand extends DirCommand<void> {
     // The description might be null if the user did not pass --message / -m.
     final String description = (argResults!['message'] as String?) ?? '';
 
-    // Build the directory path for the ticket (always under the workspace
-    // root, independent from the execution directory).
-    final ticketsPath = path.join(rootPath, ggMultiTicketFolder, issueId);
+    // Build the directory path for the ticket (always directly in the
+    // workspace root, independent from the execution directory).
+    final ticketsPath = WorkspaceUtils.ticketDir(
+      rootPath: rootPath,
+      ticketName: issueId,
+    ).path;
     final dir = directoryFactory(ticketsPath);
-    final ticketFile = File(path.join(ticketsPath, '.ticket'));
+    final ticketFile = File(path.join(ticketsPath, ticketJsonFileName));
 
     final relPath = p.relative(ticketsPath, from: directory.path);
 
@@ -86,11 +92,16 @@ class TicketCommand extends DirCommand<void> {
       dir.createSync(recursive: true);
     }
 
-    // Write the .ticket file as JSON.
-    writeRootTicket(
+    // Write the ticket.json. It carries the ticket id and its description
+    // from the very first moment; `do add` later fills in the repositories.
+    writeTicketJson(
       Directory(ticketsPath),
-      issueId: issueId,
-      description: description,
+      TicketJson(
+        issueId: issueId,
+        description: description,
+        repositories: const <TicketRepo>[],
+        ggVersion: ggCliVersion,
+      ),
     );
 
     // Write the VS Code workspace so `do code <ticket>` opens the fresh

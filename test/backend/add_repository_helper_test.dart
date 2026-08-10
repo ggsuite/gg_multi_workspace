@@ -85,6 +85,31 @@ void main() {
         expect(logs, anyElement(contains('repo from $expectedRepoUrl')));
       });
 
+      test('Clones only the named repo of a /orgs/<org>/<repo> url', () async {
+        // The org page with a repo appended is a web path, not a clone url —
+        // and it must add that one repo, not the whole organization.
+        const targetArg = 'https://github.com/orgs/ggsuite/gg_dna';
+        final mockGitCloner = MockGitCloner();
+        when(
+          () => mockGitCloner.cloneRepo(any(), any()),
+        ).thenAnswer((_) async {});
+
+        await addRepositoryHelper(
+          targetArg: targetArg,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+          force: false,
+        );
+
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/ggsuite/gg_dna.git',
+            path.join(workspacePath, 'ggsuite', 'gg_dna'),
+          ),
+        ).called(1);
+      });
+
       test('Processes repository URL that already ends with .git', () async {
         const targetArg = 'https://github.com/user/repo.git';
         final mockGitCloner = MockGitCloner();
@@ -846,12 +871,21 @@ void main() {
           () => mockGitCloner.cloneRepo(fallbackUrl, any()),
         ).thenThrow(Exception('Fallback fail'));
 
-        await addRepositoryHelper(
-          targetArg: repoName,
-          ggLog: ggLog,
-          gitCloner: mockGitCloner,
-          workspacePath: workspacePath,
-          force: false,
+        await expectLater(
+          addRepositoryHelper(
+            targetArg: repoName,
+            ggLog: ggLog,
+            gitCloner: mockGitCloner,
+            workspacePath: workspacePath,
+            force: false,
+          ),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('Repository "$repoName" was not found.'),
+            ),
+          ),
         );
 
         expect(

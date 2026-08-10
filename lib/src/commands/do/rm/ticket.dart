@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -15,7 +16,7 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Closes one or more tickets: deletes the remote feature branches of their
 /// repositories and moves each whole ticket — repositories as they are, plus
-/// `ticket.json`, `.ticket`, `.gg/` and the `.code-workspace` file — to
+/// `ticket.json`, `.gg/` and the `.code-workspace` file — to
 /// `<root>/.trash/<ticket>`.
 ///
 /// The tickets to close are named as arguments (`gg do rm ticket 88 92`).
@@ -112,12 +113,13 @@ class RemoveTicketCommand extends Command<void> {
     final workspacePath = WorkspaceUtils.defaultGgMultiWorkspacePath(
       workingDir: rootPath,
     );
-    final ticketsRoot = path.join(workspacePath, ggMultiTicketFolder);
-
     final dirs = <Directory>[];
     final missing = <String>[];
     for (final name in names) {
-      final dir = Directory(path.join(ticketsRoot, name));
+      final dir = WorkspaceUtils.ticketDir(
+        rootPath: workspacePath,
+        ticketName: name,
+      );
       if (dir.existsSync()) {
         dirs.add(dir);
       } else {
@@ -128,7 +130,7 @@ class RemoveTicketCommand extends Command<void> {
     if (missing.isNotEmpty) {
       throw Exception(
         cError(
-          'These tickets do not exist in $ticketsRoot: '
+          'These tickets do not exist in $workspacePath: '
           '${missing.join(', ')}.',
         ),
       );

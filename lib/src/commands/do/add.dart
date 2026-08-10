@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -38,6 +39,8 @@ typedef FetchRepoUrl = Future<String?> Function(String packageName);
 /// `--organization` may be given multiple times to add all repos of several
 /// organization folders of the ocean at once. `--no-localize`
 /// copies the repos without rewriting their references to local paths.
+/// `--no-transitive` copies only the requested repos and leaves the
+/// repos between them in the dependency graph out of the ticket.
 class AddCommand extends Command<dynamic> {
   /// Constructor for AddCommand.
   AddCommand({
@@ -47,7 +50,7 @@ class AddCommand extends Command<dynamic> {
     ProcessRunner? processRunner,
     String? oceanWorkspacePath,
     String? executionPath,
-    gg.DoCommit? ggDoCommit,
+    gg.GgSystemCommit? systemCommit,
     SortedProcessingList? sortedProcessingList,
     ChangeRefsToPubDev? unlocalizeRefs,
     ChangeRefsToLocal? localizeRefs,
@@ -63,7 +66,7 @@ class AddCommand extends Command<dynamic> {
        executionPath = executionPath ?? Directory.current.path,
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),
-       _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
+       _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
        _unlocalizeRefs = unlocalizeRefs ?? ChangeRefsToPubDev(ggLog: ggLog),
@@ -101,6 +104,12 @@ class AddCommand extends Command<dynamic> {
       defaultsTo: false,
       negatable: false,
     );
+    argParser.addFlag(
+      'transitive',
+      help: 'Also add the repos between the ticket repos (default)',
+      defaultsTo: true,
+      negatable: true,
+    );
   }
 
   /// The log function.
@@ -122,7 +131,7 @@ class AddCommand extends Command<dynamic> {
   final String executionPath;
 
   /// gg do commit used after localization with --git in ticket copies.
-  final gg.DoCommit _ggDoCommit;
+  final gg.GgSystemCommit _systemCommit;
 
   /// Sorted processing helper for ticket-wide iteration.
   final SortedProcessingList _sortedProcessingList;
@@ -162,6 +171,7 @@ class AddCommand extends Command<dynamic> {
     final bool localize = argResults!['localize'] as bool? ?? true;
     final orgs = argResults!['org'] as List<String>;
     final bool all = argResults!['all'] as bool;
+    final bool transitiveRepos = argResults!['transitive'] as bool? ?? true;
 
     if (targets.isEmpty && !all && orgs.isEmpty) {
       throw UsageException('Missing target parameter.', usage);
@@ -181,9 +191,11 @@ class AddCommand extends Command<dynamic> {
     // below sees a single layout.
     migrateToOrgFolders(workspacePath: oceanWorkspacePath, ggLog: ggLog);
     if (ticketPath != null) {
-      // The ticket is re-localized at the end of this run, which repairs the
-      // relative path references the move invalidates.
-      migrateToOrgFolders(workspacePath: ticketPath, ggLog: ggLog);
+      // A ticket goes the opposite way: it holds its repos flat, so the ones
+      // an older gg put into organization folders move back up. The ticket is
+      // re-localized at the end of this run, which repairs the relative path
+      // references the move invalidates.
+      migrateTicketToFlatFolders(ticketPath: ticketPath, ggLog: ggLog);
     }
 
     // If not in a ticket workspace: keep original behaviour (no graph logic).
@@ -207,10 +219,19 @@ class AddCommand extends Command<dynamic> {
 
     // Ticket mode: ensure requested repos are present in ocean first.
     final requestedRepoNames = <String>{};
+
+    // The organization a target names is the only thing that tells two
+    // same-named ocean repos apart — the name alone would always resolve to
+    // the first of them. Kept per repo name for the copy step below.
+    final requestedRepoUrls = <String, String>{};
+
     for (final targetArg in targets) {
       final repoName = extractRepoName(targetArg);
       if (repoName != null) {
         requestedRepoNames.add(repoName);
+        if (RepoFolderResolver.urlIdentity(targetArg) != null) {
+          requestedRepoUrls[repoName] = targetArg;
+        }
       }
     }
 
@@ -245,52 +266,61 @@ class AddCommand extends Command<dynamic> {
       ),
     );
 
-    // Clone missing transitive deps so the graph can resolve between-nodes.
-    await _cloneMissingTransitiveDeps(ggLog: ggLog);
+    // The whole graph machinery below exists to find the repos that lie
+    // between the ticket repos. With --no-transitive only the requested
+    // repos are copied, so neither the clone step nor the graph is needed.
+    final betweenNodes = <Node>[];
+
+    if (transitiveRepos) {
+      // Clone missing transitive deps so the graph can resolve between-nodes.
+      await _cloneMissingTransitiveDeps(ggLog: ggLog);
+
+      // Build dep graph of ocean + compute nodes between endpoints.
+      Map<String, Node> allNodes = const {};
+      try {
+        allNodes = await _graph.get(
+          directory: Directory(oceanWorkspacePath),
+          ggLog: ggLog,
+        );
+      } catch (e) {
+        ggLog(cError('Failed to build dependency graph: $e'));
+        allNodes = const {};
+      }
+
+      // Endpoints = CLI-requested repos + repos already in the ticket.
+      final endpointsByName = <String, Node>{};
+
+      // Endpoints based on requested repositories ----------------------------
+      for (final name in requestedRepoNames) {
+        final node = findNode(packageName: name, nodes: allNodes);
+        if (node != null) {
+          endpointsByName.putIfAbsent(node.name, () => node);
+        }
+      }
+
+      // Additional endpoints from existing ticket repositories ---------------
+      final existingTicketRepos = RepoFolderResolver.repoDirs(ticketPath);
+
+      for (final repoDir in existingTicketRepos) {
+        final repoName =
+            RepoFolderResolver.packageName(repoDir) ??
+            path.basename(repoDir.path);
+        final node = findNode(packageName: repoName, nodes: allNodes);
+        if (node != null) {
+          endpointsByName.putIfAbsent(node.name, () => node);
+        }
+      }
+
+      final endpoints = endpointsByName.values.toList();
+
+      if (endpoints.length >= 2) {
+        betweenNodes.addAll(_graph.getNodesBetween(allNodes, endpoints));
+      }
+    } else {
+      ggLog(cDetail('Skip adding transitive repos (--no-transitive).'));
+    }
 
     final ticketDir = Directory(ticketPath);
-
-    // Build dep graph of ocean + compute nodes between endpoints.
-    Map<String, Node> allNodes = const {};
-    try {
-      allNodes = await _graph.get(
-        directory: Directory(oceanWorkspacePath),
-        ggLog: ggLog,
-      );
-    } catch (e) {
-      ggLog(cError('Failed to build dependency graph: $e'));
-      allNodes = const {};
-    }
-
-    // Endpoints = CLI-requested repos + repos already in the ticket.
-    final endpointsByName = <String, Node>{};
-
-    // Endpoints based on requested repositories ------------------------------
-    for (final name in requestedRepoNames) {
-      final node = findNode(packageName: name, nodes: allNodes);
-      if (node != null) {
-        endpointsByName.putIfAbsent(node.name, () => node);
-      }
-    }
-
-    // Additional endpoints from existing ticket repositories -----------------
-    final existingTicketRepos = RepoFolderResolver.repoDirs(ticketPath);
-
-    for (final repoDir in existingTicketRepos) {
-      final repoName =
-          RepoFolderResolver.packageName(repoDir) ??
-          path.basename(repoDir.path);
-      final node = findNode(packageName: repoName, nodes: allNodes);
-      if (node != null) {
-        endpointsByName.putIfAbsent(node.name, () => node);
-      }
-    }
-
-    final endpoints = endpointsByName.values.toList();
-
-    final betweenNodes = endpoints.length >= 2
-        ? _graph.getNodesBetween(allNodes, endpoints)
-        : <Node>[];
 
     final finalToCopy = <String>{
       ...requestedRepoNames,
@@ -305,6 +335,7 @@ class AddCommand extends Command<dynamic> {
     await _copyReposToTicket(
       ticketPath: ticketPath,
       repoNames: finalToCopy,
+      repoUrls: requestedRepoUrls,
       ggLog: taskLog,
       reportLog: ggLog,
     );
@@ -623,6 +654,7 @@ class AddCommand extends Command<dynamic> {
   Future<void> _copyReposToTicket({
     required String ticketPath,
     required Set<String> repoNames,
+    required Map<String, String> repoUrls,
     required GgLog ggLog,
     required GgLog reportLog,
     int maxParallel = 4,
@@ -638,12 +670,20 @@ class AddCommand extends Command<dynamic> {
         }
         index = nextIndex++;
         final repoName = queue[index];
-        await _copyRepoToTicket(
+        final copied = await _copyRepoToTicket(
           repoName: repoName,
+          repoUrl: repoUrls[repoName],
           ticketPath: ticketPath,
           ggLog: ggLog,
         );
-        reportLog(cDetail('  ✓ $repoName'));
+        // Without the check a repository that never made it into the ticket
+        // would still be reported as added — the verbose-only log below is
+        // invisible in a normal run.
+        if (copied) {
+          reportLog(cDetail('  ✓ $repoName'));
+        } else {
+          reportLog(cError('  ✗ $repoName not found in ocean.'));
+        }
       }
     }
 
@@ -656,30 +696,48 @@ class AddCommand extends Command<dynamic> {
 
   /// Copies the repository from the ocean to the [ticketPath] but
   /// does not trigger a ticket-wide relocalization.
-  Future<void> _copyRepoToTicket({
+  ///
+  /// Returns false when the repository is not in the ocean at all.
+  Future<bool> _copyRepoToTicket({
     required String repoName,
+    required String? repoUrl,
     required String ticketPath,
     required GgLog ggLog,
   }) async {
-    final srcDir = RepoFolderResolver.resolve(
-      workspacePath: oceanWorkspacePath,
-      repoName: repoName,
-    );
+    // A repo the user addressed by url is looked up by that url: two
+    // organizations can own a repository of this name, and the name alone
+    // would always find the same one of them.
+    final srcDir =
+        (repoUrl == null
+            ? null
+            : RepoFolderResolver.resolveByRemoteUrl(
+                workspacePath: oceanWorkspacePath,
+                repoUrl: repoUrl,
+              )) ??
+        RepoFolderResolver.resolve(
+          workspacePath: oceanWorkspacePath,
+          repoName: repoName,
+        );
     if (srcDir == null) {
       ggLog(cError('Repository $repoName not found in ocean.'));
-      return;
+      return false;
     }
 
-    // The ticket copy keeps the location the repo has in the ocean
-    // workspace, i.e. `<ticket>/<org>/<repo>`.
-    final relativePath = RepoFolderResolver.relativePath(
-      workspacePath: oceanWorkspacePath,
-      repoDir: srcDir,
+    // The ticket holds its repos flat — it only falls back to an organization
+    // folder when the name is already taken by a repo of another one.
+    final destDir = Directory(
+      RepoFolderResolver.ticketDestination(
+        ticketPath: ticketPath,
+        repoUrl: RepoFolderResolver.remoteUrl(srcDir) ?? '',
+        // The folder name of the ocean copy, not the requested name: for a
+        // cross-language bridge repo the package name differs from it, and
+        // the ticket keeps the name the repository has on disk.
+        repoName: path.basename(srcDir.path),
+      ),
     );
-    final destDir = Directory(path.join(ticketPath, relativePath));
     if (destDir.existsSync() && destDir.listSync().isNotEmpty) {
       ggLog(darkGray('$repoName already exists in ticket workspace.'));
-      return;
+      return true;
     }
 
     await _prepareOceanRepositoryForCopy(
@@ -709,6 +767,7 @@ class AddCommand extends Command<dynamic> {
     );
 
     ggLog(cDetail('Added repository $repoName to ticket workspace.'));
+    return true;
   }
 
   /// Prepares the ocean repository state before copying it into a ticket.
@@ -1036,14 +1095,19 @@ class AddCommand extends Command<dynamic> {
         upgradeDart: true,
       );
 
-      // Commit per repo; skip changelog (gg_changelog needs pubspec.yaml).
+      // A system commit per repo: only gg's own reference files belong in
+      // it. »do add« pulls a repository into a ticket that may well carry
+      // unfinished work — that work gets its own, prefix-less commit first
+      // instead of vanishing into gg's bookkeeping.
       try {
-        await _ggDoCommit.exec(
+        await _systemCommit.commit(
           directory: repoDir,
           ggLog: ggLog,
-          message: '#gg: changed references to path',
-          force: true,
-          updateChangeLog: false,
+          message: '${gg.ggCommitPrefix}changed references to path',
+          userCommitMessage: gg.readTicketDescriptionForRepo,
+          // Localizing rewrites the manifests, so the recorded »everything is
+          // committed« hash no longer matches the tree it was taken from.
+          stateKey: gg.GgState.doCommitKey,
         );
       } catch (e) {
         ggLog(cError('Failed to commit $repoName: $e'));

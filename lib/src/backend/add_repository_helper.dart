@@ -174,10 +174,19 @@ Future<void> addRepositoryHelper({
         }
       }
       if (!anySuccess) {
+        // A repository nobody owns is a typo in the name much more often than
+        // it is a broken remote, so the run stops here instead of continuing
+        // with a repository that will be missing from every following step.
         ggLog(
           cError(
             'Failed to clone repository '
             '$repoName from any known organizations.',
+          ),
+        );
+        throw Exception(
+          cError(
+            'Repository "$repoName" was not found. Check the name, or pass '
+            'the full repository url.',
           ),
         );
       }
@@ -277,6 +286,18 @@ Future<void> addRepositoryHelper({
     } else {
       // Treat as a repository URL ---------------------------------------------
       String repoUrl = cleanedUrl;
+      // `github.com/orgs/<org>/<repo>` names the repository, but it is a web
+      // path, not a clone url — git cannot fetch from it. Rebuild the plain
+      // `github.com/<org>/<repo>` form the platform actually serves.
+      if (parsedUrl.platformType == 'github' &&
+          parsedUrl.org != null &&
+          parsedUrl.repo != null &&
+          uri.pathSegments.isNotEmpty &&
+          uri.pathSegments.first == 'orgs') {
+        repoUrl =
+            '${uri.scheme}://${uri.host}/'
+            '${parsedUrl.org}/${parsedUrl.repo}';
+      }
       if (!repoUrl.endsWith('.git')) {
         repoUrl = '$repoUrl.git';
       }

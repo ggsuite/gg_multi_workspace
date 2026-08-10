@@ -15,6 +15,7 @@ import 'package:path/path.dart' as path;
 import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/backend/dependency_overrides.dart';
+import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
 /// Factory for `Directory` instances — overridable in tests.
 typedef DirectoryFactory = Directory Function(String path);
@@ -27,10 +28,10 @@ typedef DirectoryFactory = Directory Function(String path);
 /// chain guard below still refuses to tear a repo out of the *middle* of a
 /// chain that stays behind.
 ///
-/// The command must run inside a ticket folder. To delete repos from the
-/// master workspace instead, pass `--from-master`: the master copy is then
-/// deleted — but only when no ticket still references the repo; otherwise
-/// the offending tickets are listed.
+/// The command must run inside a ticket folder and never touches the master
+/// workspace: the ocean holds the only checkout a repo has outside the
+/// tickets, so deleting it there is unrecoverable work, not a ticket
+/// cleanup. Removing a repo from the ocean is a manual step.
 class RemoveRepoCommand extends Command<void> {
   /// Constructor.
   RemoveRepoCommand({
@@ -43,15 +44,7 @@ class RemoveRepoCommand extends Command<void> {
        directoryFactory = directoryFactory ?? Directory.new,
        // coverage:ignore-end
        _sortedProcessingList =
-           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog) {
-    argParser.addFlag(
-      'from-master',
-      negatable: false,
-      help:
-          'Delete the repos from the master workspace instead of a ticket '
-          '(refused while a ticket still references them).',
-    );
-  }
+           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog);
 
   // ...........................................................................
   @override
@@ -59,9 +52,7 @@ class RemoveRepoCommand extends Command<void> {
 
   // ...........................................................................
   @override
-  String get description =>
-      'Delete repos from the current ticket '
-      '(--from-master: from the master workspace)';
+  String get description => 'Delete repos from the current ticket';
 
   // ...........................................................................
   @override
@@ -74,22 +65,12 @@ class RemoveRepoCommand extends Command<void> {
       for (final target in targets) extractRepoName(target) ?? 'unknown_repo',
     ];
 
-    final fromMaster = argResults!['from-master'] as bool;
-    if (fromMaster) {
-      _root = WorkspaceUtils.defaultGgMultiWorkspacePath(workingDir: rootPath);
-      for (final repoName in repoNames) {
-        _removeFromOceanIfUnused(repoName);
-      }
-      return;
-    }
-
     final ticketPath = WorkspaceUtils.detectTicketPath(rootPath);
     if (ticketPath == null) {
       throw Exception(
         cError(
           '»gg do rm repo« must be called inside a ticket folder. '
-          'To delete repos from the master workspace, add '
-          '${cCmd('--from-master')}.',
+          'It never deletes repos from the master workspace.',
         ),
       );
     }
@@ -106,8 +87,7 @@ class RemoveRepoCommand extends Command<void> {
   /// Directory the command was invoked in.
   final String rootPath;
 
-  /// The workspace [rootPath] belongs to: the ticket directory, or the Gg
-  /// Multi workspace root with `--from-master`. Resolved in [run], so the
+  /// The ticket directory [rootPath] belongs to. Resolved in [run], so the
   /// command also works from any sub-folder.
   late final String _root;
 
@@ -219,7 +199,40 @@ class RemoveRepoCommand extends Command<void> {
     );
 
     _updateTicketJson(ticketRepoDir, nodes);
+    _updateCodeWorkspaceFile(ticketRepoDir, nodes);
     _removeDependencyOverrides(ticketRepoDir, nodes, removedNames);
+  }
+
+  // ...........................................................................
+  /// Rewrites the ticket's `<ticket>.code-workspace` so the deleted repo is
+  /// no longer one of its folders.
+  ///
+  /// `do add` writes the file, so `do rm repo` has to maintain it — a stale
+  /// entry opens VS Code on a folder that is gone.
+  void _updateCodeWorkspaceFile(Directory removedRepoDir, List<Node> nodes) {
+    final ticketDir = directoryFactory(_root);
+    final ticketName = path.basename(ticketDir.path);
+    final file = File(path.join(ticketDir.path, '$ticketName.code-workspace'));
+    // A ticket that never saw a `do add` has no workspace file, and this is
+    // no place to give it one.
+    if (!file.existsSync()) {
+      return;
+    }
+
+    writeCodeWorkspaceFile(ticketDir, [
+      for (final node in nodes)
+        if (!path.equals(node.directory.path, removedRepoDir.path))
+          RepoFolderResolver.relativePath(
+            workspacePath: ticketDir.path,
+            repoDir: node.directory,
+          ),
+    ]);
+    ggLog(
+      cDetail(
+        '✓ Removed ${path.basename(removedRepoDir.path)} from '
+        '$ticketName.code-workspace.',
+      ),
+    );
   }
 
   // ...........................................................................
@@ -350,61 +363,5 @@ class RemoveRepoCommand extends Command<void> {
         '$ticketJsonFileName.',
       ),
     );
-  }
-
-  // ...........................................................................
-  /// Scans tickets, deletes the ocean copy iff none reference the repo.
-  void _removeFromOceanIfUnused(String repoName) {
-    final ticketsContainingRepo = _ticketsReferencing(repoName);
-    final resolved = RepoFolderResolver.resolve(
-      workspacePath: path.join(_root, ggMultiOceanFolder),
-      repoName: repoName,
-    );
-    final oceanRepoDir =
-        resolved ??
-        directoryFactory(path.join(_root, ggMultiOceanFolder, repoName));
-    final existsInMaster = oceanRepoDir.existsSync();
-
-    if (ticketsContainingRepo.isEmpty && !existsInMaster) {
-      ggLog(cError('Repository $repoName not found in any workspace.'));
-      return;
-    }
-
-    if (ticketsContainingRepo.isEmpty) {
-      oceanRepoDir.deleteSync(recursive: true);
-      RepoFolderResolver.removeEmptyOrgFolder(
-        workspacePath: path.join(_root, ggMultiOceanFolder),
-        repoDir: oceanRepoDir,
-      );
-      ggLog(cDetail('✓ Deleted repository $repoName from ocean.'));
-      return;
-    }
-
-    ggLog('Repository $repoName is used by the following tickets:');
-    for (final ticket in ticketsContainingRepo) {
-      ggLog(' - $ticket');
-    }
-    ggLog(
-      cError(
-        'Please remove it from those tickets first '
-        '(with `gg do rm repo $repoName` from inside each ticket).',
-      ),
-    );
-  }
-
-  // ...........................................................................
-  /// Returns the names of all tickets that still hold a copy of [repoName].
-  List<String> _ticketsReferencing(String repoName) {
-    final ticketsRoot = Directory(path.join(_root, ggMultiTicketFolder));
-    if (!ticketsRoot.existsSync()) return const <String>[];
-    return [
-      for (final ticket in ticketsRoot.listSync().whereType<Directory>())
-        if (RepoFolderResolver.resolve(
-              workspacePath: ticket.path,
-              repoName: repoName,
-            ) !=
-            null)
-          path.basename(ticket.path),
-    ];
   }
 }
