@@ -38,7 +38,7 @@ typedef FetchRepoUrl = Future<String?> Function(String packageName);
 /// `--organization` may be given multiple times to add all repos of several
 /// organization folders of the ocean at once. `--no-localize`
 /// copies the repos without rewriting their references to local paths.
-/// `--no-transitive-repos` copies only the requested repos and leaves the
+/// `--no-transitive` copies only the requested repos and leaves the
 /// repos between them in the dependency graph out of the ticket.
 class AddCommand extends Command<dynamic> {
   /// Constructor for AddCommand.
@@ -104,7 +104,7 @@ class AddCommand extends Command<dynamic> {
       negatable: false,
     );
     argParser.addFlag(
-      'transitive-repos',
+      'transitive',
       help: 'Also add the repos between the ticket repos (default)',
       defaultsTo: true,
       negatable: true,
@@ -170,8 +170,7 @@ class AddCommand extends Command<dynamic> {
     final bool localize = argResults!['localize'] as bool? ?? true;
     final orgs = argResults!['org'] as List<String>;
     final bool all = argResults!['all'] as bool;
-    final bool transitiveRepos =
-        argResults!['transitive-repos'] as bool? ?? true;
+    final bool transitiveRepos = argResults!['transitive'] as bool? ?? true;
 
     if (targets.isEmpty && !all && orgs.isEmpty) {
       throw UsageException('Missing target parameter.', usage);
@@ -256,7 +255,7 @@ class AddCommand extends Command<dynamic> {
     );
 
     // The whole graph machinery below exists to find the repos that lie
-    // between the ticket repos. With --no-transitive-repos only the requested
+    // between the ticket repos. With --no-transitive only the requested
     // repos are copied, so neither the clone step nor the graph is needed.
     final betweenNodes = <Node>[];
 
@@ -306,7 +305,7 @@ class AddCommand extends Command<dynamic> {
         betweenNodes.addAll(_graph.getNodesBetween(allNodes, endpoints));
       }
     } else {
-      ggLog(cDetail('Skip adding transitive repos (--no-transitive-repos).'));
+      ggLog(cDetail('Skip adding transitive repos (--no-transitive).'));
     }
 
     final ticketDir = Directory(ticketPath);

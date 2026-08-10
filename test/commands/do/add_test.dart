@@ -2399,7 +2399,7 @@ version: 1.0.0
     );
 
     test(
-      '--no-transitive-repos leaves the between nodes out of the ticket',
+      '--no-transitive leaves the between nodes out of the ticket',
       () async {
         final aDir = Directory(path.join(oceanWorkspacePath, 'a'))
           ..createSync(recursive: true);
@@ -2495,13 +2495,7 @@ version: 1.0.0
           systemCommit: mockDoCommit,
         );
 
-        await runner.run([
-          'add',
-          '--verbose',
-          '--no-transitive-repos',
-          'a',
-          'c',
-        ]);
+        await runner.run(['add', '--verbose', '--no-transitive', 'a', 'c']);
 
         expect(Directory(path.join(ticketDir.path, 'a')).existsSync(), isTrue);
         expect(Directory(path.join(ticketDir.path, 'c')).existsSync(), isTrue);
@@ -2511,9 +2505,8 @@ version: 1.0.0
 
         expect(
           logMessages.any(
-            (m) => m.contains(
-              'Skip adding transitive repos (--no-transitive-repos).',
-            ),
+            (m) =>
+                m.contains('Skip adding transitive repos (--no-transitive).'),
           ),
           isTrue,
         );
