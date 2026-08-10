@@ -4,10 +4,12 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 import 'package:gg_multi_workspace/src/commands/do/rm/repo.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
@@ -421,6 +423,30 @@ void main() {
           isFalse,
         );
         expect(messages.any((m) => m.contains('from ticket.json')), isFalse);
+      });
+
+      test('drops the deleted repo from the .code-workspace', () async {
+        final wsFile = File(path.join(alphaDir.path, 'alpha.code-workspace'));
+        writeCodeWorkspaceFile(alphaDir, ['a', 'b']);
+
+        await runnerAt(alphaDir.path).run(['repo', 'a']);
+
+        final folders =
+            (jsonDecode(wsFile.readAsStringSync())
+                    as Map<String, dynamic>)['folders']
+                as List<dynamic>;
+        expect(folders.map((f) => (f as Map<String, dynamic>)['path']), ['b']);
+        expect(messages, contains('✓ Removed a from alpha.code-workspace.'));
+      });
+
+      test('writes no .code-workspace into a ticket that has none', () async {
+        await runnerAt(alphaDir.path).run(['repo', 'a']);
+
+        expect(
+          File(path.join(alphaDir.path, 'alpha.code-workspace')).existsSync(),
+          isFalse,
+        );
+        expect(messages.any((m) => m.contains('.code-workspace')), isFalse);
       });
     });
 
