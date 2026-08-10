@@ -5,6 +5,11 @@
 ### Removed
 
 - Merge .ticket with ticket.json. Remove usage of .ticket
+## 2.3.0 - 2026-08-10
+
+### Changed
+
+- gg do add --no-transitive
 
 ## 2.2.0 - 2026-08-09
 
