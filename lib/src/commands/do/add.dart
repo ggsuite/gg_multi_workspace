@@ -657,12 +657,19 @@ class AddCommand extends Command<dynamic> {
         }
         index = nextIndex++;
         final repoName = queue[index];
-        await _copyRepoToTicket(
+        final copied = await _copyRepoToTicket(
           repoName: repoName,
           ticketPath: ticketPath,
           ggLog: ggLog,
         );
-        reportLog(cDetail('  ✓ $repoName'));
+        // Without the check a repository that never made it into the ticket
+        // would still be reported as added — the verbose-only log below is
+        // invisible in a normal run.
+        if (copied) {
+          reportLog(cDetail('  ✓ $repoName'));
+        } else {
+          reportLog(cError('  ✗ $repoName not found in ocean.'));
+        }
       }
     }
 
@@ -675,7 +682,9 @@ class AddCommand extends Command<dynamic> {
 
   /// Copies the repository from the ocean to the [ticketPath] but
   /// does not trigger a ticket-wide relocalization.
-  Future<void> _copyRepoToTicket({
+  ///
+  /// Returns false when the repository is not in the ocean at all.
+  Future<bool> _copyRepoToTicket({
     required String repoName,
     required String ticketPath,
     required GgLog ggLog,
@@ -686,7 +695,7 @@ class AddCommand extends Command<dynamic> {
     );
     if (srcDir == null) {
       ggLog(cError('Repository $repoName not found in ocean.'));
-      return;
+      return false;
     }
 
     // The ticket copy keeps the location the repo has in the ocean
@@ -698,7 +707,7 @@ class AddCommand extends Command<dynamic> {
     final destDir = Directory(path.join(ticketPath, relativePath));
     if (destDir.existsSync() && destDir.listSync().isNotEmpty) {
       ggLog(darkGray('$repoName already exists in ticket workspace.'));
-      return;
+      return true;
     }
 
     await _prepareOceanRepositoryForCopy(
@@ -728,6 +737,7 @@ class AddCommand extends Command<dynamic> {
     );
 
     ggLog(cDetail('Added repository $repoName to ticket workspace.'));
+    return true;
   }
 
   /// Prepares the ocean repository state before copying it into a ticket.

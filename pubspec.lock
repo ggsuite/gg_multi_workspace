@@ -255,7 +255,7 @@ packages:
       path: "../gg_localize_refs"
       relative: true
     source: path
-    version: "4.2.0"
+    version: "4.2.1"
   gg_log:
     dependency: "direct main"
     description:
@@ -278,7 +278,7 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "2.2.0"
+    version: "2.2.1"
   gg_one:
     dependency: "direct main"
     description:
@@ -292,21 +292,21 @@ packages:
       path: "../gg_one_commit"
       relative: true
     source: path
-    version: "2.2.0"
+    version: "2.2.1"
   gg_one_core:
     dependency: "direct overridden"
     description:
       path: "../gg_one_core"
       relative: true
     source: path
-    version: "2.3.0"
+    version: "2.3.1"
   gg_one_do_publish:
     dependency: "direct overridden"
     description:
       path: "../gg_one_do_publish"
       relative: true
     source: path
-    version: "2.4.0"
+    version: "2.4.1"
   gg_one_merge:
     dependency: "direct overridden"
     description:

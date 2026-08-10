@@ -846,12 +846,21 @@ void main() {
           () => mockGitCloner.cloneRepo(fallbackUrl, any()),
         ).thenThrow(Exception('Fallback fail'));
 
-        await addRepositoryHelper(
-          targetArg: repoName,
-          ggLog: ggLog,
-          gitCloner: mockGitCloner,
-          workspacePath: workspacePath,
-          force: false,
+        await expectLater(
+          addRepositoryHelper(
+            targetArg: repoName,
+            ggLog: ggLog,
+            gitCloner: mockGitCloner,
+            workspacePath: workspacePath,
+            force: false,
+          ),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('Repository "$repoName" was not found.'),
+            ),
+          ),
         );
 
         expect(

@@ -118,6 +118,82 @@ void main() {
         ).called(1);
       });
 
+      test('removes the folders it created when the clone fails', () async {
+        // Arrange: the org folder does not exist yet, so cloneRepo has to
+        // create it — a failing clone must not leave it behind.
+        const repoUrl = 'https://github.com/unknownOrg/unknown.git';
+        final orgDir = Directory(path.join(tempDir.path, 'unknownOrg'));
+        final targetDirectory = path.join(orgDir.path, 'unknown');
+        expect(orgDir.existsSync(), isFalse);
+
+        when(() => mockProcessRunner('git', any())).thenAnswer(
+          (_) async => ProcessResult(456, 1, '', 'repository not found'),
+        );
+
+        // Act
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        // Assert
+        expect(Directory(targetDirectory).existsSync(), isFalse);
+        expect(orgDir.existsSync(), isFalse);
+      });
+
+      test('removes a whole tree of folders it created', () async {
+        // Arrange: neither the workspace nor the org folder exist, so
+        // cloneRepo walks up to the first existing ancestor and creates
+        // several levels at once. A failing clone must remove all of them.
+        const repoUrl = 'https://github.com/unknownOrg/unknown.git';
+        final workspaceDir = Directory(
+          path.join(tempDir.path, 'new_workspace'),
+        );
+        final orgDir = Directory(path.join(workspaceDir.path, 'unknownOrg'));
+        final targetDirectory = path.join(orgDir.path, 'unknown');
+        expect(workspaceDir.existsSync(), isFalse);
+
+        when(() => mockProcessRunner('git', any())).thenAnswer(
+          (_) async => ProcessResult(456, 1, '', 'repository not found'),
+        );
+
+        // Act
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        // Assert — the outermost created folder is gone with everything
+        // in it, while the pre-existing temp folder survives.
+        expect(workspaceDir.existsSync(), isFalse);
+        expect(tempDir.existsSync(), isTrue);
+      });
+
+      test('keeps an existing org folder that holds other repos', () async {
+        // Arrange: the org folder existed before and holds another repo, so
+        // a failing clone must leave it untouched.
+        const repoUrl = 'https://github.com/knownOrg/unknown.git';
+        final orgDir = Directory(path.join(tempDir.path, 'knownOrg'));
+        final otherRepo = Directory(path.join(orgDir.path, 'other_repo'));
+        otherRepo.createSync(recursive: true);
+        final targetDirectory = path.join(orgDir.path, 'unknown');
+
+        when(() => mockProcessRunner('git', any())).thenAnswer(
+          (_) async => ProcessResult(456, 1, '', 'repository not found'),
+        );
+
+        // Act
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        // Assert
+        expect(Directory(targetDirectory).existsSync(), isFalse);
+        expect(orgDir.existsSync(), isTrue);
+        expect(otherRepo.existsSync(), isTrue);
+      });
+
       test(
         'ensures parent directory is created if it does not exist',
         () async {
