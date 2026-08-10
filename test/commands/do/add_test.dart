@@ -2399,6 +2399,135 @@ version: 1.0.0
     );
 
     test(
+      '--no-transitive-repos leaves the between nodes out of the ticket',
+      () async {
+        final aDir = Directory(path.join(oceanWorkspacePath, 'a'))
+          ..createSync(recursive: true);
+        final bDir = Directory(path.join(oceanWorkspacePath, 'b'))
+          ..createSync(recursive: true);
+        final cDir = Directory(path.join(oceanWorkspacePath, 'c'))
+          ..createSync(recursive: true);
+
+        File(path.join(aDir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: a
+version: 1.0.0
+dependencies:
+  b: ^1.0.0
+''');
+        File(path.join(bDir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: b
+version: 1.0.0
+dependencies:
+  c: ^1.0.0
+''');
+        File(path.join(cDir.path, 'pubspec.yaml')).writeAsStringSync('''
+name: c
+version: 1.0.0
+''');
+
+        final ticketDir = Directory(
+          path.join(tempDir.path, ggMultiTicketFolder, 'TXYZ'),
+        )..createSync(recursive: true);
+
+        final mockRunner = MockProcessRunner();
+        when(
+          () => mockRunner(
+            'git',
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+        when(
+          () => mockRunner(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+        when(
+          () => mockRunner(
+            'dart',
+            ['pub', 'upgrade'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
+
+        final mockDoCommit = MockGgSystemCommit();
+        when(
+          () => mockDoCommit.commit(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
+          ),
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
+
+        when(
+          () => mockRunner(
+            'git',
+            ['status', '--porcelain', '--untracked-files=no'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockRunner.call,
+          systemCommit: mockDoCommit,
+        );
+
+        await runner.run([
+          'add',
+          '--verbose',
+          '--no-transitive-repos',
+          'a',
+          'c',
+        ]);
+
+        expect(Directory(path.join(ticketDir.path, 'a')).existsSync(), isTrue);
+        expect(Directory(path.join(ticketDir.path, 'c')).existsSync(), isTrue);
+
+        // b lies between a and c and is therefore not copied.
+        expect(Directory(path.join(ticketDir.path, 'b')).existsSync(), isFalse);
+
+        expect(
+          logMessages.any(
+            (m) => m.contains(
+              'Skip adding transitive repos (--no-transitive-repos).',
+            ),
+          ),
+          isTrue,
+        );
+
+        final workspaceFile = File(
+          path.join(ticketDir.path, 'TXYZ.code-workspace'),
+        );
+        expect(workspaceFile.existsSync(), isTrue);
+        final workspaceJson =
+            jsonDecode(workspaceFile.readAsStringSync())
+                as Map<String, dynamic>;
+        final folders = (workspaceJson['folders'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        final folderPaths = folders.map((f) => f['path'] as String).toSet();
+        expect(folderPaths, equals(<String>{'a', 'c'}));
+      },
+    );
+
+    test(
       'adds between nodes using existing ticket repos as endpoints',
       () async {
         final aDir = Directory(path.join(oceanWorkspacePath, 'a'))
