@@ -288,6 +288,18 @@ Future<void> addRepositoryHelper({
     } else {
       // Treat as a repository URL ---------------------------------------------
       String repoUrl = cleanedUrl;
+      // `github.com/orgs/<org>/<repo>` names the repository, but it is a web
+      // path, not a clone url — git cannot fetch from it. Rebuild the plain
+      // `github.com/<org>/<repo>` form the platform actually serves.
+      if (parsedUrl.platformType == 'github' &&
+          parsedUrl.org != null &&
+          parsedUrl.repo != null &&
+          uri.pathSegments.isNotEmpty &&
+          uri.pathSegments.first == 'orgs') {
+        repoUrl =
+            '${uri.scheme}://${uri.host}/'
+            '${parsedUrl.org}/${parsedUrl.repo}';
+      }
       if (!repoUrl.endsWith('.git')) {
         repoUrl = '$repoUrl.git';
       }

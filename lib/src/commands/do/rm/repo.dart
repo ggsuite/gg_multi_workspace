@@ -15,6 +15,7 @@ import 'package:path/path.dart' as path;
 import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/backend/dependency_overrides.dart';
+import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
 /// Factory for `Directory` instances — overridable in tests.
 typedef DirectoryFactory = Directory Function(String path);
@@ -198,7 +199,40 @@ class RemoveRepoCommand extends Command<void> {
     );
 
     _updateTicketJson(ticketRepoDir, nodes);
+    _updateCodeWorkspaceFile(ticketRepoDir, nodes);
     _removeDependencyOverrides(ticketRepoDir, nodes, removedNames);
+  }
+
+  // ...........................................................................
+  /// Rewrites the ticket's `<ticket>.code-workspace` so the deleted repo is
+  /// no longer one of its folders.
+  ///
+  /// `do add` writes the file, so `do rm repo` has to maintain it — a stale
+  /// entry opens VS Code on a folder that is gone.
+  void _updateCodeWorkspaceFile(Directory removedRepoDir, List<Node> nodes) {
+    final ticketDir = directoryFactory(_root);
+    final ticketName = path.basename(ticketDir.path);
+    final file = File(path.join(ticketDir.path, '$ticketName.code-workspace'));
+    // A ticket that never saw a `do add` has no workspace file, and this is
+    // no place to give it one.
+    if (!file.existsSync()) {
+      return;
+    }
+
+    writeCodeWorkspaceFile(ticketDir, [
+      for (final node in nodes)
+        if (!path.equals(node.directory.path, removedRepoDir.path))
+          RepoFolderResolver.relativePath(
+            workspacePath: ticketDir.path,
+            repoDir: node.directory,
+          ),
+    ]);
+    ggLog(
+      cDetail(
+        '✓ Removed ${path.basename(removedRepoDir.path)} from '
+        '$ticketName.code-workspace.',
+      ),
+    );
   }
 
   // ...........................................................................
