@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_process/gg_process.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
@@ -112,7 +113,7 @@ Future<void> installGitattributes({
   ProcessRunner? processRunner,
 }) async {
   final list = sortedProcessingList ?? SortedProcessingList(ggLog: ggLog);
-  final runner = processRunner ?? Process.run;
+  final runner = processRunner ?? ggRunProcess;
 
   // Detect ticket folder -----------------------------------------------------
   final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -186,7 +187,7 @@ Future<void> installGitattributes({
       'git',
       <String>['config', 'merge.ours.driver', 'true'],
       workingDirectory: repoDir.path,
-      runInShell: Platform.isWindows,
+      runInShell: ggPlatform.isWindows,
     );
 
     if (result.exitCode != 0) {

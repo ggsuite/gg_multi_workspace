@@ -8,6 +8,7 @@ import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_process/gg_process.dart';
 
 /// Typedef for a process runner function.
 /// A class responsible for cloning git repositories and performing Git/utility operations.
@@ -18,7 +19,7 @@ class GitHandler {
   /// Constructor accepts an optional [processRunner]
   /// to enable testing by injection.
   GitHandler({ProcessRunner? processRunner})
-    : processRunner = processRunner ?? Process.run;
+    : processRunner = processRunner ?? ggRunProcess;
 
   /// Clones the repository from [repoUrl] into [targetDirectory].
   /// Throws an exception if cloning fails.

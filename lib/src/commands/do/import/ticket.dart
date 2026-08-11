@@ -11,11 +11,12 @@ import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_git/gg_git.dart' as gg_git;
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_process/gg_process.dart';
 import 'package:http/http.dart' as http;
-import 'package:interact/interact.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_one/gg_one.dart' show GgPrompts, throwWhenNotATerminal;
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
@@ -75,7 +76,7 @@ class DoCheckoutCommand extends Command<dynamic> {
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),
        executionPath = executionPath ?? Directory.current.path,
-       processRunner = processRunner ?? Process.run,
+       processRunner = processRunner ?? ggRunProcess,
        _selectBranch = selectBranch ?? _defaultSelectBranch,
        _copyDir = copyDir ?? copyDirectory,
        _fetchTicketJson = fetchTicketJson ?? _defaultFetchTicketJson;
@@ -117,10 +118,14 @@ class DoCheckoutCommand extends Command<dynamic> {
 
   // coverage:ignore-start
   static Future<String?> _defaultSelectBranch(List<String> branches) async {
-    final index = Select(
+    throwWhenNotATerminal(
+      'the ticket branch prompt',
+      'pass the branch explicitly instead of a bare repository name',
+    );
+    final index = await GgPrompts.current.select(
       prompt: 'Select a ticket branch',
       options: branches,
-    ).interact();
+    );
     return branches[index];
   }
 
