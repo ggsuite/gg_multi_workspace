@@ -16,8 +16,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
-import 'package:gg_one/gg_one.dart'
-    show GgPrompts, throwWhenNotATerminal;
+import 'package:gg_one/gg_one.dart' show GgPrompts, throwWhenNotATerminal;
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
