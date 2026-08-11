@@ -5,7 +5,8 @@
 ### Changed
 
 - Provide gg via npm
-- &quot;First javascript implementation&quot;
+- "First javascript implementation"
+- Fix shell changes
 
 ## 3.1.0 - 2026-08-10
 
