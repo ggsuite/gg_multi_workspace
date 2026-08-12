@@ -1,6 +1,6 @@
 name: gg_multi_workspace
 description: "Workspace management of the gg_multi tool family - adding repos and organizations, importing, creating and removing tickets, syncing the ocean, listing workspaces."
-version: 3.1.1
+version: 3.1.2
 repository: https://github.com/ggsuite/gg_multi_workspace.git
 
 environment:
