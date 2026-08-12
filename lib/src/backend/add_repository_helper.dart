@@ -68,6 +68,12 @@ Future<Organization?> defaultSelectOrganization(
 /// A plain repository name can exist in more than one of the known
 /// organizations. Every organization is asked whether it owns it, and when
 /// several do, [selectOrganization] lets the user pick one.
+///
+/// [failureHint] is appended to the report of a repository that could not be
+/// cloned from any known organization. The caller knows *why* the repository
+/// was wanted — `do add` uses it to name the manifest that declared it as a
+/// dependency — and the plain name alone does not tell the developer where to
+/// look.
 Future<void> addRepositoryHelper({
   required String targetArg,
   required GgLog ggLog,
@@ -79,6 +85,7 @@ Future<void> addRepositoryHelper({
   bool logIfAlreadyAdded = true,
   Future<void> Function(String repoName)? onRepoAdded,
   SelectOrganization? selectOrganization,
+  String? failureHint,
 }) async {
   // coverage:ignore-start
   gitHubPlatform ??= GitHubPlatform();
@@ -183,6 +190,9 @@ Future<void> addRepositoryHelper({
             '$repoName from any known organizations.',
           ),
         );
+        if (failureHint != null) {
+          ggLog(failureHint);
+        }
         throw Exception(
           cError(
             'Repository "$repoName" was not found. Check the name, or pass '

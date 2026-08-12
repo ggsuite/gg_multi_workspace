@@ -898,6 +898,35 @@ void main() {
       },
     );
 
+    test('logs the failure hint when the clone fails', () async {
+      // Arrange: one fallback org, every clone fails
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      const fallbackOrgUrl = 'https://github.com/fallbackOrg';
+      orgFile.writeAsStringSync(jsonEncode({'fallbackOrg': fallbackOrgUrl}));
+
+      const repoName = 'hintRepo';
+
+      final mockGitCloner = MockGitCloner();
+      when(
+        () => mockGitCloner.cloneRepo(any(), any()),
+      ).thenThrow(Exception('Clone fail'));
+
+      // Act
+      await expectLater(
+        addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+          failureHint: 'Declared in /somewhere/package.json',
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      // Assert
+      expect(logs, contains('Declared in /somewhere/package.json'));
+    });
+
     group('plain name owned by several organizations', () {
       const repoName = 'shared_repo';
       const urlA = 'https://github.com/orgA/$repoName.git';

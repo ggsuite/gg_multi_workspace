@@ -33,6 +33,28 @@ import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 /// Subset of [fetchDependencyRepoUrl] without named args, for test stubs.
 typedef FetchRepoUrl = Future<String?> Function(String packageName);
 
+/// A dependency the transitive clone wants to fetch into the ocean, together
+/// with the manifest that declared it. The manifest is what a failure report
+/// needs: the repository name alone (`base-dna`) does not tell the developer
+/// which of the ocean's repos asks for it, nor under which name it is written
+/// there (`@tssuite/base-dna`).
+class _PlannedDep {
+  _PlannedDep({
+    required this.targetArg,
+    required this.declaredAs,
+    required this.manifestPath,
+  });
+
+  /// What is handed to `addRepositoryHelper`: a repo name or a full URL.
+  final String targetArg;
+
+  /// The dependency as written in the manifest, e.g. `@tssuite/base-dna`.
+  final String declaredAs;
+
+  /// Absolute path of the `pubspec.yaml` / `package.json` declaring it.
+  final String manifestPath;
+}
+
 /// Command to add a repo or all repos of an organization to ocean+ticket.
 /// In ticket mode it also auto-clones transitive deps and re-localizes refs.
 /// Use `--force` to overwrite an existing repo in the ocean.
@@ -450,10 +472,12 @@ class AddCommand extends Command<dynamic> {
         }
       }
 
-      // Plan: depName -> targetArg (name for git, full URL for hosted).
-      final plan = <String, String>{};
+      // Plan: depName -> the dependency and the manifest that declared it.
+      final plan = <String, _PlannedDep>{};
 
       for (final repoDir in existingDirs) {
+        final pubspecPath = path.join(repoDir.path, 'pubspec.yaml');
+
         Future<void> scan(Map<String, Dependency> deps) async {
           for (final entry in deps.entries) {
             final depName = entry.key;
@@ -462,7 +486,12 @@ class AddCommand extends Command<dynamic> {
             }
             final dep = entry.value;
             if (dep is GitDependency) {
-              plan[depName] = depName; // helper falls back to org URLs
+              // helper falls back to org URLs
+              plan[depName] = _PlannedDep(
+                targetArg: depName,
+                declaredAs: depName,
+                manifestPath: pubspecPath,
+              );
             } else if (dep is HostedDependency) {
               // Resolve repo URL via pub.dev; accept only known-org URLs.
               if (!hostedLookupCache.containsKey(depName)) {
@@ -483,13 +512,17 @@ class AddCommand extends Command<dynamic> {
               if (!inKnownOrg) {
                 continue;
               }
-              plan[depName] = repoUrl;
+              plan[depName] = _PlannedDep(
+                targetArg: repoUrl,
+                declaredAs: depName,
+                manifestPath: pubspecPath,
+              );
             }
           }
         }
 
         // Dart: scan pubspec.yaml dependencies.
-        final pubspecFile = File(path.join(repoDir.path, 'pubspec.yaml'));
+        final pubspecFile = File(pubspecPath);
         if (pubspecFile.existsSync()) {
           Pubspec? parsed;
           try {
@@ -529,13 +562,14 @@ class AddCommand extends Command<dynamic> {
         }
         try {
           await addRepositoryHelper(
-            targetArg: entry.value,
+            targetArg: entry.value.targetArg,
             ggLog: ggLog,
             gitCloner: gitCloner,
             gitHubPlatform: gitHubPlatform,
             workspacePath: oceanWorkspacePath,
             logIfAlreadyAdded: false,
             selectOrganization: _selectOrganization,
+            failureHint: _missingDependencyHint(entry.value, orgs),
           );
         } catch (_) {
           // Swallow: addRepositoryHelper already logged the failure.
@@ -557,6 +591,27 @@ class AddCommand extends Command<dynamic> {
   }
 
   // ...........................................................................
+  /// The explanation printed when a transitive dependency has no repository
+  /// in any of the [orgs]. It names the dependency as the manifest writes it,
+  /// the manifest itself, and the way out: a dependency whose package name
+  /// does not match a repository name (a renamed or unpublished package) is a
+  /// bug in that manifest, and `--no-transitive` adds the requested repos
+  /// without touching the dependency graph while it is being fixed.
+  String _missingDependencyHint(_PlannedDep dep, List<Organization> orgs) {
+    final orgNames = orgs.map((o) => o.name).join(', ');
+
+    return cError(
+      'The dependency "${dep.declaredAs}" is not available: no repository '
+      'of that name exists in the known organizations ($orgNames).\n'
+      'It is declared in: ${dep.manifestPath}\n'
+      'Fix the dependency there - the package was probably renamed or is '
+      'not published yet.\n'
+      'To add the repositories without resolving their dependencies, run '
+      'the command again with --no-transitive.',
+    );
+  }
+
+  // ...........................................................................
   /// Adds the scoped npm dependencies of [repoDir]'s `package.json` to [plan]
   /// when their scope maps to a known organization in [orgNames].
   ///
@@ -569,9 +624,10 @@ class AddCommand extends Command<dynamic> {
     required Directory repoDir,
     required Set<String> knownPackages,
     required Set<String> orgNames,
-    required Map<String, String> plan,
+    required Map<String, _PlannedDep> plan,
   }) {
-    final packageJsonFile = File(path.join(repoDir.path, 'package.json'));
+    final packageJsonPath = path.join(repoDir.path, 'package.json');
+    final packageJsonFile = File(packageJsonPath);
     if (!packageJsonFile.existsSync()) {
       return;
     }
@@ -610,7 +666,11 @@ class AddCommand extends Command<dynamic> {
           continue;
         }
         // Bare name: addRepositoryHelper falls back to known org URLs.
-        plan[bareName] = bareName;
+        plan[bareName] = _PlannedDep(
+          targetArg: bareName,
+          declaredAs: fullName,
+          manifestPath: packageJsonPath,
+        );
       }
     }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Print an error when invalid dependencies are found in manifest
+
 ## 3.1.1 - 2026-08-11
 
 ### Changed

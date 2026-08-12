@@ -1820,6 +1820,64 @@ version: 1.0.0
         },
       );
 
+      test('names dependency, manifest and --no-transitive when a dependency '
+          'has no repository', () async {
+        // Covers `_missingDependencyHint`: a dependency whose package name
+        // does not match any repository - e.g. a renamed package - must
+        // point at the manifest that declares it, not just at the name.
+        File(path.join(oceanWorkspacePath, '.organizations')).writeAsStringSync(
+          '[{"name":"tssuite","url":"https://github.com/tssuite/"}]',
+        );
+
+        const targetName = 'hint_target';
+        final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
+          ..createSync(recursive: true);
+        File(
+          path.join(targetDir.path, 'pubspec.yaml'),
+        ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
+
+        // The consumer declares a dependency that does not exist as repo.
+        const consumerName = 'hint_consumer';
+        final consumerDir = Directory(
+          path.join(oceanWorkspacePath, consumerName),
+        )..createSync(recursive: true);
+        final manifestPath = path.join(consumerDir.path, 'package.json');
+        File(manifestPath).writeAsStringSync('''
+{
+  "name": "@tssuite/$consumerName",
+  "version": "1.0.0",
+  "dependencies": {
+    "@tssuite/gone-dna": "^1.0.0"
+  }
+}
+''');
+
+        // Every clone of the missing dependency fails.
+        when(
+          () => mockGitCloner.cloneRepo(any(that: contains('gone-dna')), any()),
+        ).thenThrow(Exception('not found'));
+
+        final ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'HINT_TICKET'),
+        )..createSync(recursive: true);
+
+        createRunner(executionPath: ticketDir.path);
+
+        await runner.run(['add', targetName]);
+
+        final log = logMessages.join('\n');
+        expect(
+          log,
+          contains(
+            'The dependency "@tssuite/gone-dna" is not '
+            'available',
+          ),
+        );
+        expect(log, contains('(tssuite)'));
+        expect(log, contains('It is declared in: $manifestPath'));
+        expect(log, contains('--no-transitive'));
+      });
+
       test(
         'a package.json that is not a JSON object is ignored by the scan',
         () async {
