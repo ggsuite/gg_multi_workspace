@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.2 - 2026-08-12
+
+### Changed
+
+- Print an error when invalid dependencies are found in manifest
+
+### Fixed
+
+- Fix package adding algorithm
+
 ## 3.1.1 - 2026-08-11
 
 ### Changed
