@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.0 - 2026-08-13
+
+### Changed
+
+- Report freshness blockers on a dry run in do upgrade ocean
+
 ## 3.1.2 - 2026-08-12
 
 ### Changed

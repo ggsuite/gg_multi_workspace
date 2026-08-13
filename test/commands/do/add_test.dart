@@ -1712,13 +1712,16 @@ version: 1.0.0
           const targetName = 'npm_scan_target';
           final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
             ..createSync(recursive: true);
-          File(
-            path.join(targetDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
+          File(path.join(targetDir.path, 'pubspec.yaml')).writeAsStringSync(
+            // The scan walks what the target reaches, so the consumer below
+            // is pulled in as its dependency.
+            'name: $targetName\nversion: 1.0.0\n'
+            'dependencies:\n  npm_consumer: ^1.0.0\n',
+          );
 
-          // ... a TypeScript repo only present in ocean gets its
-          // package.json scanned for cross-language deps. The dependency
-          // entries cover every branch of the scan.
+          // ... the TypeScript repo it depends on gets its package.json
+          // scanned for cross-language deps. The dependency entries cover
+          // every branch of the scan.
           const consumerName = 'npm_consumer';
           final consumerDir = Directory(
             path.join(oceanWorkspacePath, consumerName),
@@ -1832,9 +1835,10 @@ version: 1.0.0
         const targetName = 'hint_target';
         final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
           ..createSync(recursive: true);
-        File(
-          path.join(targetDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
+        File(path.join(targetDir.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: $targetName\nversion: 1.0.0\n'
+          'dependencies:\n  hint_consumer: ^1.0.0\n',
+        );
 
         // The consumer declares a dependency that does not exist as repo.
         const consumerName = 'hint_consumer';
@@ -1876,6 +1880,50 @@ version: 1.0.0
         expect(log, contains('(tssuite)'));
         expect(log, contains('It is declared in: $manifestPath'));
         expect(log, contains('--no-transitive'));
+
+        // The manifest was read from a checkout that had been brought to
+        // origin/main first, so the report can rule out a stale copy.
+        expect(log, contains('on the state of origin/main'));
+      });
+
+      test('says so when the manifest was not refreshed', () async {
+        File(path.join(oceanWorkspacePath, '.organizations')).writeAsStringSync(
+          '[{"name":"tssuite","url":"https://github.com/tssuite/"}]',
+        );
+
+        const targetName = 'nofetch_target';
+        final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
+          ..createSync(recursive: true);
+        File(path.join(targetDir.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: $targetName\nversion: 1.0.0\n'
+          'dependencies:\n  nofetch_consumer: ^1.0.0\n',
+        );
+
+        const consumerName = 'nofetch_consumer';
+        final consumerDir = Directory(
+          path.join(oceanWorkspacePath, consumerName),
+        )..createSync(recursive: true);
+        File(path.join(consumerDir.path, 'package.json')).writeAsStringSync(
+          '{"name":"@tssuite/$consumerName","version":"1.0.0",'
+          '"dependencies":{"@tssuite/gone-dna":"^1.0.0"}}',
+        );
+
+        when(
+          () => mockGitCloner.cloneRepo(any(that: contains('gone-dna')), any()),
+        ).thenThrow(Exception('not found'));
+
+        final ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'NOFETCH_TICKET'),
+        )..createSync(recursive: true);
+
+        createRunner(executionPath: ticketDir.path);
+
+        await runner.run(['add', targetName, '--no-fetch']);
+
+        expect(
+          logMessages.join('\n'),
+          contains('was not refreshed (--no-fetch)'),
+        );
       });
 
       test(
@@ -1893,9 +1941,10 @@ version: 1.0.0
           const targetName = 'array_target';
           final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
             ..createSync(recursive: true);
-          File(
-            path.join(targetDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: $targetName\nversion: 1.0.0\n');
+          File(path.join(targetDir.path, 'pubspec.yaml')).writeAsStringSync(
+            'name: $targetName\nversion: 1.0.0\n'
+            'dependencies:\n  npm_array_consumer: ^1.0.0\n',
+          );
 
           final ticketDir = Directory(
             path.join(tempDir.path, ggMultiLegacyTicketFolder, 'ARRAY_TICKET'),
