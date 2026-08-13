@@ -102,11 +102,9 @@ void main() {
     test('describes itself', () {
       final command = UpdateOceanCommand(ggLog: ggLog, rootPath: tempDir.path);
       expect(command.name, 'ocean');
-      expect(
-        command.aliases,
-        ['master'],
-        reason: 'The former command name must keep working as an alias.',
-      );
+      expect(command.aliases, [
+        'master',
+      ], reason: 'The former command name must keep working as an alias.');
       expect(
         command.description,
         'Sync the ocean with the registered organizations',
