@@ -80,8 +80,13 @@ class AddCommand extends Command<dynamic> {
     Graph? graph,
     FetchRepoUrl? fetchRepoUrl,
     SelectOrganization? selectOrganization,
+    RepoFreshness? repoFreshness,
+    DuplicateRepoCleanup? duplicateRepoCleanup,
     // coverage:ignore-start
   }) : _selectOrganization = selectOrganization ?? defaultSelectOrganization,
+       _repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),
+       _duplicateRepoCleanup =
+           duplicateRepoCleanup ?? const DuplicateRepoCleanup(),
        gitCloner = gitCloner ?? GitHandler(),
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
        processRunner = processRunner ?? ggRunProcess,
@@ -132,6 +137,20 @@ class AddCommand extends Command<dynamic> {
       defaultsTo: true,
       negatable: true,
     );
+    argParser.addFlag(
+      'fetch',
+      help:
+          'Bring the repos this run reasons about to origin/main first '
+          '(default)',
+      defaultsTo: true,
+      negatable: true,
+    );
+    argParser.addFlag(
+      'heal',
+      help: 'Trash the ocean folders a repository rename left behind (default)',
+      defaultsTo: true,
+      negatable: true,
+    );
   }
 
   /// The log function.
@@ -154,6 +173,12 @@ class AddCommand extends Command<dynamic> {
 
   /// gg do commit used after localization with --git in ticket copies.
   final gg.GgSystemCommit _systemCommit;
+
+  /// Brings the repositories this run reasons about to their remote state.
+  final RepoFreshness _repoFreshness;
+
+  /// Trashes the ocean folders a repository rename left behind.
+  final DuplicateRepoCleanup _duplicateRepoCleanup;
 
   /// Sorted processing helper for ticket-wide iteration.
   final SortedProcessingList _sortedProcessingList;
@@ -194,6 +219,8 @@ class AddCommand extends Command<dynamic> {
     final orgs = argResults!['org'] as List<String>;
     final bool all = argResults!['all'] as bool;
     final bool transitiveRepos = argResults!['transitive'] as bool? ?? true;
+    final bool fetch = argResults!['fetch'] as bool? ?? true;
+    final bool heal = argResults!['heal'] as bool? ?? true;
 
     if (targets.isEmpty && !all && orgs.isEmpty) {
       throw UsageException('Missing target parameter.', usage);
@@ -212,6 +239,19 @@ class AddCommand extends Command<dynamic> {
     // organization still holds them flat. Move them first, so everything
     // below sees a single layout.
     migrateToOrgFolders(workspacePath: oceanWorkspacePath, ggLog: ggLog);
+
+    // A repository rename leaves the ocean holding the same repository twice,
+    // and the dependency graph then drops one of the two by folder order —
+    // which is as likely to drop the current checkout as the stale one.
+    // Repairing it here means the user never has to know it happened.
+    if (heal) {
+      await _duplicateRepoCleanup.run(
+        workspacePath: oceanWorkspacePath,
+        rootPath: path.dirname(oceanWorkspacePath),
+        ggLog: ggLog,
+      );
+    }
+
     if (ticketPath != null) {
       // A ticket goes the opposite way: it holds its repos flat, so the ones
       // an older gg put into organization folders move back up. The ticket is
@@ -295,7 +335,11 @@ class AddCommand extends Command<dynamic> {
 
     if (transitiveRepos) {
       // Clone missing transitive deps so the graph can resolve between-nodes.
-      await _cloneMissingTransitiveDeps(ggLog: ggLog);
+      await _cloneMissingTransitiveDeps(
+        ggLog: ggLog,
+        requestedRepoNames: requestedRepoNames,
+        fetch: fetch,
+      );
 
       // Build dep graph of ocean + compute nodes between endpoints.
       Map<String, Node> allNodes = const {};
@@ -435,10 +479,23 @@ class AddCommand extends Command<dynamic> {
 
   // Ticket support helpers
   // ...........................................................................
-  /// Clones missing deps of every repo in ocean that belongs to a known org.
-  /// Git deps go via [addRepositoryHelper]; hosted deps via pub.dev lookup.
-  /// Loops to a fixpoint; failures are swallowed (helper already logs).
-  Future<void> _cloneMissingTransitiveDeps({required GgLog ggLog}) async {
+  /// Clones the missing dependencies of [requestedRepoNames] and of every
+  /// repository they reach. Git deps go via [addRepositoryHelper]; hosted deps
+  /// via pub.dev lookup. Loops to a fixpoint; failures are swallowed (the
+  /// helper already logs).
+  ///
+  /// Only the dependency closure is walked, not the whole ocean: the ocean
+  /// holds every repository the user ever added, and the manifest of one that
+  /// this ticket does not reach says nothing about what belongs in it.
+  ///
+  /// With [fetch] the closure is brought to the state of `origin/main` before
+  /// any manifest is read — resolving against a checkout that lags behind
+  /// means resolving dependencies that were renamed or dropped since.
+  Future<void> _cloneMissingTransitiveDeps({
+    required GgLog ggLog,
+    required Set<String> requestedRepoNames,
+    required bool fetch,
+  }) async {
     final oceanDir = Directory(oceanWorkspacePath);
     if (!oceanDir.existsSync()) {
       return;
@@ -457,25 +514,43 @@ class AddCommand extends Command<dynamic> {
     // Cache pub.dev lookups across the fixpoint loop.
     final hostedLookupCache = <String, String?>{};
 
+    // Repositories already brought to their remote state — a clone made
+    // during this run is on it by construction, so nothing is fetched twice.
+    final updated = <String>{};
+
     while (true) {
       final existingDirs = RepoFolderResolver.repoDirs(oceanWorkspacePath);
 
-      // Known names: folder basenames plus manifest package names, so that
-      // a cross-language bridge repo (whose folder name differs from its
-      // package name) is recognized by its package name too.
+      // Known names: folder basenames plus *every* name the manifests declare
+      // — a repository that is a Dart and an npm package at once is one
+      // repository under two names, and a dependency may be written either
+      // way. The whole ocean contributes here: a dependency that is already
+      // checked out somewhere must not be cloned again, whether this ticket
+      // reaches it or not.
       final knownPackages = <String>{};
       for (final dir in existingDirs) {
         knownPackages.add(path.basename(dir.path));
-        final packageName = RepoFolderResolver.packageName(dir);
-        if (packageName != null) {
-          knownPackages.add(packageName);
-        }
+        knownPackages.addAll(RepoFolderResolver.packageNames(dir));
+      }
+
+      final closure = _dependencyClosure(requestedRepoNames);
+
+      if (fetch) {
+        final pending = closure
+            .where((dir) => !updated.contains(dir.path))
+            .toList();
+        await _repoFreshness.updateAll(
+          ggLog: ggLog,
+          directories: pending,
+          workspacePath: oceanWorkspacePath,
+        );
+        updated.addAll(pending.map((dir) => dir.path));
       }
 
       // Plan: depName -> the dependency and the manifest that declared it.
       final plan = <String, _PlannedDep>{};
 
-      for (final repoDir in existingDirs) {
+      for (final repoDir in closure) {
         final pubspecPath = path.join(repoDir.path, 'pubspec.yaml');
 
         Future<void> scan(Map<String, Dependency> deps) async {
@@ -569,7 +644,11 @@ class AddCommand extends Command<dynamic> {
             workspacePath: oceanWorkspacePath,
             logIfAlreadyAdded: false,
             selectOrganization: _selectOrganization,
-            failureHint: _missingDependencyHint(entry.value, orgs),
+            failureHint: _missingDependencyHint(
+              entry.value,
+              orgs,
+              fetched: fetch,
+            ),
           );
         } catch (_) {
           // Swallow: addRepositoryHelper already logged the failure.
@@ -591,21 +670,101 @@ class AddCommand extends Command<dynamic> {
   }
 
   // ...........................................................................
+  /// The repositories of the ocean [requestedRepoNames] reach: themselves plus
+  /// everything their manifests depend on, transitively.
+  ///
+  /// A dependency that resolves to no ocean folder is a third-party package or
+  /// one that still has to be cloned; both are simply not part of the closure
+  /// yet — the caller's fixpoint loop reaches them in a later round.
+  List<Directory> _dependencyClosure(Set<String> requestedRepoNames) {
+    final visited = <String, Directory>{};
+    final frontier = <String>[...requestedRepoNames];
+
+    while (frontier.isNotEmpty) {
+      final name = frontier.removeLast();
+      final dir = RepoFolderResolver.resolve(
+        workspacePath: oceanWorkspacePath,
+        repoName: name,
+      );
+      if (dir == null || visited.containsKey(dir.path)) {
+        continue;
+      }
+      visited[dir.path] = dir;
+      frontier.addAll(_declaredDependencyNames(dir));
+    }
+
+    final result = visited.values.toList();
+    result.sort((a, b) => a.path.compareTo(b.path));
+    return result;
+  }
+
+  // ...........................................................................
+  /// Every dependency name the manifests of [repoDir] declare, across both
+  /// languages.
+  Iterable<String> _declaredDependencyNames(Directory repoDir) {
+    final names = <String>{};
+
+    final pubspecFile = File(path.join(repoDir.path, 'pubspec.yaml'));
+    if (pubspecFile.existsSync()) {
+      try {
+        final pubspec = Pubspec.parse(pubspecFile.readAsStringSync());
+        names.addAll(pubspec.dependencies.keys);
+        names.addAll(pubspec.devDependencies.keys);
+      } catch (_) {
+        // An unparseable manifest contributes nothing — the repo it belongs
+        // to still stays in the closure.
+      }
+    }
+
+    final packageJsonFile = File(path.join(repoDir.path, 'package.json'));
+    if (packageJsonFile.existsSync()) {
+      try {
+        final json =
+            jsonDecode(packageJsonFile.readAsStringSync())
+                as Map<String, dynamic>;
+        for (final section in ['dependencies', 'devDependencies']) {
+          final deps = json[section];
+          if (deps is Map<String, dynamic>) {
+            names.addAll(deps.keys);
+          }
+        }
+      } catch (_) {
+        // See above.
+      }
+    }
+
+    return names;
+  }
+
+  // ...........................................................................
   /// The explanation printed when a transitive dependency has no repository
   /// in any of the [orgs]. It names the dependency as the manifest writes it,
   /// the manifest itself, and the way out: a dependency whose package name
   /// does not match a repository name (a renamed or unpublished package) is a
   /// bug in that manifest, and `--no-transitive` adds the requested repos
   /// without touching the dependency graph while it is being fixed.
-  String _missingDependencyHint(_PlannedDep dep, List<Organization> orgs) {
+  ///
+  /// The manifest was read from a checkout that had been brought to the state
+  /// of `origin/main` first, so this is never an outdated local copy — unless
+  /// `--no-fetch` skipped that step, which the report then says.
+  String _missingDependencyHint(
+    _PlannedDep dep,
+    List<Organization> orgs, {
+    required bool fetched,
+  }) {
     final orgNames = orgs.map((o) => o.name).join(', ');
+    final provenance = fetched
+        ? 'That manifest is on the state of origin/main, so the dependency '
+              'itself is wrong.\n'
+        : 'The manifest was not refreshed (--no-fetch), so it may simply be '
+              'outdated.\n';
 
     return cError(
       'The dependency "${dep.declaredAs}" is not available: no repository '
       'of that name exists in the known organizations ($orgNames).\n'
       'It is declared in: ${dep.manifestPath}\n'
-      'Fix the dependency there - the package was probably renamed or is '
-      'not published yet.\n'
+      '${provenance}Fix the dependency there - the package was probably '
+      'renamed or is not published yet.\n'
       'To add the repositories without resolving their dependencies, run '
       'the command again with --no-transitive.',
     );

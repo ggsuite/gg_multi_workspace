@@ -31,11 +31,16 @@ class UpdateOceanCommand extends Command<void> {
     GitHandler? gitCloner,
     GitHubPlatform? gitHubPlatform,
     AzureDevOpsPlatform? azureDevOpsPlatform,
+    RepoFreshness? repoFreshness,
+    DuplicateRepoCleanup? duplicateRepoCleanup,
     // coverage:ignore-start
   }) : rootPath = rootPath ?? Directory.current.path,
        gitCloner = gitCloner ?? GitHandler(),
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
-       azureDevOpsPlatform = azureDevOpsPlatform ?? AzureDevOpsPlatform() {
+       azureDevOpsPlatform = azureDevOpsPlatform ?? AzureDevOpsPlatform(),
+       repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),
+       duplicateRepoCleanup =
+           duplicateRepoCleanup ?? const DuplicateRepoCleanup() {
     // coverage:ignore-end
     argParser.addFlag(
       'dry-run',
@@ -74,6 +79,12 @@ class UpdateOceanCommand extends Command<void> {
   /// Lists the repositories of an Azure DevOps project.
   final AzureDevOpsPlatform azureDevOpsPlatform;
 
+  /// Brings the ocean repositories to the state of their remote main branch.
+  final RepoFreshness repoFreshness;
+
+  /// Trashes the checkouts a repository rename left behind.
+  final DuplicateRepoCleanup duplicateRepoCleanup;
+
   // ...........................................................................
   @override
   Future<void> run() async {
@@ -100,6 +111,28 @@ class UpdateOceanCommand extends Command<void> {
             cAction(' first.'),
       );
       return;
+    }
+
+    // Syncing which repositories exist is only half the job: a checkout that
+    // lags behind its remote keeps declaring dependencies that were renamed
+    // or removed since, and every command reading its manifest reasons about
+    // a state that is gone. A repository carrying local work is never touched
+    // — the run stops instead and names it, because the alternative is
+    // deciding on the user's behalf what happens to that work.
+    if (!dryRun) {
+      await repoFreshness.updateAll(
+        ggLog: ggLog,
+        directories: RepoFolderResolver.repoDirs(oceanPath),
+        workspacePath: oceanPath,
+      );
+
+      // Now that every checkout is current, the ones a rename left behind are
+      // recognizable by their own manifests.
+      await duplicateRepoCleanup.run(
+        workspacePath: oceanPath,
+        rootPath: root,
+        ggLog: ggLog,
+      );
     }
 
     final fetched = await _fetchAll(organizations);

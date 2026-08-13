@@ -29,6 +29,39 @@ String repoUrlOfOrganization(Organization org, String repoName) {
   return '$baseUrl$repoName.git';
 }
 
+/// The checkout [workspacePath] already holds of the repository just cloned
+/// into [clone], or null when [clone] is the only one.
+///
+/// Renaming a repository does not invalidate its former name — the platform
+/// redirects it — so cloning a manifest's outdated name succeeds and yields a
+/// second checkout of a repository that is already there, in a folder named
+/// after a repository that does not exist any more.
+///
+/// Only the repository the manifests declare counts as proof here. Two
+/// packages that merely share a name are a different problem, and the price of
+/// getting this wrong is a repository that was legitimately added being thrown
+/// away again.
+Directory? existingCheckoutOf({
+  required String workspacePath,
+  required Directory clone,
+}) {
+  final identity = RepoIdentity.of(clone).declaredIdentity;
+  if (identity == null) {
+    return null;
+  }
+
+  for (final dir in RepoFolderResolver.repoDirs(workspacePath)) {
+    if (path.equals(dir.path, clone.path)) {
+      continue;
+    }
+    if (RepoIdentity.of(dir).declaredIdentity == identity) {
+      return dir;
+    }
+  }
+
+  return null;
+}
+
 /// Asks the user which organization a repository should be taken from.
 // coverage:ignore-start
 Future<Organization?> defaultSelectOrganization(
@@ -93,6 +126,50 @@ Future<void> addRepositoryHelper({
   selectOrganization ??= defaultSelectOrganization;
   // coverage:ignore-end
   // ---------------------------------------------------------------------------
+  /// Reports the clone of [repoName] from [repoUrl] that landed in
+  /// [destination] — and drops it again when it turned out to be a second
+  /// checkout of a repository the workspace already holds, see
+  /// [existingCheckoutOf].
+  Future<void> reportClone({
+    required String repoUrl,
+    required String repoName,
+    required String destination,
+  }) async {
+    final clone = Directory(destination);
+    final duplicate = existingCheckoutOf(
+      workspacePath: workspacePath,
+      clone: clone,
+    );
+
+    if (duplicate != null) {
+      clone.deleteSync(recursive: true);
+      RepoFolderResolver.removeEmptyOrgFolder(
+        workspacePath: workspacePath,
+        repoDir: clone,
+      );
+
+      // Everything after this point works with the checkout that stays, so
+      // the caller is handed its name, not the one that was asked for.
+      final name = path.basename(duplicate.path);
+      ggLog(darkGray('✓ $repoName is $name under a former name.'));
+      if (onRepoAdded != null) {
+        await onRepoAdded(name);
+      }
+      return;
+    }
+
+    ggLog(darkGray('✓ $repoName from $repoUrl'));
+    try {
+      OrganizationUtils.appendOrganization(workspacePath, repoUrl);
+    } catch (_) {
+      // Swallow errors: organization info shouldn't block the core flow
+    }
+    if (onRepoAdded != null) {
+      await onRepoAdded(repoName);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   /// Attempts to clone [repoUrl] as [repoName] into the organization folder
   /// of [workspacePath] the URL points at (`<workspace>/<org>/<repo>`).
   /// If [allowFallback] is true and cloning fails, tries each known
@@ -137,15 +214,11 @@ Future<void> addRepositoryHelper({
     // Try to clone the repository ............................................
     try {
       await gitCloner.cloneRepo(repoUrl, destination);
-      ggLog(darkGray('✓ $repoName from $repoUrl'));
-      try {
-        OrganizationUtils.appendOrganization(workspacePath, repoUrl);
-      } catch (_) {
-        // Swallow errors: organization info shouldn't block the core flow
-      }
-      if (onRepoAdded != null) {
-        await onRepoAdded(repoName);
-      }
+      await reportClone(
+        repoUrl: repoUrl,
+        repoName: repoName,
+        destination: destination,
+      );
       return;
     } catch (e) {
       if (!allowFallback) {
@@ -159,21 +232,17 @@ Future<void> addRepositoryHelper({
         try {
           // The fallback URL names another organization than the one guessed
           // from the target, so the destination is recomputed from it.
-          await gitCloner.cloneRepo(
-            fallbackUrl,
-            RepoFolderResolver.destination(
-              workspacePath: workspacePath,
-              repoUrl: fallbackUrl,
-              repoName: repoName,
-            ),
+          final fallbackDestination = RepoFolderResolver.destination(
+            workspacePath: workspacePath,
+            repoUrl: fallbackUrl,
+            repoName: repoName,
           );
-          ggLog(darkGray('✓ $repoName from $fallbackUrl'));
-          try {
-            OrganizationUtils.appendOrganization(workspacePath, fallbackUrl);
-          } catch (_) {}
-          if (onRepoAdded != null) {
-            await onRepoAdded(repoName);
-          }
+          await gitCloner.cloneRepo(fallbackUrl, fallbackDestination);
+          await reportClone(
+            repoUrl: fallbackUrl,
+            repoName: repoName,
+            destination: fallbackDestination,
+          );
           anySuccess = true;
           break;
         } catch (_) {
