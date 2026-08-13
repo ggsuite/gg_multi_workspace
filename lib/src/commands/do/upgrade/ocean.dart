@@ -119,21 +119,21 @@ class UpdateOceanCommand extends Command<void> {
     // a state that is gone. A repository carrying local work is never touched
     // — the run stops instead and names it, because the alternative is
     // deciding on the user's behalf what happens to that work.
-    if (!dryRun) {
-      await repoFreshness.updateAll(
-        ggLog: ggLog,
-        directories: RepoFolderResolver.repoDirs(oceanPath),
-        workspacePath: oceanPath,
-      );
+    await repoFreshness.updateAll(
+      ggLog: ggLog,
+      directories: RepoFolderResolver.repoDirs(oceanPath),
+      workspacePath: oceanPath,
+      dryRun: dryRun,
+    );
 
-      // Now that every checkout is current, the ones a rename left behind are
-      // recognizable by their own manifests.
-      await duplicateRepoCleanup.run(
-        workspacePath: oceanPath,
-        rootPath: root,
-        ggLog: ggLog,
-      );
-    }
+    // Now that every checkout is current, the ones a rename left behind are
+    // recognizable by their own manifests.
+    await duplicateRepoCleanup.run(
+      workspacePath: oceanPath,
+      rootPath: root,
+      ggLog: ggLog,
+      dryRun: dryRun,
+    );
 
     final fetched = await _fetchAll(organizations);
     if (fetched.isEmpty) {
