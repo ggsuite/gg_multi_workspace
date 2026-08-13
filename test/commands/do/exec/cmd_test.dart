@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_multi_workspace/src/commands/do/exec/cmd.dart';
+import 'package:gg_process/gg_process.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
@@ -24,6 +25,22 @@ class MockProcessRunner extends Mock {
 }
 
 class FakeDirectory extends Fake implements Directory {}
+
+/// Pretends gg runs on Windows.
+class _WindowsPlatform extends GgPlatformDelegate {
+  const _WindowsPlatform();
+
+  @override
+  String get operatingSystem => 'windows';
+}
+
+/// Pretends gg runs on a posix system.
+class _PosixPlatform extends GgPlatformDelegate {
+  const _PosixPlatform();
+
+  @override
+  String get operatingSystem => 'macos';
+}
 
 void main() {
   late Directory tempDir;
@@ -125,8 +142,95 @@ void main() {
       expect(messages, [
         '\n'
             'A',
+        'ok',
         '\n'
             'B',
+        'ok',
+        '\nCommand executed in all repos of TICKX\n',
+      ]);
+    });
+
+    test('runs a quoted command line through the shell', () async {
+      GgPlatformDelegate.current = const _PosixPlatform();
+      addTearDown(() => GgPlatformDelegate.current = null);
+
+      final mockRunner = MockProcessRunner();
+      when(
+        () => mockRunner(
+          any(),
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
+
+      final runner = CommandRunner<void>('test', 'do maintain exec ticket')
+        ..addCommand(
+          DoExecuteCommand(ggLog: ggLog, processRunner: mockRunner.call),
+        );
+      await runner.run(['cmd', '--input', ticketDir.path, 'dart fix --apply']);
+
+      verify(
+        () => mockRunner('sh', [
+          '-c',
+          'dart fix --apply',
+        ], workingDirectory: path.join(ticketDir.path, 'A')),
+      ).called(1);
+      verify(
+        () => mockRunner('sh', [
+          '-c',
+          'dart fix --apply',
+        ], workingDirectory: path.join(ticketDir.path, 'B')),
+      ).called(1);
+    });
+
+    test('runs a quoted command line through cmd on Windows', () async {
+      GgPlatformDelegate.current = const _WindowsPlatform();
+      addTearDown(() => GgPlatformDelegate.current = null);
+
+      final mockRunner = MockProcessRunner();
+      when(
+        () => mockRunner(
+          any(),
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
+
+      final runner = CommandRunner<void>('test', 'do maintain exec ticket')
+        ..addCommand(
+          DoExecuteCommand(ggLog: ggLog, processRunner: mockRunner.call),
+        );
+      await runner.run(['cmd', '--input', ticketDir.path, 'dart fix --apply']);
+
+      verify(
+        () => mockRunner('cmd', [
+          '/c',
+          'dart fix --apply',
+        ], workingDirectory: path.join(ticketDir.path, 'A')),
+      ).called(1);
+    });
+
+    test('prints stderr of a succeeding command', () async {
+      final mockRunner = MockProcessRunner();
+      when(
+        () => mockRunner(
+          any(),
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      ).thenAnswer((_) async => ProcessResult(1, 0, '', 'a warning'));
+
+      final runner = CommandRunner<void>('test', 'do maintain exec ticket')
+        ..addCommand(
+          DoExecuteCommand(ggLog: ggLog, processRunner: mockRunner.call),
+        );
+      await runner.run(['cmd', '--input', ticketDir.path, 'echo', 'hi']);
+
+      expect(messages, [
+        '\nA',
+        'a warning',
+        '\nB',
+        'a warning',
         '\nCommand executed in all repos of TICKX\n',
       ]);
     });
@@ -160,6 +264,7 @@ void main() {
 
       expect(messages, [
         '\nA',
+        'ok',
         '\nB',
         // The reason is printed once, under the repo it belongs to.
         '✗ Failed to execute\nerror on B',

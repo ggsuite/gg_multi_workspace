@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.1 - 2026-08-13
+
+### Fixed
+
+- Fix gg do exec
+
 ## 4.0.0 - 2026-08-13
 
 ### Changed
