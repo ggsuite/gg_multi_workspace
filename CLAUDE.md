@@ -60,7 +60,7 @@ gg does **not** install git hooks. An earlier version made `do add` write a `pre
 
 ### `do exec cmd`
 
-`DoExecuteCommand` (in `lib/src/commands/do/exec/cmd.dart`) runs one shell command in every ticket repo in dependency order, logging each repo name before its output. It collects the repos whose command exited non-zero instead of stopping at the first one, then lists them and throws. The injectable `ProcessRunner` runs with `runInShell: true`; the `-l`/`--line-length` option exists only so an argument like `dart fmt -l 120` does not fail arg parsing.
+`DoExecuteCommand` (in `lib/src/commands/do/exec/cmd.dart`) runs one shell command in every ticket repo in dependency order, logging each repo name and then everything the command printed — stdout always, stderr as well (in red when the command failed). It collects the repos whose command exited non-zero instead of stopping at the first one, then lists them and throws. A **single argument carrying whitespace** is a whole command line (`gg do exec cmd "dart fix --apply"`) and is handed to the shell as `sh -c <line>` (`cmd /c <line>` on Windows) — taken as an executable name it would only ever be "command not found"; several arguments stay executable + args. The injectable `ProcessRunner` runs with `runInShell: true`; the `-l`/`--line-length` option exists only so an argument like `dart fmt -l 120` does not fail arg parsing.
 
 ### `do ls`
 

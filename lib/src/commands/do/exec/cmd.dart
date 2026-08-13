@@ -13,6 +13,7 @@ import 'package:gg_args/gg_args.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_process/gg_process.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 
@@ -54,8 +55,7 @@ class DoExecuteCommand extends DirCommand<void> {
     if (rest.isEmpty) {
       throw UsageException('Missing command parameter.', usage);
     }
-    final cmd = rest.first;
-    final cmdArgs = rest.sublist(1);
+    final (cmd, cmdArgs) = _executableAndArgs(rest);
 
     // Detect ticket folder
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -94,9 +94,15 @@ class DoExecuteCommand extends DirCommand<void> {
         workingDirectory: repoDir.path,
       );
 
+      final stdoutStr = result.stdout?.toString().trimRight() ?? '';
+      final stderrStr = result.stderr?.toString().trimRight() ?? '';
+
+      // Show what the command printed, no matter if it succeeded or not.
+      if (stdoutStr.isNotEmpty) {
+        ggLog(stdoutStr);
+      }
+
       if (result.exitCode != 0) {
-        final stderrStr = result.stderr?.toString() ?? '';
-        final stdoutStr = result.stdout?.toString() ?? '';
         final errMsg = stderrStr.isNotEmpty ? stderrStr : stdoutStr;
         ggLog(
           [
@@ -105,6 +111,8 @@ class DoExecuteCommand extends DirCommand<void> {
           ].join('\n'),
         );
         failed.add(repoName);
+      } else if (stderrStr.isNotEmpty) {
+        ggLog(cError(rmControls(stderrStr)));
       }
     }
 
@@ -115,6 +123,22 @@ class DoExecuteCommand extends DirCommand<void> {
 
     ggLog(cAction('\nPlease fix the issues above.\n'));
     throw Exception(cDetail('Failed to execute the command.'));
+  }
+
+  /// Turns the rest arguments into executable + arguments.
+  ///
+  /// A single argument that carries whitespace is a whole command line
+  /// (`gg do exec cmd "dart fix --apply"`) and would otherwise be looked
+  /// up as one executable of that name. It is handed to the shell instead.
+  (String, List<String>) _executableAndArgs(List<String> rest) {
+    final first = rest.first;
+    if (rest.length == 1 && first.trim().contains(RegExp(r'\s'))) {
+      return ggPlatform.isWindows
+          ? ('cmd', ['/c', first])
+          : ('sh', ['-c', first]);
+    }
+
+    return (first, rest.sublist(1));
   }
 
   /// Add passthrough flag so args like -l 120 don't break parsing.
