@@ -68,9 +68,8 @@ void main() {
       // Arrange:
       final nonEmptyDir = Directory(path.join(tempDir.path, 'not_empty'));
       nonEmptyDir.createSync(recursive: true);
-      File(
-        path.join(nonEmptyDir.path, 'some_file.txt'),
-      ).writeAsStringSync('dummy');
+      File(path.join(nonEmptyDir.path, 'some_file.txt'))
+          .writeAsStringSync('dummy');
       final runner = CommandRunner<void>('test', 'InitWorkspaceCommand Test')
         ..addCommand(
           InitWorkspaceCommand(ggLog: ggLog, rootPath: nonEmptyDir.path),

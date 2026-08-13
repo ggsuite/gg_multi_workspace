@@ -8,6 +8,7 @@
 library;
 
 import 'package:gg_git/gg_git.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -99,9 +100,8 @@ void main() {
       mockGitCloner = MockGitCloner();
       logMessages = [];
       registerFallbackValue(Directory(''));
-      when(
-        () => mockGitCloner.cloneRepo(any(), any()),
-      ).thenAnswer((_) async {});
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenAnswer((_) async {});
       tempDir = Directory.systemTemp.createTempSync('add_test');
       oceanWorkspacePath = path.join(tempDir.path, ggMultiOceanFolder);
       Directory(oceanWorkspacePath).createSync(recursive: true);
@@ -536,9 +536,8 @@ dev_dependencies:
         const repoName = 'staleProgressRepo';
         final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'target.txt'),
-        ).writeAsStringSync('content');
+        File(path.join(repoDir.path, 'target.txt'))
+            .writeAsStringSync('content');
         const pubspecContent = '''
 name: project123
 version: 1.0.0
@@ -671,15 +670,13 @@ dev_dependencies:
 
         // … and never reached the ticket copy. Its sibling .gg.json did.
         expect(
-          File(
-            path.join(ticketDir.path, repoName, '.gg', 'gg-publish.json'),
-          ).existsSync(),
+          File(path.join(ticketDir.path, repoName, '.gg', 'gg-publish.json'))
+              .existsSync(),
           isFalse,
         );
         expect(
-          File(
-            path.join(ticketDir.path, repoName, '.gg', '.gg.json'),
-          ).existsSync(),
+          File(path.join(ticketDir.path, repoName, '.gg', '.gg.json'))
+              .existsSync(),
           isTrue,
         );
       },
@@ -1598,9 +1595,8 @@ version: 1.0.0
       test(
         'executes dart pub get if pubspec.yaml exists and logs success',
         () async {
-          File(
-            path.join(repoDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: pubgetRepo');
+          File(path.join(repoDir.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: pubgetRepo');
           when(
             () => mockProcessRunner(
               'dart',
@@ -1633,9 +1629,8 @@ version: 1.0.0
       );
 
       test('logs error if dart pub get fails', () async {
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: pubgetRepo');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: pubgetRepo');
         when(
           () => mockProcessRunner(
             'dart',
@@ -1667,9 +1662,8 @@ version: 1.0.0
       });
 
       test('executes npm install for a TypeScript repo', () async {
-        File(
-          path.join(repoDir.path, 'package.json'),
-        ).writeAsStringSync('{"name": "pubgetRepo", "version": "1.0.0"}');
+        File(path.join(repoDir.path, 'package.json'))
+            .writeAsStringSync('{"name": "pubgetRepo", "version": "1.0.0"}');
         File(path.join(repoDir.path, 'tsconfig.json')).writeAsStringSync('{}');
         when(
           () => mockProcessRunner(
@@ -1701,11 +1695,10 @@ version: 1.0.0
         () async {
           // Covers the npm scan branch of `_cloneMissingTransitiveDeps`.
           // Register a known organization so the npm scope resolves.
-          File(
-            path.join(oceanWorkspacePath, '.organizations'),
-          ).writeAsStringSync(
-            '[{"name":"tssuite","url":"https://github.com/tssuite/"}]',
-          );
+          File(path.join(oceanWorkspacePath, '.organizations'))
+              .writeAsStringSync(
+                '[{"name":"tssuite","url":"https://github.com/tssuite/"}]',
+              );
 
           // A simple Dart repo is the add target ...
           const targetName = 'npm_scan_target';
@@ -1725,8 +1718,8 @@ version: 1.0.0
           final consumerDir = Directory(
             path.join(oceanWorkspacePath, consumerName),
           )..createSync(recursive: true);
-          File(path.join(consumerDir.path, 'package.json')).writeAsStringSync(
-            '''
+          File(path.join(consumerDir.path, 'package.json'))
+              .writeAsStringSync('''
 {
   "name": "@tssuite/$consumerName",
   "version": "1.0.0",
@@ -1742,8 +1735,7 @@ version: 1.0.0
     "@tssuite/needed_bridge": "^2.0.0"
   }
 }
-''',
-          );
+''');
 
           final ticketDir = Directory(
             path.join(
@@ -1933,9 +1925,8 @@ version: 1.0.0
           final consumerDir = Directory(
             path.join(oceanWorkspacePath, consumerName),
           )..createSync(recursive: true);
-          File(
-            path.join(consumerDir.path, 'package.json'),
-          ).writeAsStringSync('["not", "an", "object"]');
+          File(path.join(consumerDir.path, 'package.json'))
+              .writeAsStringSync('["not", "an", "object"]');
 
           const targetName = 'array_target';
           final targetDir = Directory(path.join(oceanWorkspacePath, targetName))
@@ -2006,15 +1997,13 @@ version: 1.0.0
           const repoName = 'bridgeRepo';
           final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
             ..createSync(recursive: true);
-          File(
-            path.join(repoDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: $repoName\nversion: 1.0.0\n');
+          File(path.join(repoDir.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: $repoName\nversion: 1.0.0\n');
           File(path.join(repoDir.path, 'package.json')).writeAsStringSync(
             '{"name": "@scope/$repoName", "version": "1.0.0"}',
           );
-          File(
-            path.join(repoDir.path, 'tsconfig.json'),
-          ).writeAsStringSync('{}');
+          File(path.join(repoDir.path, 'tsconfig.json'))
+              .writeAsStringSync('{}');
 
           final ticketDir = Directory(
             path.join(tempDir.path, ggMultiLegacyTicketFolder, 'BRIDGE_TICKET'),
@@ -2103,9 +2092,8 @@ version: 1.0.0
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
       File(path.join(repoDir.path, 'dummy.txt')).writeAsStringSync('data');
-      File(
-        path.join(repoDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: x');
+      File(path.join(repoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: x');
 
       final ticketDir = Directory(
         path.join(
@@ -2215,9 +2203,8 @@ version: 1.0.0
     test(
       'clones multiple repositories when multiple targets provided',
       () async {
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockDoCommit = MockGgSystemCommit();
         when(
@@ -2270,9 +2257,8 @@ version: 1.0.0
       const repoName = 'localizeFailRepo';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
-      File(
-        path.join(repoDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: $repoName');
+      File(path.join(repoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
         path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-LOCFAIL'),
@@ -2506,9 +2492,9 @@ version: 1.0.0
           path.join(ticketDir.path, 'TXYZ.code-workspace'),
         );
         expect(workspaceFile.existsSync(), isTrue);
-        final workspaceJson =
-            jsonDecode(workspaceFile.readAsStringSync())
-                as Map<String, dynamic>;
+        final workspaceJson = jsonDecode(
+          workspaceFile.readAsStringSync(),
+        ) as Map<String, dynamic>;
         final folders = (workspaceJson['folders'] as List<dynamic>)
             .cast<Map<String, dynamic>>();
         final folderPaths = folders.map((f) => f['path'] as String).toSet();
@@ -2544,9 +2530,8 @@ version: 1.0.0
             '',
           ].join('\n'),
         );
-        File(
-          path.join(cDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync(['name: c', 'version: 1.0.0', ''].join('\n'));
+        File(path.join(cDir.path, 'pubspec.yaml'))
+            .writeAsStringSync(['name: c', 'version: 1.0.0', ''].join('\n'));
 
         final ticketDir = Directory(
           path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
@@ -2633,9 +2618,9 @@ version: 1.0.0
           path.join(ticketDir.path, 'TXYZ.code-workspace'),
         );
         expect(workspaceFile.existsSync(), isTrue);
-        final workspaceJson =
-            jsonDecode(workspaceFile.readAsStringSync())
-                as Map<String, dynamic>;
+        final workspaceJson = jsonDecode(
+          workspaceFile.readAsStringSync(),
+        ) as Map<String, dynamic>;
         final folders = (workspaceJson['folders'] as List<dynamic>)
             .cast<Map<String, dynamic>>();
         final folderPaths = folders.map((f) => f['path'] as String).toSet();
@@ -2825,9 +2810,8 @@ version: 1.0.0
           const repoName = 'upgradeRepo';
           final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
             ..createSync(recursive: true);
-          File(
-            path.join(repoDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: $repoName');
+          File(path.join(repoDir.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: $repoName');
 
           final ticketDir = Directory(
             path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG'),
@@ -2944,9 +2928,8 @@ version: 1.0.0
         const repoName = 'upgradeFailRepo';
         final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $repoName');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $repoName');
 
         final ticketDir = Directory(
           path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG-FAIL'),
@@ -3066,13 +3049,11 @@ version: 1.0.0
       final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
 
-      File(
-        path.join(oceanRepoDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: $repoName');
+      File(path.join(oceanRepoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: $repoName');
 
-      File(
-        path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'),
-      ).writeAsStringSync('{}');
+      File(path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'))
+          .writeAsStringSync('{}');
 
       final ticketDir = Directory(
         path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-BACKUP'),
@@ -3198,13 +3179,11 @@ version: 1.0.0
       final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
 
-      File(
-        path.join(oceanRepoDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: $repoName');
+      File(path.join(oceanRepoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: $repoName');
 
-      File(
-        path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'),
-      ).writeAsStringSync('{}');
+      File(path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'))
+          .writeAsStringSync('{}');
 
       final ticketDir = Directory(
         path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-UNLOC-FAIL'),
@@ -3332,34 +3311,28 @@ version: 1.0.0
 
         final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
           ..createSync(recursive: true);
-        File(
-          path.join(oceanRepoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $repoName');
+        File(path.join(oceanRepoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $repoName');
         Directory(path.join(oceanRepoDir.path, '.git')).createSync();
 
         // An older gg version installed a pre-push hook here. The copy into
         // the ticket carries it along, so `do add` must clean it up.
-        Directory(
-          path.join(oceanRepoDir.path, '.git', 'hooks'),
-        ).createSync(recursive: true);
-        File(
-          path.join(oceanRepoDir.path, '.git', 'hooks', 'pre-push'),
-        ).writeAsStringSync(
-          '#!/bin/sh\nset -e\n\ndart run .gg/verify_push.dart',
-        );
-        Directory(
-          path.join(oceanRepoDir.path, '.gg'),
-        ).createSync(recursive: true);
-        File(
-          path.join(oceanRepoDir.path, '.gg', 'verify_push.dart'),
-        ).writeAsStringSync('void main() {}');
+        Directory(path.join(oceanRepoDir.path, '.git', 'hooks'))
+            .createSync(recursive: true);
+        File(path.join(oceanRepoDir.path, '.git', 'hooks', 'pre-push'))
+            .writeAsStringSync(
+              '#!/bin/sh\nset -e\n\ndart run .gg/verify_push.dart',
+            );
+        Directory(path.join(oceanRepoDir.path, '.gg'))
+            .createSync(recursive: true);
+        File(path.join(oceanRepoDir.path, '.gg', 'verify_push.dart'))
+            .writeAsStringSync('void main() {}');
 
         // A hook gg never generated. It proves the copy really carries
         // .git/hooks over, so the missing pre-push below is a deletion and
         // not just a file that never arrived.
-        File(
-          path.join(oceanRepoDir.path, '.git', 'hooks', 'pre-commit'),
-        ).writeAsStringSync('#!/bin/sh\necho "my own hook"');
+        File(path.join(oceanRepoDir.path, '.git', 'hooks', 'pre-commit'))
+            .writeAsStringSync('#!/bin/sh\necho "my own hook"');
 
         final ticketDir = Directory(
           path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-HOOKS'),
@@ -3481,9 +3454,8 @@ version: 1.0.0
 
         // The user's own hook is untouched.
         expect(
-          File(
-            path.join(ticketRepoDir.path, '.git', 'hooks', 'pre-commit'),
-          ).existsSync(),
+          File(path.join(ticketRepoDir.path, '.git', 'hooks', 'pre-commit'))
+              .existsSync(),
           isTrue,
         );
       },
@@ -3493,9 +3465,8 @@ version: 1.0.0
       const repoName = 'backupRepo';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
-      File(
-        path.join(repoDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: $repoName');
+      File(path.join(repoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: $repoName');
 
       final ticketDir = Directory(
         path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-BACKUP'),
@@ -3646,9 +3617,8 @@ version: 1.0.0
           'name: ${path.basename(relativePath)}\nversion: 1.0.0\n',
         );
         final gitDir = Directory(path.join(dir.path, '.git'))..createSync();
-        File(
-          path.join(gitDir.path, 'config'),
-        ).writeAsStringSync('[remote "origin"]\n\turl = $remoteUrl\n');
+        File(path.join(gitDir.path, 'config'))
+            .writeAsStringSync('[remote "origin"]\n\turl = $remoteUrl\n');
         return dir;
       }
 
@@ -3681,13 +3651,10 @@ version: 1.0.0
           isFalse,
         );
 
-        final ws =
-            jsonDecode(
-                  File(
-                    path.join(ticketDir.path, 'TICKET_ORG.code-workspace'),
-                  ).readAsStringSync(),
-                )
-                as Map<String, dynamic>;
+        final ws = jsonDecode(
+          File(path.join(ticketDir.path, 'TICKET_ORG.code-workspace'))
+              .readAsStringSync(),
+        ) as Map<String, dynamic>;
         final paths = (ws['folders'] as List<dynamic>)
             .cast<Map<String, dynamic>>()
             .map((f) => f['path'] as String)
@@ -3723,9 +3690,8 @@ version: 1.0.0
           'https://github.com/ggsuite/gg_foo.git',
         ]);
         expect(
-          File(
-            path.join(ticketDir.path, 'gg_foo', 'pubspec.yaml'),
-          ).existsSync(),
+          File(path.join(ticketDir.path, 'gg_foo', 'pubspec.yaml'))
+              .existsSync(),
           isTrue,
         );
 
@@ -3736,9 +3702,8 @@ version: 1.0.0
           'https://github.com/other/gg_foo.git',
         ]);
         expect(
-          File(
-            path.join(ticketDir.path, 'other', 'gg_foo', 'pubspec.yaml'),
-          ).existsSync(),
+          File(path.join(ticketDir.path, 'other', 'gg_foo', 'pubspec.yaml'))
+              .existsSync(),
           isTrue,
         );
       });
@@ -3757,17 +3722,15 @@ version: 1.0.0
         );
 
         await runner.run(['add', 'gg_foo']);
-        File(
-          path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
-        ).writeAsStringSync('keep');
+        File(path.join(ticketDir.path, 'gg_foo', 'marker.txt'))
+            .writeAsStringSync('keep');
         await runner.run(['add', 'gg_foo']);
 
         // The repo is recognized by its remote, so it is left alone instead
         // of being copied into an organization folder beside itself.
         expect(
-          File(
-            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
-          ).readAsStringSync(),
+          File(path.join(ticketDir.path, 'gg_foo', 'marker.txt'))
+              .readAsStringSync(),
           'keep',
         );
         expect(
@@ -3789,9 +3752,8 @@ version: 1.0.0
         await runner.run(['add', 'gg_foo']);
 
         expect(
-          Directory(
-            path.join(oceanWorkspacePath, 'ggsuite', 'gg_foo'),
-          ).existsSync(),
+          Directory(path.join(oceanWorkspacePath, 'ggsuite', 'gg_foo'))
+              .existsSync(),
           isTrue,
         );
         expect(
@@ -3817,9 +3779,8 @@ version: 1.0.0
         final oldCopy = Directory(
           path.join(ticketDir.path, 'ggsuite', 'gg_foo'),
         )..createSync(recursive: true);
-        File(
-          path.join(oldCopy.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: gg_foo\nversion: 1.0.0\n');
+        File(path.join(oldCopy.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: gg_foo\nversion: 1.0.0\n');
         final gitDir = Directory(path.join(oldCopy.path, '.git'))..createSync();
         File(path.join(gitDir.path, 'config')).writeAsStringSync(
           '[remote "origin"]\n\turl = https://github.com/ggsuite/gg_foo.git\n',
@@ -3836,9 +3797,8 @@ version: 1.0.0
 
         // The existing copy is moved, not replaced by a fresh one.
         expect(
-          File(
-            path.join(ticketDir.path, 'gg_foo', 'marker.txt'),
-          ).readAsStringSync(),
+          File(path.join(ticketDir.path, 'gg_foo', 'marker.txt'))
+              .readAsStringSync(),
           'keep',
         );
         // The organization folder that lost its last repo is gone.
@@ -3928,9 +3888,8 @@ version: 1.0.0
           'name: ${path.basename(relativePath)}\nversion: 1.0.0\n',
         );
         final gitDir = Directory(path.join(dir.path, '.git'))..createSync();
-        File(
-          path.join(gitDir.path, 'config'),
-        ).writeAsStringSync('[remote "origin"]\n\turl = $remoteUrl\n');
+        File(path.join(gitDir.path, 'config'))
+            .writeAsStringSync('[remote "origin"]\n\turl = $remoteUrl\n');
       }
 
       Directory makeTicketDir(String name) =>

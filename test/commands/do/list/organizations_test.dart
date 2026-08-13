@@ -40,31 +40,25 @@ void main() {
     test('lists organizations uniquely sorted', () async {
       final oceanPath = oceanDir.path;
       final repo1 = Directory(path.join(oceanPath, 'repo1'))..createSync();
-      File(
-        path.join(repo1.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: repo1\nversion: 3.0.0');
+      File(path.join(repo1.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: repo1\nversion: 3.0.0');
       Directory(path.join(repo1.path, '.git')).createSync();
-      File(
-        path.join(repo1.path, '.git', 'config'),
-      ).writeAsStringSync('url = https://github.com/inlavigo/repo1.git');
+      File(path.join(repo1.path, '.git', 'config'))
+          .writeAsStringSync('url = https://github.com/inlavigo/repo1.git');
 
       final repo2 = Directory(path.join(oceanPath, 'repo2'))..createSync();
-      File(
-        path.join(repo2.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: repo2\nversion: 2.5.0');
+      File(path.join(repo2.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: repo2\nversion: 2.5.0');
       Directory(path.join(repo2.path, '.git')).createSync();
-      File(
-        path.join(repo2.path, '.git', 'config'),
-      ).writeAsStringSync('url = https://github.com/microsoft/repo2.git');
+      File(path.join(repo2.path, '.git', 'config'))
+          .writeAsStringSync('url = https://github.com/microsoft/repo2.git');
 
       final repo3 = Directory(path.join(oceanPath, 'repo3'))..createSync();
-      File(
-        path.join(repo3.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: repo3\nversion: 1.0.0');
+      File(path.join(repo3.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: repo3\nversion: 1.0.0');
       Directory(path.join(repo3.path, '.git')).createSync();
-      File(
-        path.join(repo3.path, '.git', 'config'),
-      ).writeAsStringSync('url = https://github.com/inlavigo/repo3.git');
+      File(path.join(repo3.path, '.git', 'config'))
+          .writeAsStringSync('url = https://github.com/inlavigo/repo3.git');
 
       final runner = CommandRunner<void>(
         'test',
@@ -89,13 +83,11 @@ void main() {
       final oceanPath = oceanDir.path;
       final repo = Directory(path.join(oceanPath, 'repo_unknown'))
         ..createSync();
-      File(
-        path.join(repo.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: repo_unknown\nversion: 1.0.0');
+      File(path.join(repo.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: repo_unknown\nversion: 1.0.0');
       Directory(path.join(repo.path, '.git')).createSync();
-      File(
-        path.join(repo.path, '.git', 'config'),
-      ).writeAsStringSync('invalid config content');
+      File(path.join(repo.path, '.git', 'config'))
+          .writeAsStringSync('invalid config content');
 
       final runner = CommandRunner<void>(
         'test',

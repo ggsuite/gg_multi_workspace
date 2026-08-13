@@ -29,16 +29,14 @@ void main() {
           ' and .git config (git@ url)', () async {
         // Create a pubspec.yaml with a valid version
         var pubspecContent = 'name: sample\nversion: 1.2.3';
-        File(
-          p.join(tempDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync(pubspecContent);
+        File(p.join(tempDir.path, 'pubspec.yaml'))
+            .writeAsStringSync(pubspecContent);
 
         // Create a .git/config file with a git@ URL
         Directory(p.join(tempDir.path, '.git')).createSync();
         var gitConfigContent = 'url = git@github.com:org/sample.git';
-        File(
-          p.join(tempDir.path, '.git', 'config'),
-        ).writeAsStringSync(gitConfigContent);
+        File(p.join(tempDir.path, '.git', 'config'))
+            .writeAsStringSync(gitConfigContent);
 
         // Execute getRepoInfo
         var info = await getRepoInfo(tempDir.path);
@@ -52,9 +50,8 @@ void main() {
 
       test('should return default version if pubspec parsing fails', () async {
         // Create a pubspec.yaml with invalid content
-        File(
-          p.join(tempDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('bad content');
+        File(p.join(tempDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('bad content');
 
         // No .git configuration exists
         var info = await getRepoInfo(tempDir.path);
@@ -82,9 +79,8 @@ void main() {
       test(
         'should label a bridge (pubspec + package.json) as dart+nodejs',
         () async {
-          File(
-            p.join(tempDir.path, 'pubspec.yaml'),
-          ).writeAsStringSync('name: bridge\nversion: 1.0.0');
+          File(p.join(tempDir.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: bridge\nversion: 1.0.0');
           File(p.join(tempDir.path, 'package.json')).writeAsStringSync('{}');
 
           var info = await getRepoInfo(tempDir.path);
@@ -95,9 +91,8 @@ void main() {
 
       test('should return python language if a .py file exists', () async {
         // Create a dummy .py file
-        File(
-          p.join(tempDir.path, 'script.py'),
-        ).writeAsStringSync('print("hello")');
+        File(p.join(tempDir.path, 'script.py'))
+            .writeAsStringSync('print("hello")');
 
         var info = await getRepoInfo(tempDir.path);
         expect(info.language, equals('python'));
@@ -105,9 +100,8 @@ void main() {
 
       test('should return Java language if a .java file exists', () async {
         // Create a dummy .java file
-        File(
-          p.join(tempDir.path, 'Main.java'),
-        ).writeAsStringSync('public class Main {}');
+        File(p.join(tempDir.path, 'Main.java'))
+            .writeAsStringSync('public class Main {}');
 
         var info = await getRepoInfo(tempDir.path);
         expect(info.language, equals('Java'));
@@ -115,9 +109,8 @@ void main() {
 
       test('should return c++ language if a .cpp file exists', () async {
         // Create a dummy .cpp file
-        File(
-          p.join(tempDir.path, 'main.cpp'),
-        ).writeAsStringSync('int main() { return 0; }');
+        File(p.join(tempDir.path, 'main.cpp'))
+            .writeAsStringSync('int main() { return 0; }');
 
         var info = await getRepoInfo(tempDir.path);
         expect(info.language, equals('c++'));
@@ -126,9 +119,8 @@ void main() {
       test('should return fallback dart language '
           'if no indicator exists', () async {
         // Create a dummy file with an unrelated extension
-        File(
-          p.join(tempDir.path, 'readme.txt'),
-        ).writeAsStringSync('This is a readme file.');
+        File(p.join(tempDir.path, 'readme.txt'))
+            .writeAsStringSync('This is a readme file.');
 
         var info = await getRepoInfo(tempDir.path);
         // With no specific indicator, language should fallback to dart
@@ -138,16 +130,14 @@ void main() {
       test('should extract organization '
           'from .git config in http format', () async {
         // Create a pubspec.yaml to force dart language
-        File(
-          p.join(tempDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: sample');
+        File(p.join(tempDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: sample');
 
         // Create .git/config with an HTTP URL
         Directory(p.join(tempDir.path, '.git')).createSync();
         var gitConfigContent = 'url = https://github.com/orgName/sample.git';
-        File(
-          p.join(tempDir.path, '.git', 'config'),
-        ).writeAsStringSync(gitConfigContent);
+        File(p.join(tempDir.path, '.git', 'config'))
+            .writeAsStringSync(gitConfigContent);
 
         var info = await getRepoInfo(tempDir.path);
         expect(info.organization, equals('orgName'));
@@ -157,9 +147,8 @@ void main() {
           'if .git config missing url', () async {
         // Create .git folder with a config file lacking a proper url
         Directory(p.join(tempDir.path, '.git')).createSync();
-        File(
-          p.join(tempDir.path, '.git', 'config'),
-        ).writeAsStringSync('some other content');
+        File(p.join(tempDir.path, '.git', 'config'))
+            .writeAsStringSync('some other content');
 
         var info = await getRepoInfo(tempDir.path);
         expect(info.organization, equals('unknown'));
@@ -188,13 +177,11 @@ void main() {
         // Create Repo1: with pubspec.yaml and .git config (git@ url)
         var repo1 = Directory(p.join(oceanWorkspace.path, 'repo1'));
         repo1.createSync();
-        File(
-          p.join(repo1.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: repo1\nversion: 2.0.0');
+        File(p.join(repo1.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: repo1\nversion: 2.0.0');
         Directory(p.join(repo1.path, '.git')).createSync();
-        File(
-          p.join(repo1.path, '.git', 'config'),
-        ).writeAsStringSync('url = git@github.com:org1/repo1.git');
+        File(p.join(repo1.path, '.git', 'config'))
+            .writeAsStringSync('url = git@github.com:org1/repo1.git');
 
         // Create Repo2: with package.json
         var repo2 = Directory(p.join(oceanWorkspace.path, 'repo2'));
@@ -221,13 +208,11 @@ void main() {
           ..createSync();
         final repo = Directory(p.join(oceanWorkspace.path, 'org1', 'repo1'))
           ..createSync(recursive: true);
-        File(
-          p.join(repo.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: repo1\nversion: 2.0.0');
+        File(p.join(repo.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: repo1\nversion: 2.0.0');
         Directory(p.join(repo.path, '.git')).createSync();
-        File(
-          p.join(repo.path, '.git', 'config'),
-        ).writeAsStringSync('url = git@github.com:org1/repo1.git');
+        File(p.join(repo.path, '.git', 'config'))
+            .writeAsStringSync('url = git@github.com:org1/repo1.git');
 
         var infos = await getAllRepoInfos(oceanWorkspace.path);
 

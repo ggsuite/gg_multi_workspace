@@ -5,6 +5,7 @@
 // found in the LICENSE file in the root of this package.
 
 import 'package:gg_git/gg_git.dart';
+
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -36,11 +37,9 @@ class RemoveTicketCommand extends Command<void> {
   RemoveTicketCommand({
     required this.ggLog,
     String? rootPath,
-    ProcessRunner? processRunner,
+    this._processRunner,
     // coverage:ignore-start
-  }) : rootPath = rootPath ?? Directory.current.path,
-       // coverage:ignore-end
-       _processRunner = processRunner {
+  }) : rootPath = rootPath ?? Directory.current.path {
     argParser.addFlag(
       'delete-remote-branch',
       defaultsTo: true,

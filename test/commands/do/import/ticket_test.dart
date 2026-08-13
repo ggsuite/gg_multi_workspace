@@ -491,9 +491,9 @@ void main() {
           runCmd(build(), ['feat_x']),
           throwsA(
             predicate(
-              (e) => rmControls(
-                e.toString(),
-              ).contains('is neither a ticket.json path'),
+              (e) =>
+                  rmControls(e.toString())
+                      .contains('is neither a ticket.json path'),
             ),
           ),
         );
@@ -528,9 +528,9 @@ void main() {
           runCmd(build(executionPath: repoA.path), ['feat_x']),
           throwsA(
             predicate(
-              (e) => rmControls(
-                e.toString(),
-              ).contains('Could not read a ticket marker'),
+              (e) =>
+                  rmControls(e.toString())
+                      .contains('Could not read a ticket marker'),
             ),
           ),
         );
@@ -633,9 +633,8 @@ void main() {
             ],
           ),
         );
-        when(
-          () => gitHandler.cloneRepo(any(), any()),
-        ).thenThrow(Exception('clone failed'));
+        when(() => gitHandler.cloneRepo(any(), any()))
+            .thenThrow(Exception('clone failed'));
         await runCmd(build(executionPath: repoA.path), ['feat_x']);
         expect(logged('Failed to clone new_repo'), isTrue);
         expect(logged('Could not obtain repository new_repo'), isTrue);
@@ -762,13 +761,10 @@ void main() {
         expect(copyCalls, [path.join(ticketDir.path, 'repo_a')]);
 
         // The VS Code workspace addresses the repo without an org folder.
-        final ws =
-            jsonDecode(
-                  File(
-                    path.join(ticketDir.path, 'feat_x.code-workspace'),
-                  ).readAsStringSync(),
-                )
-                as Map<String, dynamic>;
+        final ws = jsonDecode(
+          File(path.join(ticketDir.path, 'feat_x.code-workspace'))
+              .readAsStringSync(),
+        ) as Map<String, dynamic>;
         expect(
           (ws['folders'] as List<dynamic>).cast<Map<String, dynamic>>().map(
             (f) => f['path'] as String,
@@ -809,9 +805,8 @@ void main() {
         File(path.join(gitDir.path, 'config')).writeAsStringSync(
           '[remote "origin"]\n\turl = https://github.com/ggsuite/repo_a.git\n',
         );
-        File(
-          path.join(flat.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: x\n');
+        File(path.join(flat.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: x\n');
 
         await runCmd(build(executionPath: tempDir.path), ['feat_x']);
 

@@ -102,11 +102,9 @@ void main() {
     test('describes itself', () {
       final command = UpdateOceanCommand(ggLog: ggLog, rootPath: tempDir.path);
       expect(command.name, 'ocean');
-      expect(
-        command.aliases,
-        ['master'],
-        reason: 'The former command name must keep working as an alias.',
-      );
+      expect(command.aliases, [
+        'master',
+      ], reason: 'The former command name must keep working as an alias.');
       expect(
         command.description,
         'Sync the ocean with the registered organizations',
@@ -116,9 +114,8 @@ void main() {
     // .........................................................................
     test('still answers to the legacy alias »master«', () async {
       createRepo('ggsuite', 'gg_one', 'git@github.com:ggsuite/gg_one.git');
-      when(
-        () => gitHub.fetchOrgRepos('ggsuite'),
-      ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
+      when(() => gitHub.fetchOrgRepos('ggsuite'))
+          .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
 
       await run([], command: 'master');
 
@@ -150,9 +147,8 @@ void main() {
 
       test('but leaves the ones already present alone', () async {
         createRepo('ggsuite', 'gg_one', 'git@github.com:ggsuite/gg_one.git');
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
 
         await run([]);
 
@@ -167,9 +163,8 @@ void main() {
           'gg_one_pkg',
           'git@github.com:ggsuite/gg_one.git',
         );
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
 
         await run([]);
 
@@ -186,9 +181,8 @@ void main() {
           'git@github.com:ggsuite/gg_gone.git',
         );
         createRepo('ggsuite', 'gg_one', 'git@github.com:ggsuite/gg_one.git');
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
 
         await run([]);
 
@@ -230,9 +224,8 @@ void main() {
       test('but never one whose remote url is missing', () async {
         final noGit = Directory(path.join(oceanPath, 'ggsuite', 'no_remote'))
           ..createSync(recursive: true);
-        File(
-          path.join(noGit.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: no_remote\n');
+        File(path.join(noGit.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: no_remote\n');
         when(() => gitHub.fetchOrgRepos('ggsuite')).thenAnswer((_) async => []);
 
         await run([]);
@@ -271,9 +264,8 @@ void main() {
           '[{"id":"1","name":"acme","project_name":"proj",'
           '"url":"https://ssh.dev.azure.com:v3/acme/proj/"}]',
         );
-        when(
-          () => azure.fetchOrgRepos('acme', project: 'proj'),
-        ).thenAnswer((_) async => []);
+        when(() => azure.fetchOrgRepos('acme', project: 'proj'))
+            .thenAnswer((_) async => []);
 
         await run([]);
 
@@ -292,9 +284,8 @@ void main() {
             'repo',
             'https://dev.azure.com/acme/other_project/_git/repo',
           );
-          when(
-            () => azure.fetchOrgRepos('acme', project: 'proj'),
-          ).thenAnswer((_) async => []);
+          when(() => azure.fetchOrgRepos('acme', project: 'proj'))
+              .thenAnswer((_) async => []);
 
           await run([]);
 
@@ -311,9 +302,8 @@ void main() {
           'gg_gone',
           'git@github.com:ggsuite/gg_gone.git',
         );
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_new')]);
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_new')]);
 
         await run(['--dry-run']);
 
@@ -339,9 +329,8 @@ void main() {
           'gg_one',
           'git@github.com:ggsuite/gg_one.git',
         );
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenThrow(Exception('gh not authenticated'));
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenThrow(Exception('gh not authenticated'));
 
         await run([]);
 
@@ -361,9 +350,8 @@ void main() {
       });
 
       test('do not produce a summary when none answered', () async {
-        when(
-          () => gitHub.fetchOrgRepos('ggsuite'),
-        ).thenThrow(Exception('boom'));
+        when(() => gitHub.fetchOrgRepos('ggsuite'))
+            .thenThrow(Exception('boom'));
 
         await run([]);
 
@@ -393,9 +381,8 @@ void main() {
       File(path.join(flat.path, '.git', 'config')).writeAsStringSync(
         '[remote "origin"]\n\turl = git@github.com:ggsuite/gg_one.git\n',
       );
-      when(
-        () => gitHub.fetchOrgRepos('ggsuite'),
-      ).thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
+      when(() => gitHub.fetchOrgRepos('ggsuite'))
+          .thenAnswer((_) async => [ghRepo('ggsuite', 'gg_one')]);
 
       await run([]);
 

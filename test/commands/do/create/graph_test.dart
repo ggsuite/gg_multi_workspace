@@ -48,9 +48,8 @@ void main() {
         }
       }
 
-      File(
-        p.join(dir.path, 'pubspec.yaml'),
-      ).writeAsStringSync(buffer.toString());
+      File(p.join(dir.path, 'pubspec.yaml'))
+          .writeAsStringSync(buffer.toString());
     }
 
     /// The single message the command wrote to stdout.

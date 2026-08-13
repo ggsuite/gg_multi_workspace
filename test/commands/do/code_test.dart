@@ -67,9 +67,8 @@ void main() {
     });
 
     test('opens workspace file when ticket exists but is empty', () async {
-      Directory(
-        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'),
-      ).createSync(recursive: true);
+      Directory(path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'))
+          .createSync(recursive: true);
 
       await runner.run(<String>['code', 'T1']);
 
@@ -125,9 +124,8 @@ void main() {
         path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T5'),
       )..createSync(recursive: true);
       final r = Directory(path.join(tdir.path, 'SlashRepo'))..createSync();
-      File(
-        path.join(r.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: SlashRepo');
+      File(path.join(r.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: SlashRepo');
       await runner.run(<String>['code', 'T5\\SlashRepo']);
 
       expect(launched.length, 1);
@@ -144,9 +142,8 @@ void main() {
       )..createSync(recursive: true);
       final r = Directory(path.join(tdir.path, 'ggsuite', 'OrgRepo'))
         ..createSync(recursive: true);
-      File(
-        path.join(r.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: OrgRepo');
+      File(path.join(r.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: OrgRepo');
 
       await runner.run(<String>['code', 'T_ORG/OrgRepo']);
 
@@ -156,9 +153,8 @@ void main() {
     });
 
     test('logs error when specified repo missing', () async {
-      Directory(
-        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T4'),
-      ).createSync(recursive: true);
+      Directory(path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T4'))
+          .createSync(recursive: true);
       await runner.run(<String>['code', 'T4/NoRepo']);
       expect(
         messages.last,

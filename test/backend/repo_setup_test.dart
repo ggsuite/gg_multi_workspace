@@ -5,6 +5,7 @@
 // found in the LICENSE file in the root of this package.
 
 import 'package:gg_git/gg_git.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -131,13 +132,10 @@ void main() {
       final ticketDir = Directory(path.join(tmp.path, 'settings_ticket'))
         ..createSync();
       writeCodeWorkspaceFile(ticketDir, ['a']);
-      final written =
-          jsonDecode(
-                File(
-                  path.join(ticketDir.path, 'settings_ticket.code-workspace'),
-                ).readAsStringSync(),
-              )
-              as Map<String, dynamic>;
+      final written = jsonDecode(
+        File(path.join(ticketDir.path, 'settings_ticket.code-workspace'))
+            .readAsStringSync(),
+      ) as Map<String, dynamic>;
 
       expect(written['settings'], codeWorkspaceSettings);
       expect(
@@ -159,9 +157,8 @@ void main() {
         ..createSync();
       writeCodeWorkspaceFile(ticketDir, const <String>[]);
       expect(
-        File(
-          path.join(ticketDir.path, 'empty_ticket.code-workspace'),
-        ).readAsStringSync(),
+        File(path.join(ticketDir.path, 'empty_ticket.code-workspace'))
+            .readAsStringSync(),
         '{"folders":[{"path":"."}],'
         '"settings":{"dart.runPubGetOnPubspecChanges":"never"}}\n',
       );

@@ -25,9 +25,8 @@ void main() {
   Directory repo(String name, [String? overrides]) {
     final dir = Directory(path.join(tempDir.path, name))..createSync();
     if (overrides != null) {
-      File(
-        path.join(dir.path, pubspecOverridesFileName),
-      ).writeAsStringSync(overrides);
+      File(path.join(dir.path, pubspecOverridesFileName))
+          .writeAsStringSync(overrides);
     }
     return dir;
   }
@@ -176,9 +175,8 @@ dependency_overrides:
       // override is gg-owned — exactly the shape the ownership sweep of
       // `removeOwnedOverrides` would have taken along with `b`.
       final c = Directory(path.join(tempDir.path, 'c'))..createSync();
-      File(
-        path.join(c.path, 'package.json'),
-      ).writeAsStringSync('{"name": "c"}');
+      File(path.join(c.path, 'package.json'))
+          .writeAsStringSync('{"name": "c"}');
 
       final a = tsRepo('a', 'overrides:\n  b: link:../b\n  c: link:../c\n');
 

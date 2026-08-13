@@ -54,9 +54,8 @@ void main() {
       for (final name in <String>['A', 'B']) {
         final repoDir = Directory(path.join(ticketDir.path, name))
           ..createSync();
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $name');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $name');
         Directory(path.join(repoDir.path, '.git')).createSync();
       }
     });
@@ -127,9 +126,8 @@ void main() {
 
     test('writes no dart rules into a typescript repo', () async {
       final tsRepo = Directory(path.join(ticketDir.path, 'ts'))..createSync();
-      File(
-        path.join(tsRepo.path, 'package.json'),
-      ).writeAsStringSync('{"name": "ts"}');
+      File(path.join(tsRepo.path, 'package.json'))
+          .writeAsStringSync('{"name": "ts"}');
       File(path.join(tsRepo.path, 'pnpm-lock.yaml')).writeAsStringSync('');
       Directory(path.join(tsRepo.path, '.git')).createSync();
 
@@ -145,9 +143,8 @@ void main() {
       'writes the canonical lock file rule when no lock file exists',
       () async {
         final tsRepo = Directory(path.join(ticketDir.path, 'ts'))..createSync();
-        File(
-          path.join(tsRepo.path, 'package.json'),
-        ).writeAsStringSync('{"name": "ts"}');
+        File(path.join(tsRepo.path, 'package.json'))
+            .writeAsStringSync('{"name": "ts"}');
         Directory(path.join(tsRepo.path, '.git')).createSync();
 
         await callInstall(ticketDir);
@@ -218,9 +215,8 @@ void main() {
     });
 
     test('skips merge driver config when .git is missing', () async {
-      Directory(
-        path.join(ticketDir.path, 'A', '.git'),
-      ).deleteSync(recursive: true);
+      Directory(path.join(ticketDir.path, 'A', '.git'))
+          .deleteSync(recursive: true);
 
       await callInstall(ticketDir);
 

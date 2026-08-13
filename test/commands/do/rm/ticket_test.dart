@@ -54,9 +54,8 @@ void main() {
     Directory repo(String org, String name) {
       final dir = Directory(path.join(ticketDir.path, org, name))
         ..createSync(recursive: true);
-      File(
-        path.join(dir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: $name\nversion: 1.0.0\n');
+      File(path.join(dir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: $name\nversion: 1.0.0\n');
       return dir;
     }
 
@@ -109,9 +108,8 @@ void main() {
         'and prints the way to the workspace root in blue', () async {
       repo('ggsuite', 'a');
       repo('ggsuite', 'b');
-      File(
-        path.join(ticketDir.path, 'T88.code-workspace'),
-      ).writeAsStringSync('{}');
+      File(path.join(ticketDir.path, 'T88.code-workspace'))
+          .writeAsStringSync('{}');
 
       await runnerAt(ticketDir.path).run(['ticket']);
 
@@ -136,9 +134,8 @@ void main() {
     test('--no-delete-remote-branch keeps the remote branches', () async {
       repo('ggsuite', 'a');
 
-      await runnerAt(
-        ticketDir.path,
-      ).run(['ticket', '--no-delete-remote-branch']);
+      await runnerAt(ticketDir.path)
+          .run(['ticket', '--no-delete-remote-branch']);
 
       expect(gitCalls, isEmpty);
       expect(messages.join('\n'), contains('Kept remote branch T88 for a.'));
@@ -169,9 +166,8 @@ void main() {
         )..createSync(recursive: true);
         final repoDir = Directory(path.join(dir.path, 'ggsuite', 'a'))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: a\nversion: 1.0.0\n');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: a\nversion: 1.0.0\n');
         return dir;
       }
 
@@ -252,21 +248,18 @@ void main() {
           makeTicket('T90');
           makeTicket('T91');
 
-          await runnerAt(
-            tempDir.path,
-          ).run(['ticket', 'T90', 'T91', '--no-delete-remote-branch']);
+          await runnerAt(tempDir.path)
+              .run(['ticket', 'T90', 'T91', '--no-delete-remote-branch']);
 
           expect(gitCalls, isEmpty);
           expect(
-            Directory(
-              path.join(tempDir.path, ggMultiTrashFolder, 'T90'),
-            ).existsSync(),
+            Directory(path.join(tempDir.path, ggMultiTrashFolder, 'T90'))
+                .existsSync(),
             isTrue,
           );
           expect(
-            Directory(
-              path.join(tempDir.path, ggMultiTrashFolder, 'T91'),
-            ).existsSync(),
+            Directory(path.join(tempDir.path, ggMultiTrashFolder, 'T91'))
+                .existsSync(),
             isTrue,
           );
         },
