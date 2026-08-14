@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -68,9 +68,8 @@ void main() {
       // Arrange:
       final nonEmptyDir = Directory(path.join(tempDir.path, 'not_empty'));
       nonEmptyDir.createSync(recursive: true);
-      File(
-        path.join(nonEmptyDir.path, 'some_file.txt'),
-      ).writeAsStringSync('dummy');
+      File(path.join(nonEmptyDir.path, 'some_file.txt'))
+          .writeAsStringSync('dummy');
       final runner = CommandRunner<void>('test', 'InitWorkspaceCommand Test')
         ..addCommand(
           InitWorkspaceCommand(ggLog: ggLog, rootPath: nonEmptyDir.path),

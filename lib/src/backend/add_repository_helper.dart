@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -17,11 +17,10 @@ import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 
 /// Lets the user pick the organization a repository named [repoName] should
 /// be taken from. Returns null when the selection was cancelled.
-typedef SelectOrganization =
-    Future<Organization?> Function(
-      String repoName,
-      List<Organization> organizations,
-    );
+typedef SelectOrganization = Future<Organization?> Function(
+  String repoName,
+  List<Organization> organizations,
+);
 
 /// Returns the clone url of [repoName] within [org].
 String repoUrlOfOrganization(Organization org, String repoName) {

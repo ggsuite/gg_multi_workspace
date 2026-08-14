@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -59,9 +59,8 @@ void main() {
         const targetArg = 'http://github.com/user/repo#';
         final mockGitCloner = MockGitCloner();
         // Stub cloneRepo to complete normally
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -90,9 +89,8 @@ void main() {
         // and it must add that one repo, not the whole organization.
         const targetArg = 'https://github.com/orgs/ggsuite/gg_dna';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -113,9 +111,8 @@ void main() {
       test('Processes repository URL that already ends with .git', () async {
         const targetArg = 'https://github.com/user/repo.git';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -126,9 +123,8 @@ void main() {
         );
 
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
-        verify(
-          () => mockGitCloner.cloneRepo(targetArg, expectedDestination),
-        ).called(1);
+        verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
+            .called(1);
         expect(logs, anyElement(contains('repo from $targetArg')));
       });
 
@@ -137,9 +133,8 @@ void main() {
         // where the URL has less than 2 path segments.
         const targetArg = 'http://github.com/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         // Build a fake repo list response with two repositories
         final repoList = <Repository>[
@@ -175,9 +170,8 @@ void main() {
           final repoName = repo.name;
           final cloneUrl = repo.httpsUrl;
           final destination = path.join(workspacePath, 'myorg', repoName);
-          verify(
-            () => mockGitCloner.cloneRepo(cloneUrl, destination),
-          ).called(1);
+          verify(() => mockGitCloner.cloneRepo(cloneUrl, destination))
+              .called(1);
           expect(logs, anyElement(contains('$repoName from $cloneUrl')));
         }
       });
@@ -188,9 +182,8 @@ void main() {
         // progress-then-done printer would interleave into duplicates.
         const targetArg = 'http://github.com/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final repoList = <Repository>[
           const Repository(
@@ -232,9 +225,8 @@ void main() {
         // extra `orgs` path segment; it must still be recognised as an org.
         const targetArg = 'https://github.com/orgs/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final repoList = <Repository>[
           const Repository(
@@ -281,9 +273,8 @@ void main() {
         const targetArg = 'http://github.com/myorg';
         final mockGitCloner = MockGitCloner();
         // Since no repos found, cloneRepo should not be called
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockGitHubPlatform = MockGitHubPlatform();
         when(
@@ -312,9 +303,8 @@ void main() {
       test('Rethrows when fetching organization repos fails', () async {
         const targetArg = 'http://github.com/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockGitHubPlatform = MockGitHubPlatform();
         when(
@@ -348,9 +338,8 @@ void main() {
       test('Handles gh not installed for GitHub organization URL', () async {
         const targetArg = 'https://github.com/orgs/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockGitHubPlatform = MockGitHubPlatform();
         when(
@@ -389,9 +378,8 @@ void main() {
       test('Processes Azure organization URL with project', () async {
         const targetArg = 'https://ssh.dev.azure.com/v3/myorg/myproj';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final repoList = <Repository>[
           const Repository(
@@ -428,9 +416,8 @@ void main() {
           // On Azure DevOps the repo names are scoped to the project, so the
           // project is the folder that keeps them apart.
           final destination = path.join(workspacePath, 'myproj', repoName);
-          verify(
-            () => mockGitCloner.cloneRepo(cloneUrl, destination),
-          ).called(1);
+          verify(() => mockGitCloner.cloneRepo(cloneUrl, destination))
+              .called(1);
           expect(logs, anyElement(contains('$repoName from $cloneUrl')));
         }
       });
@@ -438,9 +425,8 @@ void main() {
       test('Processes Azure organization URL with empty repo list', () async {
         const targetArg = 'https://ssh.dev.azure.com/v3/myorg/myproj';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockAzurePlatform = MockAzurePlatform();
         when(
@@ -472,9 +458,8 @@ void main() {
       test('Skips Azure organization if no project provided', () async {
         const targetArg = 'https://ssh.dev.azure.com/v3/myorg';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockAzurePlatform = MockAzurePlatform();
         when(
@@ -501,9 +486,8 @@ void main() {
       test('Handles az not installed for Azure organization URL', () async {
         const targetArg = 'https://ssh.dev.azure.com/v3/myorg/myproj';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         final mockAzurePlatform = MockAzurePlatform();
         when(
@@ -545,9 +529,8 @@ void main() {
         () async {
           const targetArg = 'https://ssh.dev.azure.com/v3/myorg/myproj';
           final mockGitCloner = MockGitCloner();
-          when(
-            () => mockGitCloner.cloneRepo(any(), any()),
-          ).thenAnswer((_) async {});
+          when(() => mockGitCloner.cloneRepo(any(), any()))
+              .thenAnswer((_) async {});
 
           final mockAzurePlatform = MockAzurePlatform();
           when(
@@ -582,9 +565,8 @@ void main() {
       test('Processes SSH URL correctly', () async {
         const targetArg = 'git@github.com:user/repo.git';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -595,9 +577,8 @@ void main() {
         );
 
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
-        verify(
-          () => mockGitCloner.cloneRepo(targetArg, expectedDestination),
-        ).called(1);
+        verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
+            .called(1);
         expect(logs, anyElement(contains('repo from $targetArg')));
       });
     });
@@ -606,9 +587,8 @@ void main() {
       const targetArg =
           'git@ssh.dev.azure.com:v3/goeranhegenberg/project123/project123.git';
       final mockGitCloner = MockGitCloner();
-      when(
-        () => mockGitCloner.cloneRepo(any(), any()),
-      ).thenAnswer((_) async {});
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenAnswer((_) async {});
 
       await addRepositoryHelper(
         targetArg: targetArg,
@@ -624,9 +604,8 @@ void main() {
         'project123',
         'project123',
       );
-      verify(
-        () => mockGitCloner.cloneRepo(targetArg, expectedDestination),
-      ).called(1);
+      verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
+          .called(1);
       expect(logs, anyElement(contains('project123 from $targetArg')));
     });
 
@@ -634,9 +613,8 @@ void main() {
       test('Processes target with slash correctly', () async {
         const targetArg = 'user/repo';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -659,9 +637,8 @@ void main() {
       test('Processes plain target correctly', () async {
         const targetArg = 'repo';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: targetArg,
@@ -684,9 +661,8 @@ void main() {
       test('Throws exception for invalid organization URL', () async {
         const targetArg = 'http://github.com';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         expect(
           () async => await addRepositoryHelper(
@@ -710,9 +686,8 @@ void main() {
           'with whitespace in path', () async {
         const targetArg = 'http://github.com/ ';
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         expect(
           () async => await addRepositoryHelper(
@@ -741,9 +716,8 @@ void main() {
         File(path.join(destination, 'dummy.txt')).writeAsStringSync('data');
 
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: repoName,
@@ -768,9 +742,8 @@ void main() {
         File(path.join(destination, 'dummy.txt')).writeAsStringSync('data');
 
         final mockGitCloner = MockGitCloner();
-        when(
-          () => mockGitCloner.cloneRepo(any(), any()),
-        ).thenAnswer((_) async {});
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
 
         await addRepositoryHelper(
           targetArg: repoName,
@@ -807,13 +780,11 @@ void main() {
 
       final mockGitCloner = MockGitCloner();
       // First attempt fails (default github)
-      when(
-        () => mockGitCloner.cloneRepo(primaryUrl, any()),
-      ).thenThrow(Exception('Primary clone failure'));
+      when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
+          .thenThrow(Exception('Primary clone failure'));
       // Second attempt (fallback) succeeds
-      when(
-        () => mockGitCloner.cloneRepo(fallbackUrl, any()),
-      ).thenAnswer((_) async {});
+      when(() => mockGitCloner.cloneRepo(fallbackUrl, any()))
+          .thenAnswer((_) async {});
 
       var callbackExecuted = false;
       Future<void> onRepoAdded(String name) async {
@@ -832,12 +803,10 @@ void main() {
       );
 
       // Assert: fallbackUrl was used
-      verify(
-        () => mockGitCloner.cloneRepo(primaryUrl, primaryDestination),
-      ).called(1);
-      verify(
-        () => mockGitCloner.cloneRepo(fallbackUrl, fallbackDestination),
-      ).called(1);
+      verify(() => mockGitCloner.cloneRepo(primaryUrl, primaryDestination))
+          .called(1);
+      verify(() => mockGitCloner.cloneRepo(fallbackUrl, fallbackDestination))
+          .called(1);
       // The repo was reported as added from the fallback URL
       expect(logs, anyElement(contains('$repoName from $fallbackUrl')));
       expect(
@@ -864,12 +833,10 @@ void main() {
 
         final mockGitCloner = MockGitCloner();
         // Both primary and fallback throw an error
-        when(
-          () => mockGitCloner.cloneRepo(primaryUrl, any()),
-        ).thenThrow(Exception('Primary clone fail'));
-        when(
-          () => mockGitCloner.cloneRepo(fallbackUrl, any()),
-        ).thenThrow(Exception('Fallback fail'));
+        when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
+            .thenThrow(Exception('Primary clone fail'));
+        when(() => mockGitCloner.cloneRepo(fallbackUrl, any()))
+            .thenThrow(Exception('Fallback fail'));
 
         await expectLater(
           addRepositoryHelper(
@@ -907,9 +874,8 @@ void main() {
       const repoName = 'hintRepo';
 
       final mockGitCloner = MockGitCloner();
-      when(
-        () => mockGitCloner.cloneRepo(any(), any()),
-      ).thenThrow(Exception('Clone fail'));
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenThrow(Exception('Clone fail'));
 
       // Act
       await expectLater(
@@ -1063,9 +1029,8 @@ void main() {
         final mockGitCloner = clonerOwning(<String>{urlA, urlB});
         final repoDir = Directory(path.join(workspacePath, 'orgA', repoName))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $repoName\n');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $repoName\n');
 
         await addRepositoryHelper(
           targetArg: repoName,
@@ -1173,9 +1138,8 @@ void main() {
 
       final mockGitCloner = MockGitCloner();
       // cloneRepo should NOT be called because repo already present
-      when(
-        () => mockGitCloner.cloneRepo(any(), any()),
-      ).thenAnswer((_) async {});
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenAnswer((_) async {});
 
       var callbackExecuted = false;
       Future<void> onRepoAdded(String name) async {

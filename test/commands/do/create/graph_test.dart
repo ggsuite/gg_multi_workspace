@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -48,9 +48,8 @@ void main() {
         }
       }
 
-      File(
-        p.join(dir.path, 'pubspec.yaml'),
-      ).writeAsStringSync(buffer.toString());
+      File(p.join(dir.path, 'pubspec.yaml'))
+          .writeAsStringSync(buffer.toString());
     }
 
     /// The single message the command wrote to stdout.

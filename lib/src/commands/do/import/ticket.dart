@@ -1,10 +1,11 @@
 // @license
-// Copyright (c) 2025 Göran Hegenberg. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
 import 'package:gg_git/gg_git.dart';
+
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
@@ -514,8 +515,8 @@ class DoCheckoutCommand extends Command<dynamic> {
   // ...........................................................................
   /// Lists the git repositories of the ocean.
   List<Directory> _listOceanRepos() {
-    return RepoFolderResolver.repoDirs(
-      oceanWorkspacePath,
-    ).where((d) => Directory(path.join(d.path, '.git')).existsSync()).toList();
+    return RepoFolderResolver.repoDirs(oceanWorkspacePath)
+        .where((d) => Directory(path.join(d.path, '.git')).existsSync())
+        .toList();
   }
 }

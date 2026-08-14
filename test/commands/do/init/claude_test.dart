@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2025 Göran Hegenberg. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -28,15 +28,13 @@ void main() {
 
     final repoADir = Directory(path.join(ticketDir.path, 'A'))..createSync();
     File(path.join(repoADir.path, 'pubspec.yaml')).writeAsStringSync('name: A');
-    File(
-      path.join(repoADir.path, 'CLAUDE.md'),
-    ).writeAsStringSync('A architecture details');
+    File(path.join(repoADir.path, 'CLAUDE.md'))
+        .writeAsStringSync('A architecture details');
 
     final repoBDir = Directory(path.join(ticketDir.path, 'B'))..createSync();
     File(path.join(repoBDir.path, 'pubspec.yaml')).writeAsStringSync('name: B');
-    File(
-      path.join(repoBDir.path, 'CLAUDE.md'),
-    ).writeAsStringSync('B architecture details');
+    File(path.join(repoBDir.path, 'CLAUDE.md'))
+        .writeAsStringSync('B architecture details');
   });
 
   tearDown(() {

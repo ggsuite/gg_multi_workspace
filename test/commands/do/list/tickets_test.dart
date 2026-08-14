@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -98,9 +98,8 @@ void main() {
 
     test('invalid JSON in ticket.json logs parsing error', () async {
       final tdir = Directory(path.join(ticketsDir.path, 'T4'))..createSync();
-      File(
-        path.join(tdir.path, ticketJsonFileName),
-      ).writeAsStringSync('{ this is not valid json');
+      File(path.join(tdir.path, ticketJsonFileName))
+          .writeAsStringSync('{ this is not valid json');
       await runner.run(['tickets']);
       expect(
         messages.any(

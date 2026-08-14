@@ -1,10 +1,11 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
 import 'package:gg_git/gg_git.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -719,9 +720,9 @@ class AddCommand extends Command<dynamic> {
     final packageJsonFile = File(path.join(repoDir.path, 'package.json'));
     if (packageJsonFile.existsSync()) {
       try {
-        final json =
-            jsonDecode(packageJsonFile.readAsStringSync())
-                as Map<String, dynamic>;
+        final json = jsonDecode(
+          packageJsonFile.readAsStringSync(),
+        ) as Map<String, dynamic>;
         for (final section in ['dependencies', 'devDependencies']) {
           final deps = json[section];
           if (deps is Map<String, dynamic>) {

@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -150,9 +150,8 @@ void main() {
       // folder; new tickets are created in the root next to it all the same.
       final legacy = Directory(path.join(tempDir.path, 'tickets', 'OLD-1'))
         ..createSync(recursive: true);
-      File(
-        path.join(legacy.path, ticketJsonFileName),
-      ).writeAsStringSync('{"issue_id": "OLD-1"}');
+      File(path.join(legacy.path, ticketJsonFileName))
+          .writeAsStringSync('{"issue_id": "OLD-1"}');
 
       await runner.run(<String>[
         'ticket',

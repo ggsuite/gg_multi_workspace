@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -146,9 +146,8 @@ void main() {
           ..createSync();
         final repoDir = Directory(path.join(alphaDir.path, 'ggsuite', 'shared'))
           ..createSync(recursive: true);
-        File(
-          path.join(repoDir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: shared\nversion: 1.0.0\n');
+        File(path.join(repoDir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: shared\nversion: 1.0.0\n');
         final subDir = Directory(path.join(repoDir.path, 'lib', 'src'))
           ..createSync(recursive: true);
 
@@ -175,9 +174,8 @@ void main() {
             buffer.writeln('  $dep: ^1.0.0');
           }
         }
-        File(
-          path.join(dir.path, 'pubspec.yaml'),
-        ).writeAsStringSync(buffer.toString());
+        File(path.join(dir.path, 'pubspec.yaml'))
+            .writeAsStringSync(buffer.toString());
         return dir;
       }
 
@@ -294,9 +292,8 @@ void main() {
       Directory makePackage(Directory parent, String name) {
         final dir = Directory(path.join(parent.path, name))
           ..createSync(recursive: true);
-        File(
-          path.join(dir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $name\nversion: 1.0.0\n');
+        File(path.join(dir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $name\nversion: 1.0.0\n');
         return dir;
       }
 
@@ -383,15 +380,13 @@ void main() {
           '  c:\n    path: ../c\n',
         );
         // c only overrides the deleted repo — its file goes away entirely.
-        File(
-          path.join(c.path, 'pubspec_overrides.yaml'),
-        ).writeAsStringSync('dependency_overrides:\n  a:\n    path: ../a\n');
+        File(path.join(c.path, 'pubspec_overrides.yaml'))
+            .writeAsStringSync('dependency_overrides:\n  a:\n    path: ../a\n');
 
         await runnerAt(alphaDir.path).run(['repo', 'a']);
 
-        final overridesOfB = File(
-          path.join(b.path, 'pubspec_overrides.yaml'),
-        ).readAsStringSync();
+        final overridesOfB = File(path.join(b.path, 'pubspec_overrides.yaml'))
+            .readAsStringSync();
         expect(overridesOfB, isNot(contains('../a')));
         expect(overridesOfB, contains('../c'));
         expect(
@@ -456,9 +451,8 @@ void main() {
       Directory makePrefixed(Directory parent, String folder, String pkg) {
         final dir = Directory(path.join(parent.path, folder))
           ..createSync(recursive: true);
-        File(
-          path.join(dir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $pkg\nversion: 1.0.0\n');
+        File(path.join(dir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $pkg\nversion: 1.0.0\n');
         return dir;
       }
 
@@ -482,9 +476,8 @@ void main() {
       Directory makeOrgRepo(Directory workspace, String org, String repo) {
         final dir = Directory(path.join(workspace.path, org, repo))
           ..createSync(recursive: true);
-        File(
-          path.join(dir.path, 'pubspec.yaml'),
-        ).writeAsStringSync('name: $repo\nversion: 1.0.0\n');
+        File(path.join(dir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $repo\nversion: 1.0.0\n');
         return dir;
       }
 

@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -35,9 +35,8 @@ dependencies:
 dev_dependencies:
   json_serializer: ^1.4.2
 ''';
-      File(
-        path.join(projectDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync(pubspecContent);
+      File(path.join(projectDir.path, 'pubspec.yaml'))
+          .writeAsStringSync(pubspecContent);
     });
 
     tearDown(() {
@@ -70,12 +69,11 @@ dev_dependencies:
     test('also lists package.json dependencies for a bridge', () async {
       // project123 already has a pubspec.yaml (from setUp); adding a
       // package.json turns it into a cross-language bridge.
-      File(
-        path.join(oceanWorkspace.path, 'project123', 'package.json'),
-      ).writeAsStringSync(
-        '{"name":"project123","version":"1.0.0",'
-        '"dependencies":{"left_pad":"^1.0.0"}}',
-      );
+      File(path.join(oceanWorkspace.path, 'project123', 'package.json'))
+          .writeAsStringSync(
+            '{"name":"project123","version":"1.0.0",'
+            '"dependencies":{"left_pad":"^1.0.0"}}',
+          );
 
       final runner = CommandRunner<void>('test', 'Test ListDepsCommand');
       runner.addCommand(
@@ -100,9 +98,8 @@ dev_dependencies:
     });
 
     test('logs an error for a malformed package.json', () async {
-      File(
-        path.join(oceanWorkspace.path, 'project123', 'package.json'),
-      ).writeAsStringSync('{ not valid json');
+      File(path.join(oceanWorkspace.path, 'project123', 'package.json'))
+          .writeAsStringSync('{ not valid json');
 
       final runner = CommandRunner<void>('test', 'Test ListDepsCommand');
       runner.addCommand(

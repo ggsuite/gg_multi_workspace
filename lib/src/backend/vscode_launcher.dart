@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -9,12 +9,11 @@ import 'dart:io';
 import 'package:gg_process/gg_process.dart';
 
 /// Typedef for launching a process, mainly for testability.
-typedef ProcessStarter =
-    Future<void> Function(
-      String executable,
-      List<String> arguments, {
-      bool runInShell,
-    });
+typedef ProcessStarter = Future<void> Function(
+  String executable,
+  List<String> arguments, {
+  bool runInShell,
+});
 
 /// Provides logic to open a directory or workspace file in VS Code via
 /// the command line.

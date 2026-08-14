@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -39,13 +39,11 @@ void main() {
       final oceanPath = path.join(workspacePath, ggMultiOceanFolder);
       final repo1 = Directory(path.join(oceanPath, 'json_dart'))
         ..createSync(recursive: true);
-      File(
-        path.join(repo1.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: json_dart\nversion: 3.5.2');
+      File(path.join(repo1.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: json_dart\nversion: 3.5.2');
       Directory(path.join(repo1.path, '.git')).createSync();
-      File(
-        path.join(repo1.path, '.git', 'config'),
-      ).writeAsStringSync('url = https://github.com/inlavigo/json_dart.git');
+      File(path.join(repo1.path, '.git', 'config'))
+          .writeAsStringSync('url = https://github.com/inlavigo/json_dart.git');
 
       final repo2 = Directory(path.join(oceanPath, 'project123'))..createSync();
       Directory(path.join(repo2.path, '.git')).createSync();
