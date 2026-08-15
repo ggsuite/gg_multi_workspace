@@ -14,7 +14,7 @@ underlying model lives in `gg_multi_core`.
 | Command                             | Purpose                                                                                 |
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
 | `do init workspace`                 | initialise the ocean in the current directory                                            |
-| `do add <target>`                   | add a repo, `owner/repo`, url or a whole organisation to the workspace                   |
+| `do add <target>`                   | add a repo, `owner/repo`, url, regexp or a whole organisation to the workspace           |
 | `do import ticket <path\|url>`      | reproduce a whole ticket from a `ticket.json`                                            |
 | `do create ticket <id>`             | create `tickets/<id>/` with `ticket.json` file and `.code-workspace`                         |
 | `do create graph`                   | write the dependency graph of the workspace as mermaid or json                           |
@@ -25,6 +25,26 @@ underlying model lives in `gg_multi_core`.
 | `do init claude`                    | aggregate each repo's `CLAUDE.md` into one ticket-level `CLAUDE.md`                      |
 | `do exec cmd <cmd>`                 | run a shell command in every ticket repo in dependency order                             |
 | `do ls repos\|organizations\|deps\|tickets` | list workspace contents with metadata                                            |
+
+### Targets as regular expressions
+
+A `do add` target may be a regular expression selecting repositories the
+ocean already holds:
+
+```bash
+gg do add "ds_.+"        # every ocean repo whose name starts with ds_
+gg do add "gg_one.*"     # gg_one, gg_one_commit, gg_one_core, …
+```
+
+The pattern is **anchored** — it has to describe the whole name — so
+`gg do add gg` still adds the repository named `gg` and not every name
+carrying those two letters. A target matching no ocean repo is used as
+before, which is what keeps a url and a repository the ocean does not
+hold yet addressable by name. A pattern selecting more than one
+repository reports what it expanded to.
+
+Patterns only select what the ocean already has; they discover nothing
+on the git platform. Use `--org`, or run `do upgrade ocean` first.
 
 Backend helpers include cloning and branch creation (`git_handler.dart`),
 repo setup (`repo_setup.dart`), the add logic

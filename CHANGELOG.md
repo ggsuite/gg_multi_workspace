@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.1.1 - 2026-08-15
+
+### Changed
+
+- Flutter projecs fail on publish
+
 ## 4.1.0 - 2026-08-14
 
 ### Changed
