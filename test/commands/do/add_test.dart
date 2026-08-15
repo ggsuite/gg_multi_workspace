@@ -343,6 +343,71 @@ void main() {
       },
     );
 
+    // .........................................................................
+    group('target patterns', () {
+      Directory oceanRepo(String name) =>
+          Directory(path.join(oceanWorkspacePath, name))
+            ..createSync(recursive: true);
+
+      test('expands a pattern to the ocean repos it matches', () async {
+        oceanRepo('ds_alpha');
+        oceanRepo('ds_beta');
+        oceanRepo('other');
+
+        await runner.run(['add', 'ds_.+']);
+
+        expect(logMessages, contains('  » ds_.+ matches ds_alpha, ds_beta'));
+        expect(logMessages.join('\n'), isNot(contains('other')));
+      });
+
+      test('anchors the pattern, so a name is not a substring match', () async {
+        oceanRepo('gg');
+        oceanRepo('gg_multi');
+
+        await runner.run(['add', 'gg']);
+
+        // Not expanded — »gg« is one repo, not every name containing it.
+        expect(logMessages.join('\n'), isNot(contains('matches')));
+        expect(logMessages.join('\n'), isNot(contains('gg_multi')));
+      });
+
+      test('passes a target matching nothing through untouched', () async {
+        // The ocean does not hold it yet, so it must still be cloned by name.
+        await runner.run(['add', 'git@github.com:ggsuite/gg_multi.git']);
+
+        verify(() => mockGitCloner.cloneRepo(any(), any())).called(1);
+      });
+    });
+
+    group('matchOceanRepoNames', () {
+      const names = ['ds_alpha', 'ds_beta', 'gg', 'gg_multi'];
+
+      test('returns the matching names, sorted', () {
+        expect(matchOceanRepoNames('ds_.+', names), ['ds_alpha', 'ds_beta']);
+      });
+
+      test('anchors the pattern at both ends', () {
+        expect(matchOceanRepoNames('gg', names), ['gg']);
+        expect(matchOceanRepoNames('multi', names), isEmpty);
+      });
+
+      test('anchors an alternation as a whole', () {
+        // '^gg|ds_beta\$' would mean "starts with gg, or ends with ds_beta".
+        expect(matchOceanRepoNames('gg|ds_beta', names), ['ds_beta', 'gg']);
+      });
+
+      test('returns nothing for an invalid regular expression', () {
+        expect(matchOceanRepoNames('gg_multi[', names), isEmpty);
+      });
+
+      test('returns nothing for a url', () {
+        expect(
+          matchOceanRepoNames('git@github.com:ggsuite/gg_multi.git', names),
+          isEmpty,
+        );
+      });
+    });
+
     test('should log already added when destination '
         'exists and --force not provided', () async {
       const repoName = 'gg_multi';

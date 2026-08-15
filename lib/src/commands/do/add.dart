@@ -56,6 +56,37 @@ class _PlannedDep {
   final String manifestPath;
 }
 
+/// The names in [oceanRepoNames] that [target] selects when read as a regular
+/// expression, sorted so a run is reproducible.
+///
+/// The pattern is **anchored**: it has to describe the whole name. Without
+/// that, `gg` would select every repository carrying those two letters
+/// somewhere, and the plain-name form of the command — by far the common one —
+/// would stop meaning what it says. `ds_.+` selects `ds_a` and `ds_b`; `gg`
+/// selects `gg` alone.
+///
+/// Returns an empty list when [target] describes no name, and when it is no
+/// valid regular expression at all — a url contains `.` and `/` and parses as
+/// one, while `owner/repo[` does not, and neither may end the run. The caller
+/// falls back to treating [target] as a plain name or url, which is what keeps
+/// a repository the ocean does not hold yet cloneable by name.
+List<String> matchOceanRepoNames(
+  String target,
+  Iterable<String> oceanRepoNames,
+) {
+  final RegExp pattern;
+  try {
+    // A non-capturing group so an alternation is anchored as a whole:
+    // '^a|b$' would mean "starts with a, or ends with b".
+    pattern = RegExp('^(?:$target)\$');
+  } on FormatException {
+    return const <String>[];
+  }
+
+  return oceanRepoNames.where(pattern.hasMatch).toList()..sort();
+}
+
+// #############################################################################
 /// Command to add a repo or all repos of an organization to ocean+ticket.
 /// In ticket mode it also auto-clones transitive deps and re-localizes refs.
 /// Use `--force` to overwrite an existing repo in the ocean.
@@ -206,13 +237,16 @@ class AddCommand extends Command<dynamic> {
   String get name => 'add';
 
   @override
-  String get description => 'Add a repo or a whole organization to the ticket';
+  String get description =>
+      'Add a repo or a whole organization to the ticket.\n'
+      'A target may be a regular expression matching ocean repo names, '
+      'e.g. "ds_.+".';
 
   @override
   Future<void> run() async {
     ggLog(cDetail('\n✓ Copying repos'));
 
-    final targets = argResults!.rest;
+    var targets = argResults!.rest;
     final bool force = argResults!['force'] as bool;
     final String? ticketPath = WorkspaceUtils.detectTicketPath(executionPath);
     final bool verbose = argResults!['verbose'] as bool? ?? false;
@@ -260,6 +294,11 @@ class AddCommand extends Command<dynamic> {
       // references the move invalidates.
       migrateTicketToFlatFolders(ticketPath: ticketPath, ggLog: ggLog);
     }
+
+    // A target may select several ocean repos at once — »ds_.+« adds every
+    // repository whose name starts with »ds_«. Expanded only now: the
+    // migrations above decide which folders the ocean has.
+    targets = _expandTargetPatterns(targets);
 
     // If not in a ticket workspace: keep original behaviour (no graph logic).
     if (ticketPath == null) {
@@ -434,6 +473,44 @@ class AddCommand extends Command<dynamic> {
   }
 
   /// Folder names of all repositories of the ocean.
+  /// Replaces every target that selects ocean repositories as a regular
+  /// expression by the names it selects, and reports what it expanded to.
+  ///
+  /// A target matching nothing is passed through untouched, so a plain name
+  /// or url still reaches [addRepositoryHelper] and a repository the ocean
+  /// does not have yet is still cloned.
+  List<String> _expandTargetPatterns(List<String> targets) {
+    if (targets.isEmpty) {
+      return targets;
+    }
+
+    final oceanRepoNames = _allOceanRepoNames();
+    final result = <String>[];
+
+    for (final target in targets) {
+      final matches = matchOceanRepoNames(target, oceanRepoNames);
+
+      // One match under its own name is what a plain repo name does anyway —
+      // saying it expanded would be noise.
+      if (matches.length == 1 && matches.first == target) {
+        result.add(target);
+        continue;
+      }
+
+      if (matches.isEmpty) {
+        result.add(target);
+        continue;
+      }
+
+      ggLog(cDetail('  » $target matches ${matches.join(', ')}'));
+      result.addAll(matches);
+    }
+
+    // Two patterns may well select the same repository.
+    return result.toSet().toList();
+  }
+
+  // ...........................................................................
   Set<String> _allOceanRepoNames() => <String>{
     for (final repoDir in RepoFolderResolver.repoDirs(oceanWorkspacePath))
       path.basename(repoDir.path),
