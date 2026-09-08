@@ -1209,63 +1209,63 @@ void main() {
   });
 
   group('a clone of a repository that is already there', () {
-    /// Writes a package into [dir] that publishes as `ggsuite/dna_base`.
-    void writeDnaBase(Directory dir) {
+    /// Writes a package into [dir] that publishes as `ggdna/dna_dart`.
+    void writeDnaDart(Directory dir) {
       dir.createSync(recursive: true);
       File(path.join(dir.path, 'pubspec.yaml')).writeAsStringSync(
-        'name: dna_base\nversion: 1.0.0\n'
-        'repository: https://github.com/ggsuite/dna_base.git\n',
+        'name: dna_dart\nversion: 1.0.0\n'
+        'repository: https://github.com/ggdna/dna_dart.git\n',
       );
     }
 
     /// A cloner that produces such a package wherever it is told to.
-    MockGitCloner clonerWritingDnaBase() {
+    MockGitCloner clonerWritingDnaDart() {
       final cloner = MockGitCloner();
       when(() => cloner.cloneRepo(any(), any())).thenAnswer((invocation) async {
-        writeDnaBase(Directory(invocation.positionalArguments[1] as String));
+        writeDnaDart(Directory(invocation.positionalArguments[1] as String));
       });
       return cloner;
     }
 
     test('is dropped again and the existing one is used', () async {
-      // GitHub keeps redirecting `base_dna`, the former name of `dna_base`,
+      // GitHub keeps redirecting `dart_dna`, the former name of `dna_dart`,
       // so cloning it succeeds and yields a second checkout of a repository
       // the ocean already holds.
-      writeDnaBase(Directory(path.join(workspacePath, 'ggsuite', 'dna_base')));
+      writeDnaDart(Directory(path.join(workspacePath, 'ggdna', 'dna_dart')));
 
       String? addedRepo;
       await addRepositoryHelper(
-        targetArg: 'https://github.com/ggsuite/base_dna.git',
+        targetArg: 'https://github.com/ggsuite/dart_dna.git',
         ggLog: ggLog,
-        gitCloner: clonerWritingDnaBase(),
+        gitCloner: clonerWritingDnaDart(),
         workspacePath: workspacePath,
         onRepoAdded: (name) async => addedRepo = name,
       );
 
       expect(
-        Directory(path.join(workspacePath, 'ggsuite', 'base_dna')).existsSync(),
+        Directory(path.join(workspacePath, 'ggsuite', 'dart_dna')).existsSync(),
         isFalse,
       );
       expect(
-        Directory(path.join(workspacePath, 'ggsuite', 'dna_base')).existsSync(),
+        Directory(path.join(workspacePath, 'ggdna', 'dna_dart')).existsSync(),
         isTrue,
       );
 
       // Everything after this works with the checkout that stays.
-      expect(addedRepo, 'dna_base');
+      expect(addedRepo, 'dna_dart');
       expect(
         logs,
-        anyElement(contains('base_dna is dna_base under a former name')),
+        anyElement(contains('dart_dna is dna_dart under a former name')),
       );
     });
 
     test('drops the organization folder it was alone in', () async {
-      writeDnaBase(Directory(path.join(workspacePath, 'ggsuite', 'dna_base')));
+      writeDnaDart(Directory(path.join(workspacePath, 'ggdna', 'dna_dart')));
 
       await addRepositoryHelper(
-        targetArg: 'https://github.com/former/base_dna.git',
+        targetArg: 'https://github.com/former/dart_dna.git',
         ggLog: ggLog,
-        gitCloner: clonerWritingDnaBase(),
+        gitCloner: clonerWritingDnaDart(),
         workspacePath: workspacePath,
       );
 
@@ -1277,17 +1277,17 @@ void main() {
 
     test('is kept when no other checkout declares that repository', () async {
       await addRepositoryHelper(
-        targetArg: 'https://github.com/ggsuite/dna_base.git',
+        targetArg: 'https://github.com/ggdna/dna_dart.git',
         ggLog: ggLog,
-        gitCloner: clonerWritingDnaBase(),
+        gitCloner: clonerWritingDnaDart(),
         workspacePath: workspacePath,
       );
 
       expect(
-        Directory(path.join(workspacePath, 'ggsuite', 'dna_base')).existsSync(),
+        Directory(path.join(workspacePath, 'ggdna', 'dna_dart')).existsSync(),
         isTrue,
       );
-      expect(logs, anyElement(contains('dna_base from')));
+      expect(logs, anyElement(contains('dna_dart from')));
     });
   });
 }
