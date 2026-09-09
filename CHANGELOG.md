@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- `gg do init workspace` instantiates the latest `dna_gg` in the workspace
+  folder right after creating the ocean — `gg dna init`, `gg dna add dna_gg`
+  and `gg dna build` in one go — so the gg guides, skills and the managed
+  `CLAUDE.md` block are in place before the first ticket.
+
 ### Fixed
 
 - Rename the dna_base test fixtures to dna_dart
