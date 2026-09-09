@@ -474,13 +474,13 @@ packages:
     source: hosted
     version: "2.2.0"
   helix:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       name: helix
-      sha256: ee828b3ba233fc965c1f8b39307ea1e1483641da09b3fd10b1426864688172a0
+      sha256: "9c979ed229517b7e9f251b2f666e64942638c2140a99d7134f2ddb6c8770b24d"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.1"
+    version: "1.6.0"
   http:
     dependency: "direct main"
     description:

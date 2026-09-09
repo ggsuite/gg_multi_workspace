@@ -13,7 +13,7 @@ underlying model lives in `gg_multi_core`.
 
 | Command                             | Purpose                                                                                 |
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `do init workspace`                 | initialise the ocean in the current directory                                            |
+| `do init workspace`                 | initialise the ocean and instantiate the `dna_gg` DNA in the current directory           |
 | `do add <target>`                   | add a repo, `owner/repo`, url, regexp or a whole organisation to the workspace           |
 | `do import ticket <path\|url>`      | reproduce a whole ticket from a `ticket.json`                                            |
 | `do create ticket <id>`             | create `tickets/<id>/` with `ticket.json` file and `.code-workspace`                         |
