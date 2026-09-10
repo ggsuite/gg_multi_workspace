@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.0 - 2026-09-11
+
+### Fixed
+
+- `gg do add` asks the platform's repository list which organization owns a repository, so repositories moved or deleted after `gg do upgrade ocean` are no longer offered under their old organization
+
 ## 4.3.1 - 2026-09-10
 
 ### Fixed
