@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Clone Azure DevOps web URLs without a .git suffix, which Azure rejects
+
 ## 4.3.0 - 2026-09-09
 
 ### Added

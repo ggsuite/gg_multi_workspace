@@ -51,6 +51,33 @@ void main() {
     }
   });
 
+  group('repoUrlOfOrganization', () {
+    test('appends the repo name and .git to a GitHub organization', () {
+      final org = Organization(
+        name: 'ggsuite',
+        url: 'https://github.com/ggsuite',
+      );
+      expect(
+        repoUrlOfOrganization(org, 'gg_dna'),
+        'https://github.com/ggsuite/gg_dna.git',
+      );
+    });
+
+    test('appends only the repo name to an Azure DevOps web url', () {
+      // Azure rejects `.git` on its web URLs, so an organization whose base
+      // url ends in `_git/` gets the bare name.
+      final org = Organization(
+        name: 'myorg',
+        url: 'https://dev.azure.com/myorg/myproj/_git/',
+        projectName: 'myproj',
+      );
+      expect(
+        repoUrlOfOrganization(org, 'myrepo'),
+        'https://dev.azure.com/myorg/myproj/_git/myrepo',
+      );
+    });
+  });
+
   group('addRepositoryHelper', () {
     group('HTTP target', () {
       test('Processes repository URL and cleans trailing #', () async {
@@ -82,6 +109,68 @@ void main() {
 
         // Verify ggLog contains the correct success message
         expect(logs, anyElement(contains('repo from $expectedRepoUrl')));
+      });
+
+      group('Azure DevOps web URLs', () {
+        // Azure rejects a `.git` suffix on its web URLs: `repo.git` is read
+        // as a repository — or, in the shortcut form, a project — that does
+        // not exist. So no suffix is appended, and one the user typed goes.
+        Future<void> expectClone(String targetArg, String cloneUrl) async {
+          final mockGitCloner = MockGitCloner();
+          when(() => mockGitCloner.cloneRepo(any(), any()))
+              .thenAnswer((_) async {});
+
+          await addRepositoryHelper(
+            targetArg: targetArg,
+            ggLog: ggLog,
+            gitCloner: mockGitCloner,
+            workspacePath: workspacePath,
+            force: false,
+          );
+
+          verify(() => mockGitCloner.cloneRepo(cloneUrl, any())).called(1);
+        }
+
+        test('Clones the full clone URL without appending .git', () async {
+          await expectClone(
+            'https://dev.azure.com/myorg/myproj/_git/myrepo',
+            'https://dev.azure.com/myorg/myproj/_git/myrepo',
+          );
+        });
+
+        test('Drops a .git suffix the user typed', () async {
+          await expectClone(
+            'https://dev.azure.com/myorg/myproj/_git/myrepo.git',
+            'https://dev.azure.com/myorg/myproj/_git/myrepo',
+          );
+        });
+
+        test(
+          'Expands the <org>/_git/<repo> shortcut to the full form',
+          () async {
+            // Azure accepts the shortcut when the project is named like the
+            // repository; with `.git` appended it looked for project
+            // `myrepo.git` and failed.
+            await expectClone(
+              'https://dev.azure.com/myorg/_git/myrepo',
+              'https://dev.azure.com/myorg/myrepo/_git/myrepo',
+            );
+          },
+        );
+
+        test('Keeps the user info in front of the host', () async {
+          await expectClone(
+            'https://myorg@dev.azure.com/myorg/myproj/_git/myrepo',
+            'https://myorg@dev.azure.com/myorg/myproj/_git/myrepo',
+          );
+        });
+
+        test('Keeps the legacy visualstudio.com host', () async {
+          await expectClone(
+            'https://myorg.visualstudio.com/myproj/_git/myrepo.git',
+            'https://myorg.visualstudio.com/myproj/_git/myrepo',
+          );
+        });
       });
 
       test('Clones only the named repo of a /orgs/<org>/<repo> url', () async {
