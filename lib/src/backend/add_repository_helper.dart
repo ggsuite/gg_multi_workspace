@@ -25,7 +25,45 @@ typedef SelectOrganization = Future<Organization?> Function(
 /// Returns the clone url of [repoName] within [org].
 String repoUrlOfOrganization(Organization org, String repoName) {
   final baseUrl = org.url.endsWith('/') ? org.url : '${org.url}/';
+  // Azure DevOps rejects a `.git` suffix on its web URLs
+  // (`dev.azure.com/<org>/<project>/_git/<repo>`): it reads `repo.git` as
+  // the name of a repository that does not exist.
+  if (isAzureWebHost(Uri.tryParse(baseUrl)?.host ?? '')) {
+    return '$baseUrl$repoName';
+  }
   return '$baseUrl$repoName.git';
+}
+
+/// Whether [host] is one of the hosts Azure DevOps serves its web and clone
+/// URLs from: `dev.azure.com` or the legacy `<org>.visualstudio.com`.
+bool isAzureWebHost(String host) {
+  final h = host.toLowerCase();
+  return h == 'dev.azure.com' || h.endsWith('.visualstudio.com');
+}
+
+/// The clone url of the Azure DevOps repository [parsed] names, rebuilt from
+/// its parts in the form Azure serves:
+/// `https://dev.azure.com/<org>/<project>/_git/<repo>` or, on the legacy host,
+/// `https://<org>.visualstudio.com/<project>/_git/<repo>`.
+///
+/// Azure rejects a `.git` suffix here — it reads `repo.git` as a repository,
+/// or in the `<org>/_git/<repo>` shortcut as a project, that does not exist.
+/// Rebuilding drops a suffix the user typed, and turns the shortcut into the
+/// unambiguous full form. Returns null when [parsed] lacks a part.
+String? azureCloneUrl(Uri uri, ParseResult parsed) {
+  final org = parsed.org;
+  final project = parsed.project;
+  final repo = parsed.repo;
+  if (org == null || project == null || repo == null) {
+    return null;
+  }
+  final isLegacyHost = uri.host.toLowerCase().endsWith('.visualstudio.com');
+  return Uri(
+    scheme: uri.scheme,
+    userInfo: uri.userInfo,
+    host: uri.host,
+    pathSegments: [if (!isLegacyHost) org, project, '_git', repo],
+  ).toString();
 }
 
 /// The checkout [workspacePath] already holds of the repository just cloned
@@ -376,7 +414,11 @@ Future<void> addRepositoryHelper({
             '${uri.scheme}://${uri.host}/'
             '${parsedUrl.org}/${parsedUrl.repo}';
       }
-      if (!repoUrl.endsWith('.git')) {
+      if (parsedUrl.platformType == 'azure' && isAzureWebHost(uri.host)) {
+        // Azure DevOps rejects a `.git` suffix on its web URLs, so none is
+        // appended and one the user typed is dropped, see [azureCloneUrl].
+        repoUrl = azureCloneUrl(uri, parsedUrl) ?? repoUrl;
+      } else if (!repoUrl.endsWith('.git')) {
         repoUrl = '$repoUrl.git';
       }
       final String repoName = extractRepoName(repoUrl) ?? 'unknown_repo';
