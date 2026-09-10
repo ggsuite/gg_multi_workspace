@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 import 'package:pubspec_parse/pubspec_parse.dart';
 
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
+import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 
 /// Lets the user pick the organization a repository named [repoName] should
 /// be taken from. Returns null when the selection was cancelled.
@@ -137,7 +138,9 @@ Future<Organization?> defaultSelectOrganization(
 ///
 /// A plain repository name can exist in more than one of the known
 /// organizations. Every organization is asked whether it owns it, and when
-/// several do, [selectOrganization] lets the user pick one.
+/// several do, [selectOrganization] lets the user pick one. [repoLists] is
+/// where that question is answered — pass one instance to all calls of a run
+/// so each organization is listed once, see [OrganizationRepoLists].
 ///
 /// [failureHint] is appended to the report of a repository that could not be
 /// cloned from any known organization. The caller knows *why* the repository
@@ -156,12 +159,17 @@ Future<void> addRepositoryHelper({
   Future<void> Function(String repoName)? onRepoAdded,
   SelectOrganization? selectOrganization,
   String? failureHint,
+  OrganizationRepoLists? repoLists,
 }) async {
   // coverage:ignore-start
   gitHubPlatform ??= GitHubPlatform();
   azureDevOpsPlatform ??= AzureDevOpsPlatform();
   selectOrganization ??= defaultSelectOrganization;
   // coverage:ignore-end
+  repoLists ??= OrganizationRepoLists(
+    gitHubPlatform: gitHubPlatform,
+    azureDevOpsPlatform: azureDevOpsPlatform,
+  );
   // ---------------------------------------------------------------------------
   /// Reports the clone of [repoName] from [repoUrl] that landed in
   /// [destination] — and drops it again when it turned out to be a second
@@ -456,6 +464,7 @@ Future<void> addRepositoryHelper({
             repoName: targetArg,
             workspacePath: workspacePath,
             gitCloner: gitCloner,
+            repoLists: repoLists,
           );
 
     if (owners.length > 1) {
@@ -487,6 +496,18 @@ Future<void> addRepositoryHelper({
 /// Returns the known organizations of [workspacePath] that own a repository
 /// named [repoName], in the order they are registered.
 ///
+/// An organization owns the repository when the list its platform reports
+/// names it — the list [repoLists] holds, the very one `gg do upgrade ocean`
+/// syncs the ocean against. The url of the repository is no proof: GitHub
+/// keeps serving a renamed or transferred repository under its former name,
+/// so `git ls-remote` answers for an organization that does not offer the
+/// repository any more, and the sync that just moved it out of the ocean
+/// would be undone by the next `gg do add`.
+///
+/// Only when the platform cannot be asked — its CLI is missing or
+/// unauthenticated — does the url decide, via [gitCloner], so the command
+/// keeps working on a machine that has git but no platform CLI.
+///
 /// Returns an empty list when fewer than two organizations are known — then
 /// there is nothing to choose and the caller's cheaper fallback path does the
 /// job without asking a remote.
@@ -494,21 +515,27 @@ Future<List<Organization>> organizationsOwningRepo({
   required String repoName,
   required String workspacePath,
   required GitHandler gitCloner,
+  OrganizationRepoLists? repoLists,
 }) async {
   final orgs = OrganizationUtils.readOrganizations(workspacePath);
   if (orgs.length < 2) {
     return const <Organization>[];
   }
 
-  // The remotes are asked in parallel, but the result keeps the order of the
-  // organizations so the selection is stable across runs.
+  // coverage:ignore-start
+  final lists = repoLists ?? OrganizationRepoLists();
+  // coverage:ignore-end
+
+  // The platforms are asked in parallel, but the result keeps the order of
+  // the organizations so the selection is stable across runs.
   final owns = List<bool>.filled(orgs.length, false);
   await runWithLimit(List<int>.generate(orgs.length, (i) => i), 4, (
     index,
   ) async {
-    owns[index] = await gitCloner.remoteExists(
-      repoUrlOfOrganization(orgs[index], repoName),
-    );
+    final org = orgs[index];
+    owns[index] =
+        await lists.owns(org, repoName) ??
+        await gitCloner.remoteExists(repoUrlOfOrganization(org, repoName));
   });
 
   return <Organization>[

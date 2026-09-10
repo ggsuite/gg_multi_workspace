@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart';
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
+import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:http/http.dart' as http;
@@ -1007,6 +1008,31 @@ void main() {
         return cloner;
       }
 
+      /// A GitHub platform that lists [reposByOrg] — an organization missing
+      /// there cannot be listed at all, as with a missing or logged-out `gh`.
+      MockGitHubPlatform platformListing(Map<String, List<String>> reposByOrg) {
+        final platform = MockGitHubPlatform();
+        when(() => platform.fetchOrgRepos(any())).thenAnswer((i) async {
+          final org = i.positionalArguments.first as String;
+          final names = reposByOrg[org];
+          if (names == null) {
+            throw Exception('gh is not installed');
+          }
+          return [
+            for (final name in names)
+              Repository(
+                name: name,
+                httpsUrl: 'https://github.com/$org/$name.git',
+              ),
+          ];
+        });
+        return platform;
+      }
+
+      /// A platform that can list no organization, so the urls decide.
+      MockGitHubPlatform platformListingNothing() =>
+          platformListing(const <String, List<String>>{});
+
       test('asks which organization is meant and clones from it', () async {
         writeOrganizations(<String>['orgA', 'orgB']);
         final mockGitCloner = clonerOwning(<String>{urlA, urlB});
@@ -1016,6 +1042,10 @@ void main() {
           targetArg: repoName,
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: platformListing({
+            'orgA': [repoName],
+            'orgB': [repoName, 'other'],
+          }),
           workspacePath: workspacePath,
           selectOrganization: (name, orgs) async {
             expect(name, repoName);
@@ -1032,6 +1062,8 @@ void main() {
             path.join(workspacePath, 'orgB', repoName),
           ),
         ).called(1);
+        // The lists answered, so no url had to be asked.
+        verifyNever(() => mockGitCloner.remoteExists(any()));
       });
 
       test('does not ask when only one organization owns the repo', () async {
@@ -1043,6 +1075,10 @@ void main() {
           targetArg: repoName,
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: platformListing({
+            'orgA': ['other'],
+            'orgB': [repoName],
+          }),
           workspacePath: workspacePath,
           selectOrganization: (name, orgs) async {
             asked = true;
@@ -1059,6 +1095,156 @@ void main() {
         ).called(1);
       });
 
+      test('does not offer an organization the repository was moved out of, '
+          'although its former url still answers', () async {
+        // GitHub redirects a transferred repository from its former name,
+        // so `git ls-remote` on orgA succeeds — `gg do upgrade ocean` just
+        // moved it out of orgA in the ocean, and `do add` must not offer it
+        // there again. The list orgA reports is what counts.
+        writeOrganizations(<String>['orgA', 'orgB']);
+        final mockGitCloner = clonerOwning(<String>{urlA, urlB});
+
+        var asked = false;
+        await addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          gitHubPlatform: platformListing({
+            'orgA': ['other'],
+            'orgB': [repoName],
+          }),
+          workspacePath: workspacePath,
+          selectOrganization: (name, orgs) async {
+            asked = true;
+            return orgs.first;
+          },
+        );
+
+        expect(asked, isFalse);
+        verify(
+          () => mockGitCloner.cloneRepo(
+            urlB,
+            path.join(workspacePath, 'orgB', repoName),
+          ),
+        ).called(1);
+        verifyNever(() => mockGitCloner.remoteExists(any()));
+      });
+
+      test('matches the repository name case-insensitively', () async {
+        writeOrganizations(<String>['orgA', 'orgB']);
+        final mockGitCloner = clonerOwning(<String>{});
+
+        await addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          gitHubPlatform: platformListing({
+            'orgA': ['other'],
+            'orgB': ['Shared_Repo'],
+          }),
+          workspacePath: workspacePath,
+        );
+
+        verify(
+          () => mockGitCloner.cloneRepo(
+            urlB,
+            path.join(workspacePath, 'orgB', repoName),
+          ),
+        ).called(1);
+      });
+
+      test('lets the url decide only for an organization the platform '
+          'cannot list', () async {
+        writeOrganizations(<String>['orgA', 'orgB']);
+        final mockGitCloner = clonerOwning(<String>{urlA, urlB});
+
+        List<String>? offered;
+        await addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          // orgA cannot be listed, orgB can — and does not own the repo.
+          gitHubPlatform: platformListing({
+            'orgB': ['other'],
+          }),
+          workspacePath: workspacePath,
+          selectOrganization: (name, orgs) async {
+            offered = orgs.map((o) => o.name).toList();
+            return orgs.first;
+          },
+        );
+
+        // orgA was decided by its url, orgB by its list — so only orgA
+        // owns it and nothing is asked.
+        expect(offered, isNull);
+        verify(() => mockGitCloner.remoteExists(urlA)).called(1);
+        verifyNever(() => mockGitCloner.remoteExists(urlB));
+        verify(
+          () => mockGitCloner.cloneRepo(
+            urlA,
+            path.join(workspacePath, 'orgA', repoName),
+          ),
+        ).called(1);
+      });
+
+      test('falls back to the urls when no platform can be asked', () async {
+        writeOrganizations(<String>['orgA', 'orgB']);
+        final mockGitCloner = clonerOwning(<String>{urlA, urlB});
+
+        List<String>? offered;
+        await addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          gitHubPlatform: platformListingNothing(),
+          workspacePath: workspacePath,
+          selectOrganization: (name, orgs) async {
+            offered = orgs.map((o) => o.name).toList();
+            return orgs.last;
+          },
+        );
+
+        expect(offered, <String>['orgA', 'orgB']);
+        verify(() => mockGitCloner.remoteExists(urlA)).called(1);
+        verify(() => mockGitCloner.remoteExists(urlB)).called(1);
+      });
+
+      test('lists each organization once for all names of a run', () async {
+        writeOrganizations(<String>['orgA', 'orgB']);
+        final mockGitCloner = clonerOwning(<String>{});
+        final platform = platformListing({
+          'orgA': ['first'],
+          'orgB': ['second'],
+        });
+        final repoLists = OrganizationRepoLists(gitHubPlatform: platform);
+
+        for (final name in ['first', 'second']) {
+          await addRepositoryHelper(
+            targetArg: name,
+            ggLog: ggLog,
+            gitCloner: mockGitCloner,
+            gitHubPlatform: platform,
+            repoLists: repoLists,
+            workspacePath: workspacePath,
+          );
+        }
+
+        verify(() => platform.fetchOrgRepos('orgA')).called(1);
+        verify(() => platform.fetchOrgRepos('orgB')).called(1);
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/orgA/first.git',
+            path.join(workspacePath, 'orgA', 'first'),
+          ),
+        ).called(1);
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/orgB/second.git',
+            path.join(workspacePath, 'orgB', 'second'),
+          ),
+        ).called(1);
+      });
+
       test('stops when the selection is cancelled', () async {
         writeOrganizations(<String>['orgA', 'orgB']);
         final mockGitCloner = clonerOwning(<String>{urlA, urlB});
@@ -1067,6 +1253,7 @@ void main() {
           targetArg: repoName,
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: platformListingNothing(),
           workspacePath: workspacePath,
           selectOrganization: (name, orgs) async => null,
         );
@@ -1085,6 +1272,7 @@ void main() {
             targetArg: repoName,
             ggLog: ggLog,
             gitCloner: mockGitCloner,
+            gitHubPlatform: platformListingNothing(),
             workspacePath: workspacePath,
             selectOrganization: (name, orgs) async => orgs.first,
           );
@@ -1102,20 +1290,24 @@ void main() {
       test('asks no remote when a single organization is known', () async {
         writeOrganizations(<String>['orgA']);
         final mockGitCloner = clonerOwning(<String>{urlA});
+        final platform = platformListingNothing();
 
         await addRepositoryHelper(
           targetArg: repoName,
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: platform,
           workspacePath: workspacePath,
         );
 
         verifyNever(() => mockGitCloner.remoteExists(any()));
+        verifyNever(() => platform.fetchOrgRepos(any()));
       });
 
       test('asks no remote when the repo is already added', () async {
         writeOrganizations(<String>['orgA', 'orgB']);
         final mockGitCloner = clonerOwning(<String>{urlA, urlB});
+        final platform = platformListingNothing();
         final repoDir = Directory(path.join(workspacePath, 'orgA', repoName))
           ..createSync(recursive: true);
         File(path.join(repoDir.path, 'pubspec.yaml'))
@@ -1125,10 +1317,12 @@ void main() {
           targetArg: repoName,
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: platform,
           workspacePath: workspacePath,
         );
 
         verifyNever(() => mockGitCloner.remoteExists(any()));
+        verifyNever(() => platform.fetchOrgRepos(any()));
         verifyNever(() => mockGitCloner.cloneRepo(any(), any()));
         expect(logs, contains('✓ $repoName (already added).'));
       });

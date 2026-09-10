@@ -28,6 +28,7 @@ import 'package:gg_multi_workspace/src/backend/git_attributes.dart';
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/gitignore_lock_files.dart';
 import 'package:gg_multi_workspace/src/backend/legacy_git_hooks.dart';
+import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
 /// Resolves the repository URL of a hosted dependency.
@@ -101,6 +102,7 @@ class AddCommand extends Command<dynamic> {
     required this.ggLog,
     GitHandler? gitCloner,
     GitHubPlatform? gitHubPlatform,
+    AzureDevOpsPlatform? azureDevOpsPlatform,
     ProcessRunner? processRunner,
     String? oceanWorkspacePath,
     String? executionPath,
@@ -121,6 +123,7 @@ class AddCommand extends Command<dynamic> {
            duplicateRepoCleanup ?? const DuplicateRepoCleanup(),
        gitCloner = gitCloner ?? GitHandler(),
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
+       azureDevOpsPlatform = azureDevOpsPlatform ?? AzureDevOpsPlatform(),
        processRunner = processRunner ?? ggRunProcess,
        executionPath = executionPath ?? Directory.current.path,
        oceanWorkspacePath =
@@ -194,6 +197,16 @@ class AddCommand extends Command<dynamic> {
   /// Optional GitHub platform instance to handle GitHub-specific operations.
   final GitHubPlatform? gitHubPlatform;
 
+  /// Lists the repositories of an Azure DevOps organization.
+  final AzureDevOpsPlatform azureDevOpsPlatform;
+
+  /// The repositories each organization offers, listed once per run.
+  ///
+  /// Every plain name this run resolves — the targets and every missing
+  /// transitive dependency — is checked against these lists, so they are
+  /// shared by all of them and renewed per run, not per command instance.
+  late OrganizationRepoLists _repoLists;
+
   /// Instance to handle running general processes.
   final ProcessRunner processRunner;
 
@@ -245,6 +258,10 @@ class AddCommand extends Command<dynamic> {
   @override
   Future<void> run() async {
     ggLog(cDetail('\n✓ Copying repos'));
+    _repoLists = OrganizationRepoLists(
+      gitHubPlatform: gitHubPlatform,
+      azureDevOpsPlatform: azureDevOpsPlatform,
+    );
 
     var targets = argResults!.rest;
     final bool force = argResults!['force'] as bool;
@@ -310,6 +327,8 @@ class AddCommand extends Command<dynamic> {
           ggLog: ggLog,
           gitCloner: gitCloner,
           gitHubPlatform: gitHubPlatform,
+          azureDevOpsPlatform: azureDevOpsPlatform,
+          repoLists: _repoLists,
           workspacePath: oceanWorkspacePath,
           force: force,
           logIfAlreadyAdded: true,
@@ -359,6 +378,8 @@ class AddCommand extends Command<dynamic> {
         ggLog: ggLog,
         gitCloner: gitCloner,
         gitHubPlatform: gitHubPlatform,
+        azureDevOpsPlatform: azureDevOpsPlatform,
+        repoLists: _repoLists,
         workspacePath: oceanWorkspacePath,
         force: force,
         // When inside a ticket we do not spam "already added" messages.
@@ -719,6 +740,8 @@ class AddCommand extends Command<dynamic> {
             ggLog: ggLog,
             gitCloner: gitCloner,
             gitHubPlatform: gitHubPlatform,
+            azureDevOpsPlatform: azureDevOpsPlatform,
+            repoLists: _repoLists,
             workspacePath: oceanWorkspacePath,
             logIfAlreadyAdded: false,
             selectOrganization: _selectOrganization,
