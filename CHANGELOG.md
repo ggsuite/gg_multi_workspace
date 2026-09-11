@@ -5,6 +5,11 @@
 ### Fixed
 
 - `gg do add` resets the ocean copy to the repository's default branch instead of `origin/main` and refreshes `origin/HEAD` on fetch; `gg do import ticket` no longer offers the default branch as a ticket branch
+## 4.5.0 - 2026-09-11
+
+### Changed
+
+- Rewrite the https://ssh.dev.azure.com:v3 organization base earlier versions recorded to the SSH form git can open
 
 ## 4.4.0 - 2026-09-11
 

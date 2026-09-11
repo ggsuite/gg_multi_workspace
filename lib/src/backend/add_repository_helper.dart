@@ -32,7 +32,34 @@ String repoUrlOfOrganization(Organization org, String repoName) {
   if (isAzureWebHost(Uri.tryParse(baseUrl)?.host ?? '')) {
     return '$baseUrl$repoName';
   }
+  // Organizations recorded from an Azure SSH clone. Earlier versions stored
+  // them as `https://ssh.dev.azure.com:v3/<org>/<project>/`, which git cannot
+  // open — `v3` is no port — so such a base is rewritten to the SSH form.
+  final azureSsh = azureSshBase(baseUrl);
+  if (azureSsh != null) {
+    return '$azureSsh$repoName';
+  }
   return '$baseUrl$repoName.git';
+}
+
+/// [baseUrl] as an Azure DevOps SSH base, `git@ssh.dev.azure.com:v3/…/`, or
+/// null when it does not point at the Azure SSH host.
+///
+/// Accepts the SSH form itself and the `https://ssh.dev.azure.com:v3/…` and
+/// `https://ssh.dev.azure.com/v3/…` spellings earlier versions recorded in
+/// `.organizations` files.
+String? azureSshBase(String baseUrl) {
+  final match = RegExp(
+    r'^(?:git@ssh\.dev\.azure\.com:|https?://ssh\.dev\.azure\.com[:/]+)(.*)$',
+  ).firstMatch(baseUrl);
+  if (match == null) {
+    return null;
+  }
+  var rest = match.group(1)!.replaceAll(RegExp(r'^/+'), '');
+  if (!rest.endsWith('/')) {
+    rest = '$rest/';
+  }
+  return 'git@ssh.dev.azure.com:$rest';
 }
 
 /// Whether [host] is one of the hosts Azure DevOps serves its web and clone
