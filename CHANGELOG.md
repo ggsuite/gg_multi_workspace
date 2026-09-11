@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.5.0 - 2026-09-11
+
+### Changed
+
+- Rewrite the https://ssh.dev.azure.com:v3 organization base earlier versions recorded to the SSH form git can open
+
 ## 4.4.0 - 2026-09-11
 
 ### Fixed

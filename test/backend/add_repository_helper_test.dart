@@ -64,6 +64,49 @@ void main() {
       );
     });
 
+    test('builds the SSH form for an Azure DevOps SSH organization', () {
+      final org = Organization(
+        name: 'acme',
+        url: 'git@ssh.dev.azure.com:v3/acme/proj/',
+        projectName: 'proj',
+      );
+      expect(
+        repoUrlOfOrganization(org, 'myrepo'),
+        'git@ssh.dev.azure.com:v3/acme/proj/myrepo',
+      );
+    });
+
+    test('rewrites the https://ssh.dev.azure.com:v3 base earlier versions '
+        'recorded to the SSH form', () {
+      // `https://ssh.dev.azure.com:v3/…` is no URL git can open — `v3` is
+      // not a port — but `.organizations` files written before 4.4.0 hold it.
+      for (final base in [
+        'https://ssh.dev.azure.com:v3/acme/proj/',
+        'https://ssh.dev.azure.com:v3/acme/proj',
+        'https://ssh.dev.azure.com/v3/acme/proj/',
+      ]) {
+        final org = Organization(name: 'acme', url: base, projectName: 'proj');
+        expect(
+          repoUrlOfOrganization(org, 'myrepo'),
+          'git@ssh.dev.azure.com:v3/acme/proj/myrepo',
+          reason: base,
+        );
+      }
+    });
+
+    test('azureSshBase normalizes the base and ignores other hosts', () {
+      expect(
+        azureSshBase('https://ssh.dev.azure.com:v3/acme/proj'),
+        'git@ssh.dev.azure.com:v3/acme/proj/',
+      );
+      expect(
+        azureSshBase('git@ssh.dev.azure.com:v3/acme/proj/'),
+        'git@ssh.dev.azure.com:v3/acme/proj/',
+      );
+      expect(azureSshBase('https://github.com/ggsuite/'), isNull);
+      expect(azureSshBase('https://dev.azure.com/acme/proj/_git/'), isNull);
+    });
+
     test('appends only the repo name to an Azure DevOps web url', () {
       // Azure rejects `.git` on its web URLs, so an organization whose base
       // url ends in `_git/` gets the bare name.
