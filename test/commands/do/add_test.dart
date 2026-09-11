@@ -52,6 +52,20 @@ class MockUnlocalizeRefs extends Mock implements ChangeRefsToPubDev {}
 
 class MockGraph extends Mock implements Graph {}
 
+/// A [DefaultBranch] that answers [name] for every repository — `main` by
+/// default, so the tests that build their ocean repos out of plain folders
+/// (no git at all) still see the reset the command would run on a real one.
+DefaultBranch fakeDefaultBranch([String name = 'main']) {
+  final mock = MockDefaultBranch();
+  when(
+    () => mock.get(
+      directory: any(named: 'directory'),
+      ggLog: any(named: 'ggLog'),
+    ),
+  ).thenAnswer((_) async => name);
+  return mock;
+}
+
 void main() {
   group('AddCommand', () {
     late MockGitCloner mockGitCloner;
@@ -75,6 +89,7 @@ void main() {
       BackupPublishTo? backupPublishTo,
       Graph? graph,
       FetchRepoUrl? fetchRepoUrl,
+      DefaultBranch? defaultBranch,
     }) {
       final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
       runner = CommandRunner<void>('test', 'Test for AddCommand');
@@ -92,6 +107,7 @@ void main() {
           backupPublishTo: backupPublishTo,
           graph: graph,
           fetchRepoUrl: fetchRepoUrl,
+          defaultBranch: defaultBranch ?? fakeDefaultBranch(),
         ),
       );
     }
@@ -255,6 +271,7 @@ void main() {
           ggLog: ggLog,
           gitCloner: mockGitCloner,
           gitHubPlatform: mockGitHubPlatform,
+          defaultBranch: fakeDefaultBranch(),
           oceanWorkspacePath: oceanWorkspacePath,
           // Without an execution path the command would resolve the ticket
           // of the checkout the tests run in and modify it.
@@ -328,6 +345,7 @@ void main() {
           AddCommand(
             ggLog: ggLog,
             gitCloner: mockGitCloner,
+            defaultBranch: fakeDefaultBranch(),
             oceanWorkspacePath: oceanWorkspacePath,
             // Without an execution path the command would resolve the ticket of
             // the checkout the tests run in and modify it.
@@ -484,6 +502,14 @@ dev_dependencies:
         () => mockProc(
           'git',
           ['fetch'],
+          workingDirectory: repoDir.path,
+          runInShell: true,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+      when(
+        () => mockProc(
+          'git',
+          ['remote', 'set-head', 'origin', '--auto'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -654,6 +680,14 @@ dev_dependencies:
           () => mockProc(
             'git',
             ['fetch'],
+            workingDirectory: repoDir.path,
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+        when(
+          () => mockProc(
+            'git',
+            ['remote', 'set-head', 'origin', '--auto'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -1083,6 +1117,14 @@ version: 1.0.0
       when(
         () => mockProc(
           'git',
+          ['remote', 'set-head', 'origin', '--auto'],
+          workingDirectory: repoDir.path,
+          runInShell: true,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+      when(
+        () => mockProc(
+          'git',
           ['reset', '--hard', 'origin/main'],
           workingDirectory: repoDir.path,
           runInShell: true,
@@ -1355,6 +1397,14 @@ version: 1.0.0
       when(
         () => mockProc(
           'git',
+          ['remote', 'set-head', 'origin', '--auto'],
+          workingDirectory: oceanRepoDir.path,
+          runInShell: true,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+      when(
+        () => mockProc(
+          'git',
           ['reset', '--hard', 'origin/main'],
           workingDirectory: oceanRepoDir.path,
           runInShell: true,
@@ -1421,6 +1471,7 @@ version: 1.0.0
             systemCommit: mockDoCommit,
             sortedProcessingList: mockSorted,
             graph: mockGraph,
+            defaultBranch: fakeDefaultBranch(),
           ),
         );
 
@@ -1441,6 +1492,14 @@ version: 1.0.0
         () => mockProc(
           'git',
           ['fetch'],
+          workingDirectory: oceanRepoDir.path,
+          runInShell: true,
+        ),
+      ).called(1);
+      verify(
+        () => mockProc(
+          'git',
+          ['remote', 'set-head', 'origin', '--auto'],
           workingDirectory: oceanRepoDir.path,
           runInShell: true,
         ),
@@ -1600,6 +1659,14 @@ version: 1.0.0
           () => mockProcessRunner(
             'git',
             ['fetch'],
+            workingDirectory: repoDir.path,
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+        when(
+          () => mockProcessRunner(
+            'git',
+            ['remote', 'set-head', 'origin', '--auto'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -1938,8 +2005,9 @@ version: 1.0.0
         expect(log, contains('--no-transitive'));
 
         // The manifest was read from a checkout that had been brought to
-        // origin/main first, so the report can rule out a stale copy.
-        expect(log, contains('on the state of origin/main'));
+        // its remote default branch first, so the report can rule out a
+        // stale copy.
+        expect(log, contains('on the state of origin/<default branch>'));
       });
 
       test('says so when the manifest was not refreshed', () async {
@@ -2187,6 +2255,14 @@ version: 1.0.0
         () => mockProc(
           'git',
           ['fetch'],
+          workingDirectory: repoDir.path,
+          runInShell: true,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+      when(
+        () => mockProc(
+          'git',
+          ['remote', 'set-head', 'origin', '--auto'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -2853,6 +2929,7 @@ version: 1.0.0
             executionPath: ticketDir.path,
             processRunner: mockProc.call,
             graph: mockGraph,
+            defaultBranch: fakeDefaultBranch(),
           ),
         );
 
@@ -3408,6 +3485,14 @@ version: 1.0.0
           () => mockProc(
             'git',
             ['fetch'],
+            workingDirectory: oceanRepoDir.path,
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+        when(
+          () => mockProc(
+            'git',
+            ['remote', 'set-head', 'origin', '--auto'],
             workingDirectory: oceanRepoDir.path,
             runInShell: true,
           ),
@@ -4150,6 +4235,218 @@ version: 1.0.0
               'Missing target parameter.',
             ),
           ),
+        );
+      });
+    });
+
+    group('default branch', () {
+      late Directory ticketDir;
+
+      /// Runs git with [args] in [dir] and fails the test when it fails.
+      Future<String> git(Directory dir, List<String> args) async {
+        final result = await Process.run('git', [
+          '-c',
+          'user.name=test',
+          '-c',
+          'user.email=test@example.com',
+          ...args,
+        ], workingDirectory: dir.path);
+        if (result.exitCode != 0) {
+          fail('git ${args.join(' ')} failed: ${result.stderr}');
+        }
+        return (result.stdout as String).trim();
+      }
+
+      gg.GgSystemCommit anyDoCommit() {
+        final mock = MockGgSystemCommit();
+        when(
+          () => mock.commit(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
+          ),
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: ['pubspec_overrides.yaml'],
+            foreignPaths: [],
+          ),
+        );
+        return mock;
+      }
+
+      setUp(() {
+        ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_DEFAULT'),
+        )..createSync(recursive: true);
+      });
+
+      test('resets the ocean copy to origin/develop when that is the '
+          'default branch and no main exists', () async {
+        const repoName = 'devRepo';
+
+        // The remote: a bare repository whose HEAD is develop. There is no
+        // main and no master anywhere.
+        final src = Directory(path.join(tempDir.path, 'dev_src'))..createSync();
+        await git(src, ['init', '-b', 'develop']);
+        File(path.join(src.path, 'README.md')).writeAsStringSync('one\n');
+        await git(src, ['add', '.']);
+        await git(src, ['commit', '-m', 'first']);
+        final originDir = Directory(path.join(tempDir.path, 'dev_origin.git'));
+        await git(tempDir, ['clone', '--bare', src.path, originDir.path]);
+        await git(src, ['remote', 'add', 'origin', originDir.path]);
+
+        // The ocean copy was built with git init + remote add, so it has no
+        // origin/HEAD at all — the state that made the old origin/main reset
+        // fail with "unknown revision".
+        final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
+          ..createSync(recursive: true);
+        await git(oceanRepoDir, ['init', '-b', 'develop']);
+        await git(oceanRepoDir, ['remote', 'add', 'origin', originDir.path]);
+        await git(oceanRepoDir, ['fetch', 'origin']);
+        await git(oceanRepoDir, ['reset', '--hard', 'origin/develop']);
+        final headBefore = await git(oceanRepoDir, ['rev-parse', 'HEAD']);
+
+        // The remote moves on after the ocean copy was made.
+        File(path.join(src.path, 'second.txt')).writeAsStringSync('two\n');
+        await git(src, ['add', '.']);
+        await git(src, ['commit', '-m', 'second']);
+        await git(src, ['push', 'origin', 'develop']);
+        final remoteHead = await git(src, ['rev-parse', 'HEAD']);
+        expect(remoteHead, isNot(headBefore));
+
+        createRunner(
+          executionPath: ticketDir.path,
+          systemCommit: anyDoCommit(),
+          defaultBranch: DefaultBranch(ggLog: ggLog),
+        );
+
+        await runner.run(['add', '--verbose', repoName]);
+
+        // origin/HEAD was refreshed from the remote ...
+        expect(
+          await git(oceanRepoDir, ['symbolic-ref', 'refs/remotes/origin/HEAD']),
+          'refs/remotes/origin/develop',
+        );
+        expect(
+          logMessages,
+          contains('Refreshed origin/HEAD in $repoName in ocean.'),
+        );
+
+        // ... and the ocean copy was reset to origin/develop, not origin/main.
+        expect(
+          logMessages,
+          contains(
+            'Executed git reset --hard origin/develop in $repoName in ocean.',
+          ),
+        );
+        expect(logMessages.any((m) => m.contains('origin/main')), isFalse);
+        expect(await git(oceanRepoDir, ['rev-parse', 'HEAD']), remoteHead);
+
+        // The ticket got the fresh state.
+        final copied = Directory(path.join(ticketDir.path, repoName));
+        expect(copied.existsSync(), isTrue);
+        expect(File(path.join(copied.path, 'second.txt')).existsSync(), isTrue);
+      });
+
+      test('throws when the ocean repo has no default branch at all', () async {
+        const repoName = 'noDefaultRepo';
+        final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
+          ..createSync(recursive: true);
+        File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
+
+        final mockProc = MockProcessRunner();
+        when(
+          () => mockProc(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: any(named: 'runInShell'),
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          defaultBranch: fakeDefaultBranch(''),
+        );
+
+        await expectLater(
+          () async => runner.run(['add', '--verbose', repoName]),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls(e.toString()),
+              'message',
+              contains(
+                'Repository $repoName in the ocean has no default branch',
+              ),
+            ),
+          ),
+        );
+
+        // Nothing was reset and nothing was copied.
+        verifyNever(
+          () => mockProc(
+            'git',
+            any(that: contains('reset')),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: any(named: 'runInShell'),
+          ),
+        );
+        expect(
+          Directory(path.join(ticketDir.path, repoName)).existsSync(),
+          isFalse,
+        );
+      });
+
+      test('only warns when origin/HEAD cannot be refreshed', () async {
+        const repoName = 'offlineRepo';
+        final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
+          ..createSync(recursive: true);
+        File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
+
+        // Every git call succeeds except the one asking the remote for its
+        // default branch — what an offline machine sees.
+        Future<ProcessResult> offlineSetHead(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool runInShell = true,
+        }) async => arguments.join(' ') == 'remote set-head origin --auto'
+            ? ProcessResult(0, 128, '', 'fatal: offline')
+            : ProcessResult(0, 0, '', '');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: offlineSetHead,
+          systemCommit: anyDoCommit(),
+        );
+
+        await runner.run(['add', '--verbose', repoName]);
+
+        expect(
+          logMessages,
+          contains(
+            'Could not refresh origin/HEAD in $repoName in ocean: '
+            'fatal: offline',
+          ),
+        );
+        expect(
+          logMessages,
+          contains(
+            'Executed git reset --hard origin/main in $repoName in ocean.',
+          ),
+        );
+        expect(
+          Directory(path.join(ticketDir.path, repoName)).existsSync(),
+          isTrue,
         );
       });
     });

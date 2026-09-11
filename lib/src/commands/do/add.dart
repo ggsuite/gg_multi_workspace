@@ -116,9 +116,11 @@ class AddCommand extends Command<dynamic> {
     SelectOrganization? selectOrganization,
     RepoFreshness? repoFreshness,
     DuplicateRepoCleanup? duplicateRepoCleanup,
+    DefaultBranch? defaultBranch,
     // coverage:ignore-start
   }) : _selectOrganization = selectOrganization ?? defaultSelectOrganization,
        _repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),
+       _defaultBranch = defaultBranch ?? DefaultBranch(ggLog: ggLog),
        _duplicateRepoCleanup =
            duplicateRepoCleanup ?? const DuplicateRepoCleanup(),
        gitCloner = gitCloner ?? GitHandler(),
@@ -175,8 +177,8 @@ class AddCommand extends Command<dynamic> {
     argParser.addFlag(
       'fetch',
       help:
-          'Bring the repos this run reasons about to origin/main first '
-          '(default)',
+          'Bring the repos this run reasons about to origin/<default branch> '
+          'first (default)',
       defaultsTo: true,
       negatable: true,
     );
@@ -221,6 +223,9 @@ class AddCommand extends Command<dynamic> {
 
   /// Brings the repositories this run reasons about to their remote state.
   final RepoFreshness _repoFreshness;
+
+  /// Names the branch a repository's remote declares as its default.
+  final DefaultBranch _defaultBranch;
 
   /// Trashes the ocean folders a repository rename left behind.
   final DuplicateRepoCleanup _duplicateRepoCleanup;
@@ -587,7 +592,8 @@ class AddCommand extends Command<dynamic> {
   /// holds every repository the user ever added, and the manifest of one that
   /// this ticket does not reach says nothing about what belongs in it.
   ///
-  /// With [fetch] the closure is brought to the state of `origin/main` before
+  /// With [fetch] the closure is brought to the state of its remote default
+  /// branch before
   /// any manifest is read — resolving against a checkout that lags behind
   /// means resolving dependencies that were renamed or dropped since.
   Future<void> _cloneMissingTransitiveDeps({
@@ -846,7 +852,8 @@ class AddCommand extends Command<dynamic> {
   /// without touching the dependency graph while it is being fixed.
   ///
   /// The manifest was read from a checkout that had been brought to the state
-  /// of `origin/main` first, so this is never an outdated local copy — unless
+  /// of its remote default branch first, so this is never an outdated local
+  /// copy — unless
   /// `--no-fetch` skipped that step, which the report then says.
   String _missingDependencyHint(
     _PlannedDep dep,
@@ -855,8 +862,8 @@ class AddCommand extends Command<dynamic> {
   }) {
     final orgNames = orgs.map((o) => o.name).join(', ');
     final provenance = fetched
-        ? 'That manifest is on the state of origin/main, so the dependency '
-              'itself is wrong.\n'
+        ? 'That manifest is on the state of origin/<default branch>, so the '
+              'dependency itself is wrong.\n'
         : 'The manifest was not refreshed (--no-fetch), so it may simply be '
               'outdated.\n';
 
@@ -1102,7 +1109,7 @@ class AddCommand extends Command<dynamic> {
       ggLog: ggLog,
     );
     await _gitFetch(repoDir: repoDir, repoName: repoName, ggLog: ggLog);
-    await _gitResetHardToOriginMain(
+    await _gitResetHardToOriginDefault(
       repoDir: repoDir,
       repoName: repoName,
       ggLog: ggLog,
@@ -1139,7 +1146,8 @@ class AddCommand extends Command<dynamic> {
 
   /// Throws when the ocean copy of [repoName] carries uncommitted changes.
   ///
-  /// The preparation below runs `git reset --hard origin/main`, which would
+  /// The preparation below runs `git reset --hard origin/<default branch>`,
+  /// which would
   /// throw away every modification the user made in the ocean
   /// without a trace. So a dirty repo stops the `add` instead: the user has
   /// to commit, stash or revert the changes first. Untracked files survive
@@ -1220,7 +1228,15 @@ class AddCommand extends Command<dynamic> {
     return result;
   }
 
-  /// Runs `git fetch` in [repoDir].
+  /// Runs `git fetch` in [repoDir] and refreshes `origin/HEAD` afterwards.
+  ///
+  /// `git fetch` updates every remote branch but never `origin/HEAD`, and a
+  /// checkout that was built with `git init` + `git remote add` does not
+  /// record it at all. `git remote set-head origin --auto` asks the remote
+  /// which branch it declares as its default, so the reset that follows lands
+  /// on the branch the remote means today — not on the one it meant when the
+  /// repository was cloned. Offline the call fails like the fetch does; both
+  /// are reported and the run goes on with what the checkout already knows.
   Future<void> _gitFetch({
     required Directory repoDir,
     required String repoName,
@@ -1233,21 +1249,55 @@ class AddCommand extends Command<dynamic> {
       failureLabel: 'git fetch in $repoName in ocean',
       ggLog: ggLog,
     );
+
+    final setHead = await processRunner(
+      'git',
+      <String>['remote', 'set-head', 'origin', '--auto'],
+      workingDirectory: repoDir.path,
+      runInShell: true,
+    );
+    if (setHead.exitCode != 0) {
+      ggLog(
+        cWarn(
+          'Could not refresh origin/HEAD in $repoName in ocean: '
+          '${setHead.stderr}',
+        ),
+      );
+    } else {
+      ggLog(darkGray('Refreshed origin/HEAD in $repoName in ocean.'));
+    }
   }
 
-  /// Runs `git reset --hard origin/main` in [repoDir].
-  Future<void> _gitResetHardToOriginMain({
+  /// Runs `git reset --hard origin/<default branch>` in [repoDir].
+  ///
+  /// The branch is whatever the remote declares as its default — `develop`
+  /// for a repository that never had a `main`. A repository that declares no
+  /// default branch and has neither `main` nor `master` cannot be brought to
+  /// a remote state at all, so the add stops here instead of copying a
+  /// checkout of unknown age.
+  Future<void> _gitResetHardToOriginDefault({
     required Directory repoDir,
     required String repoName,
     required GgLog ggLog,
   }) async {
+    final branch = await _defaultBranch.get(directory: repoDir, ggLog: ggLog);
+    if (branch.isEmpty) {
+      throw Exception(
+        cError(
+          'Repository $repoName in the ocean has no default branch: '
+          'origin/HEAD is not set and neither main nor master exists. '
+          'Cannot reset it to the state of its remote.',
+        ),
+      );
+    }
+
     await _runGit(
       repoDir: repoDir,
-      arguments: <String>['reset', '--hard', 'origin/main'],
+      arguments: <String>['reset', '--hard', 'origin/$branch'],
       successMessage:
-          'Executed git reset --hard origin/main in '
+          'Executed git reset --hard origin/$branch in '
           '$repoName in ocean.',
-      failureLabel: 'git reset --hard origin/main in $repoName in ocean',
+      failureLabel: 'git reset --hard origin/$branch in $repoName in ocean',
       ggLog: ggLog,
     );
   }

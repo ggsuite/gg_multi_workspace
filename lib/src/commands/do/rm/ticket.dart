@@ -46,6 +46,7 @@ class RemoveTicketCommand extends Command<void> {
       help: 'Delete the remote feature branch of every ticket repo.',
     );
   }
+  // coverage:ignore-end
 
   // ...........................................................................
   @override
