@@ -348,10 +348,9 @@ packages:
   gg_localize_refs:
     dependency: "direct main"
     description:
-      name: gg_localize_refs
-      sha256: "88962fb53663d30ae3e99488779d5fa870879a098885a455c0c4ef9cef569fc0"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_localize_refs"
+      relative: true
+    source: path
     version: "4.4.1"
   gg_log:
     dependency: "direct main"

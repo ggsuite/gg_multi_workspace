@@ -26,6 +26,18 @@ underlying model lives in `gg_multi_core`.
 | `do exec cmd <cmd>`                 | run a shell command in every ticket repo in dependency order                             |
 | `do ls repos\|organizations\|deps\|tickets` | list workspace contents with metadata                                            |
 
+### Debugging across the repos of a ticket
+
+The `.code-workspace` of a ticket ships a launch configuration
+»Debug current vitest file«. It runs the spec file open in the editor with
+the vitest of the repo the file belongs to (`${fileWorkspaceFolder}`), so it
+works in every folder of the multi-root workspace. Because `gg do add`
+maps the TypeScript dependencies of the ticket to the sources of their
+sibling checkouts (`tsconfig.workspace.json`, written by gg_localize_refs),
+stepping into a dependency lands in its `src/`, and breakpoints set there
+hit. Dart folders need no counterpart — the Dart extension offers
+»Run«/»Debug« code lenses by itself.
+
 ### Targets as regular expressions
 
 A `do add` target may be a regular expression selecting repositories the
