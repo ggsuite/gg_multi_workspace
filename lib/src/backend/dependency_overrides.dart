@@ -16,15 +16,17 @@ const String pubspecOverridesFileName = 'pubspec_overrides.yaml';
 
 /// Removes [packageNames] from the localized overrides of every repo in
 /// [repoDirs] — the `dependency_overrides` of `pubspec_overrides.yaml`
-/// (Dart) and the `overrides` of `pnpm-workspace.yaml` (pnpm-managed
-/// TypeScript) — and returns the directories whose files were changed.
+/// (Dart), the `overrides` of `pnpm-workspace.yaml` (pnpm-managed
+/// TypeScript) and the source `paths` of `tsconfig.workspace.json`
+/// (TypeScript) — and returns the directories whose files were changed.
 ///
 /// gg_localize_refs points those overrides at the sibling checkouts of the
-/// ticket (`path: ../<repo>` / `link:../<repo>`). When a repo leaves the
-/// ticket, its entry becomes a dangling path and every `pub get` /
-/// `pnpm install` of the remaining repos fails — so the entry goes with it.
-/// A file that holds nothing but the removed entries is deleted instead of
-/// left behind as an empty override.
+/// ticket (`path: ../<repo>` / `link:../<repo>` /
+/// `../<repo>/src/index.ts`). When a repo leaves the ticket, its entry
+/// becomes a dangling path and every `pub get` / `pnpm install` of the
+/// remaining repos fails — so the entry goes with it. A file that holds
+/// nothing but the removed entries is deleted instead of left behind as an
+/// empty override.
 ///
 /// Repos without the files, without an overrides section, or without any of
 /// [packageNames] are left untouched. An unparsable file is skipped as
@@ -45,6 +47,8 @@ List<Directory> removeDependencyOverrides({
     }
 
     repoChanged = _removePnpmOverrides(repoDir, packageNames) || repoChanged;
+
+    repoChanged = _removeTsconfigPaths(repoDir, packageNames) || repoChanged;
 
     if (repoChanged) {
       changed.add(repoDir);
@@ -113,6 +117,45 @@ bool _removePnpmOverrides(Directory repoDir, Set<String> packageNames) {
       // Only the names of the repo that left the ticket. Without this the
       // call also sweeps every other override linking a sibling checkout —
       // and those siblings are the repos that stay.
+      restrictToNames: true,
+    );
+  } on Exception {
+    return false;
+  }
+
+  if (edit.isUnchanged) return false;
+
+  if (edit.deleteFile) {
+    io.file(repoDir).deleteSync();
+    return true;
+  }
+
+  io.file(repoDir).writeAsStringSync(edit.content!);
+  return true;
+}
+
+/// Removes the source `paths` of [packageNames] from the
+/// `tsconfig.workspace.json` of [repoDir]. Returns whether the file was
+/// changed (or deleted).
+///
+/// gg_localize_refs maps a TypeScript dependency of the ticket to the
+/// `src/index.ts` of its sibling checkout, so tests and the editor step into
+/// the sibling's source instead of its compiled `dist/`. A repo that leaves
+/// the ticket turns its entry into a mapping to nothing — TypeScript falls
+/// back to the regular resolution for it, but the editor and every `tsc`
+/// run keep reporting the stale path. Delegates to
+/// [TsconfigWorkspaceIo.removeOwnedPaths] with `restrictToNames`, so the
+/// mappings of the repos that stay in the ticket survive. An unparsable
+/// file is the user's and is left untouched.
+bool _removeTsconfigPaths(Directory repoDir, Set<String> packageNames) {
+  const io = TsconfigWorkspaceIo();
+  if (!io.file(repoDir).existsSync()) return false;
+
+  final PubspecOverridesEdit edit;
+  try {
+    edit = io.removeOwnedPaths(
+      projectDir: repoDir,
+      dependencyNames: packageNames,
       restrictToNames: true,
     );
   } on Exception {

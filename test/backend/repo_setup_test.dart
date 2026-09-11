@@ -122,8 +122,34 @@ void main() {
       expect(
         file.readAsStringSync(),
         '{"folders":[{"path":"a"},{"path":"b"}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"}}\n',
+        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
+    });
+
+    test('carries a launch configuration that debugs the open vitest file '
+        'in the folder it belongs to', () {
+      final ticketDir = Directory(path.join(tmp.path, 'launch_ticket'))
+        ..createSync();
+      writeCodeWorkspaceFile(ticketDir, ['a']);
+      final written = jsonDecode(
+        File(path.join(ticketDir.path, 'launch_ticket.code-workspace'))
+            .readAsStringSync(),
+      ) as Map<String, dynamic>;
+
+      expect(written['launch'], codeWorkspaceLaunch);
+      final configurations =
+          (written['launch'] as Map<String, dynamic>)['configurations']
+              as List<dynamic>;
+      final vitest = configurations.single as Map<String, dynamic>;
+      expect(vitest['type'], 'node');
+      // The folder of the open file, not the first folder of the workspace.
+      expect(vitest['cwd'], r'${fileWorkspaceFolder}');
+      expect(vitest['program'], contains('node_modules/vitest/vitest.mjs'));
+      expect(vitest['args'], contains(r'${relativeFile}'));
+      expect(vitest['args'], contains('--coverage.enabled=false'));
+      // vitest runs the tests in child processes.
+      expect(vitest['autoAttachChildProcesses'], isTrue);
     });
 
     test('turns the automatic pub get of the Dart extension off', () {
@@ -160,7 +186,8 @@ void main() {
         File(path.join(ticketDir.path, 'empty_ticket.code-workspace'))
             .readAsStringSync(),
         '{"folders":[{"path":"."}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"}}\n',
+        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
     });
 
@@ -174,7 +201,8 @@ void main() {
       expect(
         file.readAsStringSync(),
         '{"folders":[{"path":"ggsuite/gg_foo"}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"}}\n',
+        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
     });
   });
