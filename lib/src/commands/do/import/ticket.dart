@@ -60,6 +60,7 @@ class DoCheckoutCommand extends Command<dynamic> {
     gg_git.ShowFile? showFile,
     gg_git.RemoteBranches? remoteBranches,
     gg_git.RemoteBranchExists? remoteBranchExists,
+    gg_git.DefaultBranch? defaultBranch,
     String? oceanWorkspacePath,
     String? executionPath,
     ProcessRunner? processRunner,
@@ -74,6 +75,7 @@ class DoCheckoutCommand extends Command<dynamic> {
        _remoteBranches = remoteBranches ?? gg_git.RemoteBranches(ggLog: ggLog),
        _remoteBranchExists =
            remoteBranchExists ?? gg_git.RemoteBranchExists(ggLog: ggLog),
+       _defaultBranch = defaultBranch ?? gg_git.DefaultBranch(ggLog: ggLog),
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),
        executionPath = executionPath ?? Directory.current.path,
@@ -94,6 +96,7 @@ class DoCheckoutCommand extends Command<dynamic> {
   final gg_git.ShowFile _showFile;
   final gg_git.RemoteBranches _remoteBranches;
   final gg_git.RemoteBranchExists _remoteBranchExists;
+  final gg_git.DefaultBranch _defaultBranch;
 
   /// Resolved ocean path.
   final String oceanWorkspacePath;
@@ -274,10 +277,21 @@ class DoCheckoutCommand extends Command<dynamic> {
   // ...........................................................................
   /// Fetches [repoDir], lists its remote ticket branches and lets the user pick
   /// one to reproduce.
+  ///
+  /// The remote's default branch is never a ticket branch, whatever it is
+  /// called — a repository living on `develop` must not offer `develop` as a
+  /// ticket. `main` and `master` are left out as well: a repository that
+  /// keeps both around has neither as a ticket.
   Future<void> _handleRepoMode(Directory repoDir) async {
     await _fetch.get(directory: repoDir, ggLog: ggLog);
     final all = await _remoteBranches.get(directory: repoDir, ggLog: ggLog);
-    final branches = all.where((b) => b != 'main' && b != 'master').toList();
+    final defaultBranch = await _defaultBranch.get(
+      directory: repoDir,
+      ggLog: ggLog,
+    );
+    final branches = all
+        .where((b) => b != defaultBranch && b != 'main' && b != 'master')
+        .toList();
     if (branches.isEmpty) {
       ggLog(
         cWarn('No ticket branches found in ${path.basename(repoDir.path)}.'),

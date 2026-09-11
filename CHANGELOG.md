@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `gg do add` resets the ocean copy to the repository's default branch instead of `origin/main` and refreshes `origin/HEAD` on fetch; `gg do import ticket` no longer offers the default branch as a ticket branch
+
 ## 4.4.0 - 2026-09-11
 
 ### Fixed

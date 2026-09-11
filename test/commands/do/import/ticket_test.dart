@@ -29,6 +29,8 @@ class MockShowFile extends Mock implements gg_git.ShowFile {}
 
 class MockRemoteBranches extends Mock implements gg_git.RemoteBranches {}
 
+class MockDefaultBranch extends Mock implements gg_git.DefaultBranch {}
+
 class MockRemoteBranchExists extends Mock
     implements gg_git.RemoteBranchExists {}
 
@@ -54,6 +56,7 @@ void main() {
   late MockCheckout checkout;
   late MockShowFile showFile;
   late MockRemoteBranches remoteBranches;
+  late MockDefaultBranch defaultBranch;
   late MockRemoteBranchExists remoteBranchExists;
   late MockProcessRunner proc;
   final copyCalls = <String>[];
@@ -110,6 +113,7 @@ void main() {
     showFile = MockShowFile();
     remoteBranches = MockRemoteBranches();
     remoteBranchExists = MockRemoteBranchExists();
+    defaultBranch = MockDefaultBranch();
     proc = MockProcessRunner();
 
     when(
@@ -132,6 +136,12 @@ void main() {
         ggLog: any(named: 'ggLog'),
       ),
     ).thenAnswer((_) async => ['main', 'master', 'feat_x']);
+    when(
+      () => defaultBranch.get(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+      ),
+    ).thenAnswer((_) async => 'main');
     when(
       () => remoteBranchExists.get(
         directory: any(named: 'directory'),
@@ -157,6 +167,8 @@ void main() {
     BranchSelector? selectBranch,
     CopyDirectory? copyDir,
     TicketJsonFetcher? fetchTicketJson,
+    gg_git.RemoteBranches? remoteBranchesOverride,
+    gg_git.DefaultBranch? defaultBranchOverride,
   }) => DoCheckoutCommand(
     fetchTicketJson:
         fetchTicketJson ??
@@ -169,8 +181,9 @@ void main() {
     fetch: fetch,
     checkout: checkout,
     showFile: showFile,
-    remoteBranches: remoteBranches,
+    remoteBranches: remoteBranchesOverride ?? remoteBranches,
     remoteBranchExists: remoteBranchExists,
+    defaultBranch: defaultBranchOverride ?? defaultBranch,
     oceanWorkspacePath: oceanPath,
     executionPath: executionPath ?? tempDir.path,
     processRunner: proc.call,
@@ -415,6 +428,60 @@ void main() {
         ).called(1);
         expect(ticketDirOf('feat_x').existsSync(), isTrue);
       });
+
+      test(
+        'never offers the default branch, even when it is not main',
+        () async {
+          // A remote whose default branch is develop: there is no main and no
+          // master at all, only develop and one ticket branch.
+          Future<void> git(Directory dir, List<String> args) async {
+            final result = await Process.run('git', [
+              '-c',
+              'user.name=test',
+              '-c',
+              'user.email=test@example.com',
+              ...args,
+            ], workingDirectory: dir.path);
+            if (result.exitCode != 0) {
+              fail('git ${args.join(' ')} failed: ${result.stderr}');
+            }
+          }
+
+          final src = Directory(path.join(tempDir.path, 'dev_src'))
+            ..createSync();
+          await git(src, ['init', '-b', 'develop']);
+          File(path.join(src.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: x\n');
+          await git(src, ['add', '.']);
+          await git(src, ['commit', '-m', 'first']);
+          await git(src, ['branch', 'feat_x']);
+          final origin = Directory(path.join(tempDir.path, 'dev_origin.git'));
+          await git(tempDir, ['clone', '--bare', src.path, origin.path]);
+
+          // The ocean copy is a clone, so it records origin/HEAD -> develop.
+          final repoDir = Directory(path.join(oceanPath, 'repo_dev'));
+          await git(tempDir, ['clone', origin.path, repoDir.path]);
+
+          List<String>? offered;
+          await runCmd(
+            build(
+              remoteBranchesOverride: gg_git.RemoteBranches(ggLog: ggLog),
+              defaultBranchOverride: gg_git.DefaultBranch(ggLog: ggLog),
+              selectBranch: (b) async {
+                offered = b;
+                return null;
+              },
+            ),
+            ['repo_dev'],
+          );
+
+          // gg_git's RemoteBranches lists origin/HEAD under its short name
+          // `origin` as well; that entry is its business, not this filter's.
+          expect(offered, isNot(contains('develop')));
+          expect(offered, isNot(contains('main')));
+          expect(offered, contains('feat_x'));
+        },
+      );
 
       test('logs when there are no ticket branches', () async {
         makeMasterRepo('repo_a');
