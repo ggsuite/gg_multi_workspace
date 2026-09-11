@@ -38,117 +38,36 @@ void main() {
       File(path.join(dir.path, pubspecOverridesFileName)).existsSync();
 
   group('removeDependencyOverrides', () {
-    group('tsconfig.workspace.json', () {
-      Directory tsRepo(String name, {String? workspaceJson}) {
-        final dir = repo(name);
-        File(path.join(dir.path, 'package.json'))
-            .writeAsStringSync('{"name":"$name"}');
-        File(path.join(dir.path, 'tsconfig.json'))
-            .writeAsStringSync('{"extends": "./tsconfig.workspace.json"}');
-        if (workspaceJson != null) {
-          File(path.join(dir.path, 'tsconfig.workspace.json'))
-              .writeAsStringSync(workspaceJson);
-        }
-        return dir;
-      }
+    test('drops a pnpm shim link and its shim folder', () {
+      final a = repo('a');
+      final shim = Directory(path.join(a.path, '.gg', 'ts_links', 'b'))
+        ..createSync(recursive: true);
+      File(path.join(shim.path, 'package.json'))
+          .writeAsStringSync('{"name":"b","main":"./src/index.ts"}');
+      File(path.join(a.path, 'pnpm-workspace.yaml')).writeAsStringSync(
+        '# Created by gg_localize_refs. The overrides section redirects\n'
+        '# the dependencies of package.json to the sibling checkouts of\n'
+        '# this workspace without touching their published constraints.\n'
+        '# change-refs-to-pub-dev removes the section again.\n'
+        'overrides:\n'
+        '  b: link:./.gg/ts_links/b\n'
+        '  c: link:../c\n',
+      );
+      repo('c');
+      File(path.join(tempDir.path, 'c', 'package.json'))
+          .writeAsStringSync('{"name":"c"}');
 
-      String workspaceJsonOf(Directory dir) =>
-          File(path.join(dir.path, 'tsconfig.workspace.json'))
-              .readAsStringSync();
+      final changed = removeDependencyOverrides(
+        repoDirs: [a],
+        packageNames: {'b'},
+      );
 
-      test('drops the source path of the removed repo and keeps the rest', () {
-        final a = tsRepo(
-          'a',
-          workspaceJson:
-              '{"compilerOptions":{"paths":{'
-              '"b":["../b/src/index.ts"],'
-              '"c":["../c/src/index.ts"]}}}',
-        );
-        tsRepo('b');
-        tsRepo('c');
-
-        final changed = removeDependencyOverrides(
-          repoDirs: [a],
-          packageNames: {'b'},
-        );
-
-        expect(changed, [a]);
-        expect(workspaceJsonOf(a), isNot(contains('../b/src/index.ts')));
-        // c stays in the ticket, so its mapping survives.
-        expect(workspaceJsonOf(a), contains('../c/src/index.ts'));
-      });
-
-      test('empties the paths of an extended file instead of deleting it', () {
-        final a = tsRepo(
-          'a',
-          workspaceJson:
-              '{"compilerOptions":{"paths":{'
-              '"b":["../b/src/index.ts"]}}}',
-        );
-
-        final changed = removeDependencyOverrides(
-          repoDirs: [a],
-          packageNames: {'b'},
-        );
-
-        expect(changed, [a]);
-        expect(
-          workspaceJsonOf(a),
-          '{\n  "compilerOptions": {\n    "paths": {}\n  }\n}\n',
-        );
-      });
-
-      test('deletes a file nobody extends once nothing is left', () {
-        final a = tsRepo(
-          'a',
-          workspaceJson:
-              '{"compilerOptions":{"paths":{'
-              '"b":["../b/src/index.ts"]}}}',
-        );
-        File(path.join(a.path, 'tsconfig.json')).deleteSync();
-
-        final changed = removeDependencyOverrides(
-          repoDirs: [a],
-          packageNames: {'b'},
-        );
-
-        expect(changed, [a]);
-        expect(
-          File(path.join(a.path, 'tsconfig.workspace.json')).existsSync(),
-          isFalse,
-        );
-      });
-
-      test('leaves a repo without the file or without the entry alone', () {
-        final a = tsRepo('a');
-        final b = tsRepo(
-          'b',
-          workspaceJson:
-              '{"compilerOptions":{"paths":{'
-              '"c":["../c/src/index.ts"]}}}',
-        );
-        tsRepo('c');
-
-        final changed = removeDependencyOverrides(
-          repoDirs: [a, b],
-          packageNames: {'x'},
-        );
-
-        expect(changed, isEmpty);
-        expect(workspaceJsonOf(b), contains('../c/src/index.ts'));
-      });
-
-      test('skips an unparsable file', () {
-        final a = tsRepo('a', workspaceJson: '{"compilerOptions": ');
-
-        final changed = removeDependencyOverrides(
-          repoDirs: [a],
-          packageNames: {'b'},
-        );
-
-        expect(changed, isEmpty);
-        expect(workspaceJsonOf(a), '{"compilerOptions": ');
-      });
+      expect(changed, [a]);
+      final overrides = File(path.join(a.path, 'pnpm-workspace.yaml'))
+          .readAsStringSync();
+      expect(overrides, isNot(contains('ts_links')));
+      expect(overrides, contains('c: link:../c'));
+      expect(shim.existsSync(), isFalse);
     });
 
     test('removes the entry and keeps the remaining ones', () {
