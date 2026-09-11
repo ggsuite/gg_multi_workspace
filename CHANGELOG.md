@@ -1,10 +1,7 @@
 # Changelog
 
-## Unreleased
+## 4.6.0 - 2026-09-11
 
-### Fixed
-
-- `gg do add` resets the ocean copy to the repository's default branch instead of `origin/main` and refreshes `origin/HEAD` on fetch; `gg do import ticket` no longer offers the default branch as a ticket branch
 ### Added
 
 - The `.code-workspace` of a ticket carries a launch configuration »Debug current vitest file« that debugs the open spec with the vitest of the folder it belongs to — together with the source paths gg_localize_refs writes, a test steps into the TypeScript sources of the other ticket repos.
@@ -12,6 +9,10 @@
 ### Changed
 
 - `do rm repo` also drops the removed repo from the source `paths` of `tsconfig.workspace.json` in the repos that stay.
+
+### Fixed
+
+- `gg do add` resets the ocean copy to the repository's default branch instead of `origin/main` and refreshes `origin/HEAD` on fetch; `gg do import ticket` no longer offers the default branch as a ticket branch
 
 ## 4.5.0 - 2026-09-11
 
