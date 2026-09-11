@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.7.0 - 2026-09-11
+
+### Changed
+
+- `do rm repo` removes the shim gg_localize_refs linked the removed repo through (`.gg/ts_links/<name>`) instead of pruning `tsconfig.workspace.json` paths, which gg_localize_refs 5 no longer writes.
+
 ## 4.6.0 - 2026-09-11
 
 ### Added

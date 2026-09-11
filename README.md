@@ -32,11 +32,12 @@ The `.code-workspace` of a ticket ships a launch configuration
 »Debug current vitest file«. It runs the spec file open in the editor with
 the vitest of the repo the file belongs to (`${fileWorkspaceFolder}`), so it
 works in every folder of the multi-root workspace. Because `gg do add`
-maps the TypeScript dependencies of the ticket to the sources of their
-sibling checkouts (`tsconfig.workspace.json`, written by gg_localize_refs),
-stepping into a dependency lands in its `src/`, and breakpoints set there
-hit. Dart folders need no counterpart — the Dart extension offers
-»Run«/»Debug« code lenses by itself.
+links the TypeScript dependencies of the ticket through shims that lead to
+the sources of their sibling checkouts (`.gg/ts_links/`, written by
+gg_localize_refs), stepping into a dependency lands in its `src/`, and
+breakpoints set there hit — in any repo, without configuration. Dart folders
+need no counterpart — the Dart extension offers »Run«/»Debug« code lenses by
+itself.
 
 ### Targets as regular expressions
 
