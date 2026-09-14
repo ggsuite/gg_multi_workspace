@@ -158,6 +158,50 @@ void main() {
       );
     });
 
+    group('never takes a hidden folder for the ticket of the cwd', () {
+      Future<void> expectRefusedIn(Directory cwd) async {
+        await expectLater(
+          runnerAt(cwd.path).run(['ticket', '--no-delete-remote-branch']),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls(e.toString()),
+              'message',
+              contains('needs a ticket'),
+            ),
+          ),
+        );
+      }
+
+      test('not even one that holds a ticket.json', () async {
+        final github = Directory(path.join(tempDir.path, '.github'))
+          ..createSync();
+        File(path.join(github.path, ticketJsonFileName))
+            .writeAsStringSync('{}');
+        final workflows = Directory(path.join(github.path, 'workflows'))
+          ..createSync();
+
+        await expectRefusedIn(workflows);
+
+        expect(workflows.existsSync(), isTrue);
+        expect(
+          Directory(path.join(tempDir.path, ggMultiTrashFolder)).existsSync(),
+          isFalse,
+        );
+      });
+
+      test('nor a closed ticket in the trash', () async {
+        final closed = Directory(
+          path.join(tempDir.path, ggMultiTrashFolder, 'T5'),
+        )..createSync(recursive: true);
+        File(path.join(closed.path, ticketJsonFileName))
+            .writeAsStringSync('{}');
+
+        await expectRefusedIn(closed);
+
+        expect(closed.existsSync(), isTrue);
+      });
+    });
+
     group('named tickets', () {
       /// Creates `<root>/tickets/<name>` holding one repo.
       Directory makeTicket(String name) {
@@ -240,6 +284,67 @@ void main() {
         // The check runs before the first removal — nothing was closed.
         expect(existing.existsSync(), isTrue);
         expect(gitCalls, isEmpty);
+      });
+
+      test(
+        'closes a ticket in the root, recognized by its ticket.json',
+        () async {
+          final ticket = Directory(path.join(tempDir.path, 'T77'))
+            ..createSync();
+          File(path.join(ticket.path, ticketJsonFileName))
+              .writeAsStringSync('{}');
+
+          await runnerAt(tempDir.path)
+              .run(['ticket', 'T77', '--no-delete-remote-branch']);
+
+          expect(ticket.existsSync(), isFalse);
+          expect(
+            Directory(path.join(tempDir.path, ggMultiTrashFolder, 'T77'))
+                .existsSync(),
+            isTrue,
+          );
+        },
+      );
+
+      test('refuses hidden and plain folders of the root, even a hidden one '
+          'holding a ticket.json, and moves nothing', () async {
+        // What a DNA instantiates in the workspace root.
+        final github = Directory(path.join(tempDir.path, '.github'))
+          ..createSync();
+        File(path.join(github.path, ticketJsonFileName))
+            .writeAsStringSync('{}');
+        final dartTool = Directory(path.join(tempDir.path, '.dart_tool'))
+          ..createSync();
+        final doc = Directory(path.join(tempDir.path, 'doc'))..createSync();
+
+        await expectLater(
+          runnerAt(tempDir.path).run([
+            'ticket',
+            '.github',
+            '.dart_tool',
+            'doc',
+            '.',
+            '--no-delete-remote-branch',
+          ]),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls(e.toString()),
+              'message',
+              allOf(
+                contains('These tickets do not exist'),
+                contains('.github, .dart_tool, doc, .'),
+              ),
+            ),
+          ),
+        );
+
+        expect(github.existsSync(), isTrue);
+        expect(dartTool.existsSync(), isTrue);
+        expect(doc.existsSync(), isTrue);
+        expect(
+          Directory(path.join(tempDir.path, ggMultiTrashFolder)).existsSync(),
+          isFalse,
+        );
       });
 
       test(

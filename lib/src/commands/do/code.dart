@@ -85,18 +85,23 @@ class CodeCommand extends Command<void> {
     final repoName = parts.length == 2 ? parts[1] : null;
 
     // Tickets sit directly in the workspace root; a legacy `tickets` folder
-    // is still resolved.
-    final ticketDir = _dirFactory(
-      WorkspaceUtils.ticketDir(
-        rootPath: workspacePath,
-        ticketName: ticketName,
-      ).path,
+    // is still resolved. Only a real ticket is opened — never a hidden folder
+    // such as `.github` or a plain one such as `doc` that merely has the name.
+    final existing = WorkspaceUtils.existingTicketDir(
+      rootPath: workspacePath,
+      ticketName: ticketName,
     );
 
-    if (!ticketDir.existsSync()) {
-      ggLog(cError('Ticket $ticketName not found at ${_rel(ticketDir.path)}'));
+    if (existing == null) {
+      final expected = WorkspaceUtils.ticketDir(
+        rootPath: workspacePath,
+        ticketName: ticketName,
+      );
+      ggLog(cError('Ticket $ticketName not found at ${_rel(expected.path)}'));
       return;
     }
+
+    final ticketDir = _dirFactory(existing.path);
 
     if (repoName != null) {
       // The repo is looked up in the whole ticket, so `<ticket>/<repo>` finds

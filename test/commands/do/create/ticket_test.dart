@@ -206,6 +206,26 @@ void main() {
       );
     });
 
+    test('refuses an issue id that starts with a dot', () async {
+      // A hidden folder is never a ticket, so such a ticket would be lost.
+      await expectLater(
+        runner.run(['ticket', '--input', tempDir.path, '.foo', '-m', 'desc']),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('hidden folders are never tickets'),
+          ),
+        ),
+      );
+
+      expect(Directory(path.join(tempDir.path, '.foo')).existsSync(), isFalse);
+      expect(
+        Directory(path.join(tempDir.path, '.trash', '.foo')).existsSync(),
+        isFalse,
+      );
+    });
+
     test('throws UsageException when missing issue id', () async {
       await expectLater(
         runner.run(['ticket', '--input', tempDir.path, '-m', 'desc']),

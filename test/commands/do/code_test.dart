@@ -66,6 +66,56 @@ void main() {
       expect(messages.last, contains('Ticket TCKT not found at'));
     });
 
+    test('opens a ticket in the root, recognized by its ticket.json', () async {
+      final tdir = Directory(path.join(tempRoot.path, 'T9'))..createSync();
+      File(path.join(tdir.path, ticketJsonFileName)).writeAsStringSync('{}');
+
+      await runner.run(<String>['code', 'T9']);
+
+      expect(launched.single[1], path.join(tdir.path, 'T9.code-workspace'));
+    });
+
+    test('never opens a hidden or a plain folder of the root', () async {
+      // What a DNA instantiates in the workspace root — `.github` even with a
+      // ticket.json.
+      final github = Directory(path.join(tempRoot.path, '.github'))
+        ..createSync();
+      File(path.join(github.path, ticketJsonFileName)).writeAsStringSync('{}');
+      Directory(path.join(tempRoot.path, '.claude')).createSync();
+      Directory(path.join(tempRoot.path, 'doc')).createSync();
+
+      for (final name in <String>['.github', '.claude', 'doc']) {
+        await runner.run(<String>['code', name]);
+        expect(messages.last, contains('Ticket $name not found at'));
+      }
+      expect(launched, isEmpty);
+    });
+
+    test('does not take a closed ticket in the trash for the ticket of the '
+        'cwd', () async {
+      final closed = Directory(
+        path.join(tempRoot.path, ggMultiTrashFolder, 'T1'),
+      )..createSync(recursive: true);
+      File(path.join(closed.path, ticketJsonFileName)).writeAsStringSync('{}');
+
+      final localRunner = CommandRunner<void>('test', 'test')
+        ..addCommand(
+          CodeCommand(
+            ggLog: ggLog,
+            rootPath: tempRoot.path,
+            executionPath: closed.path,
+            directoryFactory: Directory.new,
+            launcher: VSCodeLauncher(processStarter: fakeStarter),
+          ),
+        );
+
+      await expectLater(
+        localRunner.run(<String>['code']),
+        throwsA(isA<UsageException>()),
+      );
+      expect(launched, isEmpty);
+    });
+
     test('opens workspace file when ticket exists but is empty', () async {
       Directory(path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'))
           .createSync(recursive: true);

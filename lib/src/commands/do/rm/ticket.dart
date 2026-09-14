@@ -116,11 +116,13 @@ class RemoveTicketCommand extends Command<void> {
     final dirs = <Directory>[];
     final missing = <String>[];
     for (final name in names) {
-      final dir = WorkspaceUtils.ticketDir(
+      // Only a real ticket is closed — never a hidden folder such as
+      // `.github` or a plain one such as `doc` that merely has the name.
+      final dir = WorkspaceUtils.existingTicketDir(
         rootPath: workspacePath,
         ticketName: name,
       );
-      if (dir.existsSync()) {
+      if (dir != null) {
         dirs.add(dir);
       } else {
         missing.add(name);

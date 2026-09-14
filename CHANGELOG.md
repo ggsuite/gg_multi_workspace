@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- gg do rm ticket, gg do code and gg do create ticket never take a hidden folder such as .github or a plain root folder such as doc for a ticket
+
 ## 4.7.0 - 2026-09-11
 
 ### Changed

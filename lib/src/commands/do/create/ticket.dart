@@ -64,6 +64,16 @@ class TicketCommand extends DirCommand<void> {
 
     final issueId = argResults!.rest.first;
 
+    // A hidden folder is never a ticket, so a ticket created under such a
+    // name would be invisible to every other command.
+    if (WorkspaceUtils.isHiddenName(issueId)) {
+      throw UsageException(
+        'The issue id "$issueId" starts with a dot, '
+        'but hidden folders are never tickets.',
+        usage,
+      );
+    }
+
     // The description might be null if the user did not pass --message / -m.
     final String description = (argResults!['message'] as String?) ?? '';
 
