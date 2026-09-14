@@ -73,8 +73,27 @@ class CodeCommand extends Command<void> {
     }
 
     final target = args.first;
-    final parts = target.split(RegExp(r'[\\/]'));
-    if (parts.isEmpty || parts.length > 2) {
+
+    // An absolute path names no ticket of this workspace.
+    if (path.isAbsolute(target) || target.startsWith(RegExp(r'[\\/]'))) {
+      throw UsageException(
+        'The target "$target" is an absolute path. '
+        'Use <ticket> or <ticket>/<repo>.',
+        usage,
+      );
+    }
+
+    // Repeated and trailing separators — a tab completion appends one (`T1/`,
+    // `T1/repo/`) — separate nothing, so an empty repo segment means no repo.
+    // The `tickets/<ticket>` a tab completion offers in the root of a legacy
+    // workspace names the ticket itself.
+    final segments = <String>[
+      for (final segment in target.split(RegExp(r'[\\/]+')))
+        if (segment.isNotEmpty) segment,
+    ];
+    final parts = WorkspaceUtils.normalizeTicketName(segments.join('/'))
+        .split('/');
+    if (parts.length > 2) {
       throw UsageException(
         'Invalid target format. Use <ticket> or <ticket>/<repo>.',
         usage,
@@ -84,19 +103,38 @@ class CodeCommand extends Command<void> {
     final ticketName = parts[0];
     final repoName = parts.length == 2 ? parts[1] : null;
 
+    // A name that is no ticket name — empty, hidden, `tickets` — is refused
+    // before it is joined to the workspace root.
+    final nameError = WorkspaceUtils.ticketNameError(ticketName);
+    if (nameError != null) {
+      throw UsageException(nameError, usage);
+    }
+
     // Tickets sit directly in the workspace root; a legacy `tickets` folder
-    // is still resolved.
-    final ticketDir = _dirFactory(
-      WorkspaceUtils.ticketDir(
-        rootPath: workspacePath,
-        ticketName: ticketName,
-      ).path,
+    // is still resolved. Only a real ticket is opened — never a plain folder
+    // such as `doc` that merely has the name.
+    final existing = WorkspaceUtils.existingTicketDir(
+      rootPath: workspacePath,
+      ticketName: ticketName,
     );
 
-    if (!ticketDir.existsSync()) {
-      ggLog(cError('Ticket $ticketName not found at ${_rel(ticketDir.path)}'));
+    if (existing == null) {
+      final place = path.join(workspacePath, ticketName);
+      if (FileSystemEntity.typeSync(place, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        ggLog(
+          cError(
+            '$ticketName is no ticket: ${_rel(place)} holds no '
+            '$ticketJsonFileName.',
+          ),
+        );
+      } else {
+        ggLog(cError('Ticket $ticketName not found at ${_rel(place)}'));
+      }
       return;
     }
+
+    final ticketDir = _dirFactory(existing.path);
 
     if (repoName != null) {
       // The repo is looked up in the whole ticket, so `<ticket>/<repo>` finds

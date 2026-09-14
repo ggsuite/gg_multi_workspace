@@ -367,14 +367,27 @@ class DoCheckoutCommand extends Command<dynamic> {
       throw Exception(cError('The ticket marker has no issue_id.'));
     }
 
-    final root = path.dirname(oceanWorkspacePath);
-    final ticketDir = WorkspaceUtils.ticketDir(
-      rootPath: root,
-      ticketName: ticketName,
-    );
-    if (!ticketDir.existsSync()) {
-      ticketDir.createSync(recursive: true);
+    // The issue id names the ticket folder in the workspace root, so it has
+    // to be one visible folder name — never a path, hidden or `tickets`.
+    final nameError = WorkspaceUtils.ticketNameError(ticketName);
+    if (nameError != null) {
+      throw Exception(cError('The ticket.json cannot be imported. $nameError'));
     }
+
+    // An existing ticket of that name is reproduced once more — a retry after
+    // repos failed. Otherwise the folder is created by `newTicketDir`, which
+    // refuses a folder or file of that name that is no ticket, such as `doc`.
+    final root = path.dirname(oceanWorkspacePath);
+    final ticketDir =
+        WorkspaceUtils.existingTicketDir(
+          rootPath: root,
+          ticketName: ticketName,
+        ) ??
+        WorkspaceUtils.newTicketDir(
+          rootPath: root,
+          ticketName: ticketName,
+          relativeTo: executionPath,
+        );
     // Keep the ticket.json in the reproduced workspace so it can be handed on
     // from here as well.
     writeTicketJson(ticketDir, ticket);

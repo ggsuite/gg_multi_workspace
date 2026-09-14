@@ -10,7 +10,6 @@ import 'package:args/command_runner.dart';
 import 'package:gg_args/gg_args.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
-import 'package:path/path.dart' as p;
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
@@ -62,40 +61,36 @@ class TicketCommand extends DirCommand<void> {
       throw UsageException('Missing issue id parameter.', usage);
     }
 
-    final issueId = argResults!.rest.first;
+    // One trailing separator is what a tab completion leaves (`T1/`).
+    final issueId = WorkspaceUtils.normalizeTicketName(argResults!.rest.first);
+
+    // A ticket is named by one visible folder name: no path, nothing hidden,
+    // not the legacy `tickets` folder.
+    final nameError = WorkspaceUtils.ticketNameError(issueId);
+    if (nameError != null) {
+      throw UsageException(nameError, usage);
+    }
 
     // The description might be null if the user did not pass --message / -m.
     final String description = (argResults!['message'] as String?) ?? '';
 
-    // Build the directory path for the ticket (always directly in the
-    // workspace root, independent from the execution directory).
-    final ticketsPath = WorkspaceUtils.ticketDir(
-      rootPath: rootPath,
-      ticketName: issueId,
-    ).path;
-    final dir = directoryFactory(ticketsPath);
-    final ticketFile = File(path.join(ticketsPath, ticketJsonFileName));
-
-    final relPath = p.relative(ticketsPath, from: directory.path);
-
-    if (dir.existsSync() && ticketFile.existsSync()) {
-      ggLog(
-        cError(
-          'Error: Ticket $issueId already exists at '
-          '$relPath',
-        ),
-      );
-      return;
-    }
-
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
-    }
+    // The ticket is created directly in the workspace root, independent from
+    // the execution directory. An existing ticket, or anything else that
+    // already has that name there — the `doc`, `dna` or `scripts` folder of
+    // the DNA, a file, a folder of the user — makes this throw.
+    final ticketDir = directoryFactory(
+      WorkspaceUtils.newTicketDir(
+        rootPath: rootPath,
+        ticketName: issueId,
+        relativeTo: directory.path,
+      ).path,
+    );
+    final relPath = path.relative(ticketDir.path, from: directory.path);
 
     // Write the ticket.json. It carries the ticket id and its description
     // from the very first moment; `do add` later fills in the repositories.
     writeTicketJson(
-      Directory(ticketsPath),
+      ticketDir,
       TicketJson(
         issueId: issueId,
         description: description,
@@ -107,12 +102,12 @@ class TicketCommand extends DirCommand<void> {
     // Write the VS Code workspace so `do code <ticket>` opens the fresh
     // ticket right away. It holds the ticket folder itself until `do add`
     // rewrites it with one entry per repository.
-    writeCodeWorkspaceFile(Directory(ticketsPath), const <String>[]);
+    writeCodeWorkspaceFile(ticketDir, const <String>[]);
 
     // Every ticket gets its trash folder right away, so `do publish` has a
     // place to move the ticket's repos to and the user can find it even
     // before anything was removed.
-    Trash.createDirForTicket(Directory(ticketsPath));
+    Trash.createDirForTicket(ticketDir);
 
     ggLog(cSuccess('✓ Created ticket $issueId'));
 
