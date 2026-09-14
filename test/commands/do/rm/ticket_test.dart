@@ -306,8 +306,8 @@ void main() {
         },
       );
 
-      test('refuses hidden and plain folders of the root, even a hidden one '
-          'holding a ticket.json, and moves nothing', () async {
+      test('refuses hidden names and plain folders of the root, even a hidden '
+          'one holding a ticket.json, and moves nothing', () async {
         // What a DNA instantiates in the workspace root.
         final github = Directory(path.join(tempDir.path, '.github'))
           ..createSync();
@@ -324,6 +324,7 @@ void main() {
             '.dart_tool',
             'doc',
             '.',
+            'ghost',
             '--no-delete-remote-branch',
           ]),
           throwsA(
@@ -331,8 +332,14 @@ void main() {
               (e) => rmControls(e.toString()),
               'message',
               allOf(
-                contains('These tickets do not exist'),
-                contains('.github, .dart_tool, doc, .'),
+                contains('".github" starts with a dot'),
+                contains('".dart_tool" starts with a dot'),
+                contains('"." starts with a dot'),
+                contains('These are no tickets in ${tempDir.path}: doc.'),
+                contains(
+                  'These tickets do not exist in ${tempDir.path}: '
+                  'ghost.',
+                ),
               ),
             ),
           ),
@@ -345,6 +352,67 @@ void main() {
           Directory(path.join(tempDir.path, ggMultiTrashFolder)).existsSync(),
           isFalse,
         );
+      });
+
+      test('refuses empty names and paths — which would address the root, '
+          'the legacy tickets folder or any folder — and moves nothing '
+          'and deletes no branch', () async {
+        final elsewhere = Directory(path.join(tempDir.path, 'elsewhere'))
+          ..createSync();
+        final legacyPath = path.join(ggMultiLegacyTicketFolder, 'T88');
+
+        await expectLater(
+          runnerAt(tempDir.path).run([
+            'ticket',
+            '',
+            '  ',
+            tempDir.path,
+            elsewhere.path,
+            legacyPath,
+            r'a\b',
+            ggMultiLegacyTicketFolder,
+            ggMultiLegacyTicketFolder.toUpperCase(),
+          ]),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls(e.toString()),
+              'message',
+              allOf(
+                contains('A ticket name must not be empty.'),
+                contains('"${tempDir.path}" is a path'),
+                contains('"${elsewhere.path}" is a path'),
+                contains('"$legacyPath" is a path'),
+                contains(r'"a\b" is a path'),
+                contains('"$ggMultiLegacyTicketFolder" is reserved'),
+                contains(
+                  '"${ggMultiLegacyTicketFolder.toUpperCase()}" is reserved',
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // The legacy tickets folder with its ticket and every other folder
+        // stay where they are.
+        expect(ticketDir.existsSync(), isTrue);
+        expect(elsewhere.existsSync(), isTrue);
+        expect(
+          Directory(path.join(tempDir.path, ggMultiTrashFolder)).existsSync(),
+          isFalse,
+        );
+        expect(gitCalls, isEmpty);
+      });
+
+      test('ignores the trailing separator a tab completion appends', () async {
+        final ticket = Directory(path.join(tempDir.path, 'T77'))..createSync();
+        File(path.join(ticket.path, ticketJsonFileName))
+            .writeAsStringSync('{}');
+
+        await runnerAt(
+          tempDir.path,
+        ).run(['ticket', 'T77${path.separator}', '--no-delete-remote-branch']);
+
+        expect(ticket.existsSync(), isFalse);
       });
 
       test(

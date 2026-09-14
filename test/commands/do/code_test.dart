@@ -17,6 +17,7 @@ import 'package:test/test.dart';
 void main() {
   group('CodeCommand', () {
     late Directory tempRoot;
+    late Directory execDir;
     late List<String> messages;
     late List<List<Object?>> launched;
     late CommandRunner<void> runner;
@@ -33,13 +34,13 @@ void main() {
 
     setUp(() {
       tempRoot = Directory.systemTemp.createTempSync('code_test_');
-      final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
+      execDir = Directory.systemTemp.createTempSync('exec_path_');
       messages = <String>[];
       launched = <List<Object?>>[];
       runner = CommandRunner<void>('test', 'test')
         ..addCommand(
           CodeCommand(
-            executionPath: execPath,
+            executionPath: execDir.path,
             ggLog: ggLog,
             rootPath: tempRoot.path,
             directoryFactory: Directory.new,
@@ -49,8 +50,10 @@ void main() {
     });
 
     tearDown(() {
-      if (tempRoot.existsSync()) {
-        tempRoot.deleteSync(recursive: true);
+      for (final dir in <Directory>[tempRoot, execDir]) {
+        if (dir.existsSync()) {
+          dir.deleteSync(recursive: true);
+        }
       }
     });
 
@@ -75,7 +78,8 @@ void main() {
       expect(launched.single[1], path.join(tdir.path, 'T9.code-workspace'));
     });
 
-    test('never opens a hidden or a plain folder of the root', () async {
+    test('never opens a hidden or a plain folder of the root, and says '
+        'why', () async {
       // What a DNA instantiates in the workspace root — `.github` even with a
       // ticket.json.
       final github = Directory(path.join(tempRoot.path, '.github'))
@@ -84,11 +88,41 @@ void main() {
       Directory(path.join(tempRoot.path, '.claude')).createSync();
       Directory(path.join(tempRoot.path, 'doc')).createSync();
 
-      for (final name in <String>['.github', '.claude', 'doc']) {
+      for (final name in <String>['.github', '.claude']) {
         await runner.run(<String>['code', name]);
-        expect(messages.last, contains('Ticket $name not found at'));
+        expect(messages.last, contains('"$name" starts with a dot'));
+      }
+      await runner.run(<String>['code', 'doc']);
+      expect(messages.last, contains('doc is no ticket: '));
+      expect(messages.last, contains('holds no $ticketJsonFileName.'));
+      expect(launched, isEmpty);
+    });
+
+    test('refuses empty ticket names and tickets', () async {
+      Directory(path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'))
+          .createSync(recursive: true);
+
+      final expected = <String, String>{
+        '': 'must not be empty',
+        '/': 'must not be empty',
+        r'\T1': 'must not be empty',
+        ggMultiLegacyTicketFolder: 'is reserved',
+        '${ggMultiLegacyTicketFolder.toUpperCase()}/T1': 'is reserved',
+      };
+      for (final MapEntry(key: target, value: reason) in expected.entries) {
+        await runner.run(<String>['code', target]);
+        expect(messages.last, contains(reason), reason: target);
       }
       expect(launched, isEmpty);
+    });
+
+    test('ignores the trailing separator a tab completion appends', () async {
+      final tdir = Directory(path.join(tempRoot.path, 'T9'))..createSync();
+      File(path.join(tdir.path, ticketJsonFileName)).writeAsStringSync('{}');
+
+      await runner.run(<String>['code', 'T9${path.separator}']);
+
+      expect(launched.single[1], path.join(tdir.path, 'T9.code-workspace'));
     });
 
     test('does not take a closed ticket in the trash for the ticket of the '

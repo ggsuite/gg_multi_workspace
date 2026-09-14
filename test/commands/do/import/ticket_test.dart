@@ -293,6 +293,84 @@ void main() {
         await runCmd(build(executionPath: repoA.path), ['feat_x']);
         expect(ticketDirOf('feat_x').existsSync(), isTrue);
       });
+
+      test('refuses an issue_id that is no ticket name and creates '
+          'nothing', () async {
+        makeMasterRepo('repo_a');
+        for (final issueId in <String>[
+          '.github',
+          ggMultiLegacyTicketFolder,
+          'a/b',
+          tempDir.path,
+        ]) {
+          final file = writeSource(ticketJsonStr(issueId: issueId));
+          await expectLater(
+            runCmd(build(), [file.path]),
+            throwsA(
+              predicate(
+                (e) =>
+                    rmControls(e.toString())
+                        .contains('The ticket.json cannot be imported. '),
+              ),
+            ),
+            reason: issueId,
+          );
+        }
+
+        for (final name in <String>[
+          '.github',
+          ggMultiLegacyTicketFolder,
+          'a',
+        ]) {
+          expect(
+            Directory(path.join(tempDir.path, name)).existsSync(),
+            isFalse,
+            reason: name,
+          );
+        }
+        expect(
+          File(path.join(tempDir.path, ticketJsonFileName)).existsSync(),
+          isFalse,
+        );
+        expect(copyCalls, isEmpty);
+      });
+
+      test('refuses an issue_id naming a folder of the root that is no '
+          'ticket', () async {
+        makeMasterRepo('repo_a');
+        final doc = Directory(path.join(tempDir.path, 'doc'))..createSync();
+        File(path.join(doc.path, 'guide.md')).writeAsStringSync('# Guide');
+        final file = writeSource(ticketJsonStr(issueId: 'doc'));
+
+        await expectLater(
+          runCmd(build(), [file.path]),
+          throwsA(
+            predicate(
+              (e) =>
+                  rmControls(e.toString())
+                      .contains('doc already exists and is no ticket'),
+            ),
+          ),
+        );
+
+        expect(
+          File(path.join(doc.path, ticketJsonFileName)).existsSync(),
+          isFalse,
+        );
+        expect(copyCalls, isEmpty);
+      });
+
+      test('imports into an empty folder of that name', () async {
+        makeMasterRepo('repo_a');
+        final prepared = ticketDirOf('feat_x')..createSync();
+
+        await runCmd(build(), [writeSource(ticketJsonStr()).path]);
+
+        expect(
+          File(path.join(prepared.path, ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
+      });
     });
 
     group('ticket.json given as a URL', () {
@@ -712,6 +790,10 @@ void main() {
         final dest = Directory(path.join(tempDir.path, 'feat_x', 'repo_a'))
           ..createSync(recursive: true);
         File(path.join(dest.path, 'pubspec.yaml')).writeAsStringSync('name: x');
+        // The ticket was imported before, so it carries its ticket.json and
+        // is reproduced once more.
+        File(path.join(tempDir.path, 'feat_x', ticketJsonFileName))
+            .writeAsStringSync(ticketJsonStr());
         await runCmd(build(executionPath: repoA.path), ['feat_x']);
         expect(copyCalls.any((p) => p.endsWith('repo_a')), isFalse);
         verify(

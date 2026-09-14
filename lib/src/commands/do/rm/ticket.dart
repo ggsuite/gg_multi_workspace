@@ -114,28 +114,51 @@ class RemoveTicketCommand extends Command<void> {
       workingDir: rootPath,
     );
     final dirs = <Directory>[];
+    final invalid = <String>[];
+    final noTickets = <String>[];
     final missing = <String>[];
-    for (final name in names) {
-      // Only a real ticket is closed — never a hidden folder such as
-      // `.github` or a plain one such as `doc` that merely has the name.
+    for (final typed in names) {
+      // One trailing separator is what a tab completion leaves (`T1/`).
+      final name = WorkspaceUtils.normalizeTicketName(typed);
+
+      // A name that is no ticket name — empty, a path such as "$PWD",
+      // hidden — never reaches a path: joined to the root it would address
+      // the root itself, the legacy `tickets` folder or any folder at all.
+      final nameError = WorkspaceUtils.ticketNameError(name);
+      if (nameError != null) {
+        invalid.add(nameError);
+        continue;
+      }
+
+      // Only a real ticket is closed — never a plain folder such as `doc`
+      // that merely has the name.
       final dir = WorkspaceUtils.existingTicketDir(
         rootPath: workspacePath,
         ticketName: name,
       );
       if (dir != null) {
         dirs.add(dir);
+      } else if (FileSystemEntity.typeSync(
+            path.join(workspacePath, name),
+            followLinks: false,
+          ) !=
+          FileSystemEntityType.notFound) {
+        noTickets.add(name);
       } else {
         missing.add(name);
       }
     }
 
-    if (missing.isNotEmpty) {
-      throw Exception(
-        cError(
-          'These tickets do not exist in $workspacePath: '
-          '${missing.join(', ')}.',
-        ),
-      );
+    final problems = <String>[
+      ...invalid,
+      if (noTickets.isNotEmpty)
+        'These are no tickets in $workspacePath: ${noTickets.join(', ')}.',
+      if (missing.isNotEmpty)
+        'These tickets do not exist in $workspacePath: '
+            '${missing.join(', ')}.',
+    ];
+    if (problems.isNotEmpty) {
+      throw Exception(cError(problems.join('\n')));
     }
 
     return dirs;

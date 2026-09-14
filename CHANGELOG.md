@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- `gg do create ticket` fails with an error instead of exit code 0 when the ticket already exists, a legacy `tickets/<id>` included
+
 ### Fixed
 
-- `gg do rm ticket` and `gg do code` never take a hidden folder such as `.github`, a closed ticket in `.trash` or a plain root folder such as `doc` for a ticket
-- `gg do create ticket` refuses an issue id that starts with a dot or is `tickets`, and a name the workspace root already holds as a folder or file that is no ticket (`doc`, `dna`, `scripts` after `gg do init workspace`), instead of writing its `ticket.json`, `.code-workspace` and trash folder into it; a legacy ticket of that name is reported as existing
+- `gg do rm ticket` and `gg do code` never take a hidden folder such as `.github`, a closed ticket in `.trash` or a root folder without `ticket.json` such as `doc` for a ticket; `gg do code` names such a folder »is no ticket« instead of »not found«
+- `gg do create ticket`, `gg do rm ticket`, `gg do code` and `gg do import ticket` (its `issue_id`) refuse every name that is no single visible folder name — empty, a path such as `a/b` or `"$PWD"`, absolute, starting with a dot, or `tickets` in any case — with a message naming the reason; `gg do rm ticket "$PWD"` or `gg do rm ticket ""` no longer move an arbitrary folder, or the whole `tickets` folder of a legacy workspace, to the trash and delete the remote branches named after it. One trailing separator (`T1/` from tab completion) is ignored
+- `gg do create ticket` refuses a name the workspace root already holds as a folder or file that is no ticket (`doc`, `dna`, `scripts` after `gg do init workspace`) instead of writing its `ticket.json`, `.code-workspace` and trash folder into it; an empty folder is taken
+- `gg do import ticket` creates the ticket folder through the same check, so a `ticket.json` naming `doc` no longer writes into the `doc` folder; an existing ticket of that name is still reproduced again
 - The README describes `gg do create ticket` with the ticket folder in the workspace root instead of `tickets/<id>/`
 
 ## 4.7.0 - 2026-09-11

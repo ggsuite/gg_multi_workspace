@@ -72,7 +72,8 @@ class CodeCommand extends Command<void> {
       return;
     }
 
-    final target = args.first;
+    // One trailing separator is what a tab completion leaves (`T1/`).
+    final target = WorkspaceUtils.normalizeTicketName(args.first);
     final parts = target.split(RegExp(r'[\\/]'));
     if (parts.isEmpty || parts.length > 2) {
       throw UsageException(
@@ -84,20 +85,35 @@ class CodeCommand extends Command<void> {
     final ticketName = parts[0];
     final repoName = parts.length == 2 ? parts[1] : null;
 
+    // A name that is no ticket name — empty, hidden, `tickets` — is named as
+    // such before it is joined to the workspace root.
+    final nameError = WorkspaceUtils.ticketNameError(ticketName);
+    if (nameError != null) {
+      ggLog(cError(nameError));
+      return;
+    }
+
     // Tickets sit directly in the workspace root; a legacy `tickets` folder
-    // is still resolved. Only a real ticket is opened — never a hidden folder
-    // such as `.github` or a plain one such as `doc` that merely has the name.
+    // is still resolved. Only a real ticket is opened — never a plain folder
+    // such as `doc` that merely has the name.
     final existing = WorkspaceUtils.existingTicketDir(
       rootPath: workspacePath,
       ticketName: ticketName,
     );
 
     if (existing == null) {
-      final expected = WorkspaceUtils.ticketDir(
-        rootPath: workspacePath,
-        ticketName: ticketName,
-      );
-      ggLog(cError('Ticket $ticketName not found at ${_rel(expected.path)}'));
+      final place = path.join(workspacePath, ticketName);
+      if (FileSystemEntity.typeSync(place, followLinks: false) !=
+          FileSystemEntityType.notFound) {
+        ggLog(
+          cError(
+            '$ticketName is no ticket: ${_rel(place)} holds no '
+            '$ticketJsonFileName.',
+          ),
+        );
+      } else {
+        ggLog(cError('Ticket $ticketName not found at ${_rel(place)}'));
+      }
       return;
     }
 
