@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-### Changed
+### Fixed
 
-- gg do rm ticket, gg do code and gg do create ticket never take a hidden folder such as .github or a plain root folder such as doc for a ticket
+- `gg do rm ticket` and `gg do code` never take a hidden folder such as `.github`, a closed ticket in `.trash` or a plain root folder such as `doc` for a ticket
+- `gg do create ticket` refuses an issue id that starts with a dot or is `tickets`, and a name the workspace root already holds as a folder or file that is no ticket (`doc`, `dna`, `scripts` after `gg do init workspace`), instead of writing its `ticket.json`, `.code-workspace` and trash folder into it; a legacy ticket of that name is reported as existing
+- The README describes `gg do create ticket` with the ticket folder in the workspace root instead of `tickets/<id>/`
 
 ## 4.7.0 - 2026-09-11
 

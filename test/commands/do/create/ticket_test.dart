@@ -226,6 +226,84 @@ void main() {
       );
     });
 
+    test('refuses the issue id tickets, the legacy ticket folder', () async {
+      await expectLater(
+        runner.run(['ticket', '--input', tempDir.path, 'tickets', '-m', 'x']),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('is reserved for the folder older gg versions'),
+          ),
+        ),
+      );
+
+      expect(
+        Directory(path.join(tempDir.path, 'tickets')).existsSync(),
+        isFalse,
+      );
+    });
+
+    test('refuses a name the root holds as a folder or a file that is no '
+        'ticket, and writes nothing into it', () async {
+      // What `gg do init workspace` instantiates in the workspace root.
+      for (final name in <String>['doc', 'dna', 'scripts']) {
+        final folder = Directory(path.join(tempDir.path, name))..createSync();
+        File(path.join(folder.path, 'guide.md')).writeAsStringSync('# Guide');
+      }
+      final license = File(path.join(tempDir.path, 'LICENSE'))
+        ..writeAsStringSync('license text');
+
+      for (final name in <String>['doc', 'dna', 'scripts', 'LICENSE']) {
+        await expectLater(
+          runner.run(['ticket', '--input', tempDir.path, name, '-m', 'x']),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls(e.toString()),
+              'message',
+              contains('$name already exists and is no ticket'),
+            ),
+          ),
+          reason: name,
+        );
+
+        final target = path.join(tempDir.path, name);
+        expect(
+          File(path.join(target, ticketJsonFileName)).existsSync(),
+          isFalse,
+        );
+        expect(
+          File(path.join(target, '$name.code-workspace')).existsSync(),
+          isFalse,
+        );
+        expect(
+          Directory(path.join(tempDir.path, '.trash', name)).existsSync(),
+          isFalse,
+        );
+      }
+      expect(license.readAsStringSync(), 'license text');
+      expect(messages, isEmpty);
+    });
+
+    test('reports a legacy ticket as existing instead of creating a second '
+        'one in the root', () async {
+      // A legacy ticket of an older gg may lack a ticket.json.
+      final legacy = Directory(path.join(tempDir.path, 'tickets', 'OLD-1'))
+        ..createSync(recursive: true);
+
+      await runner.run(['ticket', '--input', tempDir.path, 'OLD-1', '-m', 'x']);
+
+      expect(messages, [
+        'Error: Ticket OLD-1 already exists at '
+            '${path.join('tickets', 'OLD-1')}',
+      ]);
+      expect(Directory(path.join(tempDir.path, 'OLD-1')).existsSync(), isFalse);
+      expect(
+        File(path.join(legacy.path, ticketJsonFileName)).existsSync(),
+        isFalse,
+      );
+    });
+
     test('throws UsageException when missing issue id', () async {
       await expectLater(
         runner.run(['ticket', '--input', tempDir.path, '-m', 'desc']),

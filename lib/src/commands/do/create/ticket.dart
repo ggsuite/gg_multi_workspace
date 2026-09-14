@@ -74,33 +74,52 @@ class TicketCommand extends DirCommand<void> {
       );
     }
 
+    // `tickets` is the folder older gg versions kept their tickets in; a
+    // ticket of that name would make its repositories look like tickets.
+    if (issueId == ggMultiLegacyTicketFolder) {
+      throw UsageException(
+        'The issue id "$issueId" is reserved for the folder older gg '
+        'versions kept their tickets in.',
+        usage,
+      );
+    }
+
     // The description might be null if the user did not pass --message / -m.
     final String description = (argResults!['message'] as String?) ?? '';
 
-    // Build the directory path for the ticket (always directly in the
-    // workspace root, independent from the execution directory).
-    final ticketsPath = WorkspaceUtils.ticketDir(
+    // A ticket of that name — in the root or in a legacy `tickets` folder —
+    // is reported, never written into again.
+    final existing = WorkspaceUtils.existingTicketDir(
       rootPath: rootPath,
       ticketName: issueId,
-    ).path;
-    final dir = directoryFactory(ticketsPath);
-    final ticketFile = File(path.join(ticketsPath, ticketJsonFileName));
-
-    final relPath = p.relative(ticketsPath, from: directory.path);
-
-    if (dir.existsSync() && ticketFile.existsSync()) {
+    );
+    if (existing != null) {
       ggLog(
         cError(
           'Error: Ticket $issueId already exists at '
-          '$relPath',
+          '${p.relative(existing.path, from: directory.path)}',
         ),
       );
       return;
     }
 
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
+    // The ticket is created directly in the workspace root, independent from
+    // the execution directory. Whatever else already has that name there —
+    // the `doc`, `dna` or `scripts` folder of the DNA, a file, a folder of the
+    // user — is never taken over.
+    final ticketsPath = path.join(rootPath, issueId);
+    final relPath = p.relative(ticketsPath, from: directory.path);
+    if (FileSystemEntity.typeSync(ticketsPath, followLinks: false) !=
+        FileSystemEntityType.notFound) {
+      throw Exception(
+        cError(
+          '$relPath already exists and is no ticket. '
+          'Choose another issue id.',
+        ),
+      );
     }
+
+    directoryFactory(ticketsPath).createSync(recursive: true);
 
     // Write the ticket.json. It carries the ticket id and its description
     // from the very first moment; `do add` later fills in the repositories.
