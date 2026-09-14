@@ -257,6 +257,49 @@ void main() {
       expect(messages.first, '✓ Created ticket T5');
     });
 
+    test('creates tickets/<id> as <id> in the workspace root, never as a new '
+        'legacy ticket, and refuses a deeper path', () async {
+      final legacy = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder),
+      )..createSync();
+
+      await runner.run([
+        'ticket',
+        '--input',
+        tempDir.path,
+        '$ggMultiLegacyTicketFolder/42/',
+        '-m',
+        'x',
+      ]);
+
+      expect(
+        File(path.join(tempDir.path, '42', ticketJsonFileName)).existsSync(),
+        isTrue,
+      );
+      expect(Directory(path.join(legacy.path, '42')).existsSync(), isFalse);
+      expect(messages.first, '✓ Created ticket 42');
+
+      await expectLater(
+        runner.run([
+          'ticket',
+          '--input',
+          tempDir.path,
+          '$ggMultiLegacyTicketFolder/43/sub',
+          '-m',
+          'x',
+        ]),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.message,
+            'message',
+            contains('is a path'),
+          ),
+        ),
+      );
+      expect(Directory(path.join(tempDir.path, '43')).existsSync(), isFalse);
+      expect(legacy.listSync(), isEmpty);
+    });
+
     test('takes an empty folder prepared in the workspace root', () async {
       final prepared = Directory(path.join(tempDir.path, 'PREP-1'))
         ..createSync();

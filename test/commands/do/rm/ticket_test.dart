@@ -359,7 +359,8 @@ void main() {
           'and deletes no branch', () async {
         final elsewhere = Directory(path.join(tempDir.path, 'elsewhere'))
           ..createSync();
-        final legacyPath = path.join(ggMultiLegacyTicketFolder, 'T88');
+        // `tickets/<ticket>` names a ticket, one level deeper is a path.
+        final legacyPath = path.join(ggMultiLegacyTicketFolder, 'T88', 'sub');
 
         await expectLater(
           runnerAt(tempDir.path).run([
@@ -413,6 +414,30 @@ void main() {
         ).run(['ticket', 'T77${path.separator}', '--no-delete-remote-branch']);
 
         expect(ticket.existsSync(), isFalse);
+      });
+
+      test('takes tickets/<ticket>/ — the tab completion in the root of a '
+          'legacy workspace — for the legacy ticket', () async {
+        final first = makeTicket('L1');
+        final second = makeTicket('L2');
+
+        await runnerAt(tempDir.path).run([
+          'ticket',
+          '$ggMultiLegacyTicketFolder/L1/',
+          '${ggMultiLegacyTicketFolder.toUpperCase()}\\L2',
+          '--no-delete-remote-branch',
+        ]);
+
+        expect(first.existsSync(), isFalse);
+        expect(second.existsSync(), isFalse);
+        for (final name in <String>['L1', 'L2']) {
+          expect(
+            Directory(path.join(tempDir.path, ggMultiTrashFolder, name))
+                .existsSync(),
+            isTrue,
+            reason: name,
+          );
+        }
       });
 
       test(

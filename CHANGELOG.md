@@ -5,11 +5,13 @@
 ### Changed
 
 - `gg do create ticket` fails with an error instead of exit code 0 when the ticket already exists, a legacy `tickets/<id>` included
+- `gg do code` fails with an error instead of exit code 0 for a name that is no ticket name
 
 ### Fixed
 
 - `gg do rm ticket` and `gg do code` never take a hidden folder such as `.github`, a closed ticket in `.trash` or a root folder without `ticket.json` such as `doc` for a ticket; `gg do code` names such a folder »is no ticket« instead of »not found«
-- `gg do create ticket`, `gg do rm ticket`, `gg do code` and `gg do import ticket` (its `issue_id`) refuse every name that is no single visible folder name — empty, a path such as `a/b` or `"$PWD"`, absolute, starting with a dot, or `tickets` in any case — with a message naming the reason; `gg do rm ticket "$PWD"` or `gg do rm ticket ""` no longer move an arbitrary folder, or the whole `tickets` folder of a legacy workspace, to the trash and delete the remote branches named after it. One trailing separator (`T1/` from tab completion) is ignored
+- `gg do create ticket`, `gg do rm ticket`, `gg do code` and `gg do import ticket` (its `issue_id`) refuse every name that is no single visible folder name — empty, a path such as `a/b` or `"$PWD"`, absolute, starting with a dot, or `tickets` in any case — with a message naming the reason; `gg do rm ticket "$PWD"` or `gg do rm ticket ""` no longer move an arbitrary folder, or the whole `tickets` folder of a legacy workspace, to the trash and delete the remote branches named after it. One trailing separator (`T1/` from tab completion) is ignored, and so is the leading `tickets/` a tab completion offers for a legacy ticket: `tickets/L1/` names `L1`, `gg do create ticket tickets/42` creates `42` in the workspace root
+- `gg do code` takes `T1//` for the ticket instead of opening the ticket folder as a repo, tolerates repeated and trailing separators in `<ticket>/<repo>` and refuses an absolute path such as `/T1` as such instead of »must not be empty«
 - `gg do create ticket` refuses a name the workspace root already holds as a folder or file that is no ticket (`doc`, `dna`, `scripts` after `gg do init workspace`) instead of writing its `ticket.json`, `.code-workspace` and trash folder into it; an empty folder is taken
 - `gg do import ticket` creates the ticket folder through the same check, so a `ticket.json` naming `doc` no longer writes into the `doc` folder; an existing ticket of that name is still reproduced again
 - The README describes `gg do create ticket` with the ticket folder in the workspace root instead of `tickets/<id>/`

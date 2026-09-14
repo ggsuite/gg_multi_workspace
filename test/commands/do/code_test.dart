@@ -89,8 +89,16 @@ void main() {
       Directory(path.join(tempRoot.path, 'doc')).createSync();
 
       for (final name in <String>['.github', '.claude']) {
-        await runner.run(<String>['code', name]);
-        expect(messages.last, contains('"$name" starts with a dot'));
+        await expectLater(
+          runner.run(<String>['code', name]),
+          throwsA(
+            isA<UsageException>().having(
+              (e) => e.message,
+              'message',
+              contains('"$name" starts with a dot'),
+            ),
+          ),
+        );
       }
       await runner.run(<String>['code', 'doc']);
       expect(messages.last, contains('doc is no ticket: '));
@@ -98,20 +106,49 @@ void main() {
       expect(launched, isEmpty);
     });
 
-    test('refuses empty ticket names and tickets', () async {
+    test('throws for empty ticket names and tickets', () async {
       Directory(path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'T1'))
           .createSync(recursive: true);
 
       final expected = <String, String>{
         '': 'must not be empty',
-        '/': 'must not be empty',
-        r'\T1': 'must not be empty',
+        '  ': 'must not be empty',
         ggMultiLegacyTicketFolder: 'is reserved',
-        '${ggMultiLegacyTicketFolder.toUpperCase()}/T1': 'is reserved',
+        '${ggMultiLegacyTicketFolder.toUpperCase()}/': 'is reserved',
+        '$ggMultiLegacyTicketFolder/.github': 'is reserved',
       };
       for (final MapEntry(key: target, value: reason) in expected.entries) {
-        await runner.run(<String>['code', target]);
-        expect(messages.last, contains(reason), reason: target);
+        await expectLater(
+          runner.run(<String>['code', target]),
+          throwsA(
+            isA<UsageException>().having(
+              (e) => e.message,
+              'message',
+              contains(reason),
+            ),
+          ),
+          reason: target,
+        );
+      }
+      expect(launched, isEmpty);
+    });
+
+    test('throws for an absolute path and says so', () async {
+      final ticket = Directory(path.join(tempRoot.path, 'T1'))..createSync();
+      File(path.join(ticket.path, ticketJsonFileName)).writeAsStringSync('{}');
+
+      for (final target in <String>['/', '/T1', r'\T1', ticket.path]) {
+        await expectLater(
+          runner.run(<String>['code', target]),
+          throwsA(
+            isA<UsageException>().having(
+              (e) => e.message,
+              'message',
+              contains('"$target" is an absolute path'),
+            ),
+          ),
+          reason: target,
+        );
       }
       expect(launched, isEmpty);
     });
@@ -123,6 +160,57 @@ void main() {
       await runner.run(<String>['code', 'T9${path.separator}']);
 
       expect(launched.single[1], path.join(tdir.path, 'T9.code-workspace'));
+    });
+
+    test('tolerates repeated and trailing separators and takes an empty '
+        'repo segment for no repo', () async {
+      final tdir = Directory(path.join(tempRoot.path, 'T9'))..createSync();
+      File(path.join(tdir.path, ticketJsonFileName)).writeAsStringSync('{}');
+      final repo = Directory(path.join(tdir.path, 'MyRepo'))..createSync();
+      File(path.join(repo.path, 'pubspec.yaml')).writeAsStringSync('name: x');
+
+      final expected = <String, String>{
+        'T9//': path.join(tdir.path, 'T9.code-workspace'),
+        r'T9\\': path.join(tdir.path, 'T9.code-workspace'),
+        'T9//MyRepo': repo.path,
+        'T9/MyRepo/': repo.path,
+        r'T9\MyRepo\\': repo.path,
+      };
+      for (final MapEntry(key: target, value: opened) in expected.entries) {
+        launched.clear();
+        await runner.run(<String>['code', target]);
+        expect(launched.single[1], opened, reason: target);
+      }
+    });
+
+    test('opens a legacy ticket named tickets/<ticket>/ the way the tab '
+        'completion in the workspace root offers it', () async {
+      final legacy = Directory(
+        path.join(tempRoot.path, ggMultiLegacyTicketFolder, 'L1'),
+      )..createSync(recursive: true);
+
+      for (final target in <String>[
+        '$ggMultiLegacyTicketFolder/L1/',
+        '$ggMultiLegacyTicketFolder/L1',
+        '${ggMultiLegacyTicketFolder.toUpperCase()}\\L1\\',
+        '$ggMultiLegacyTicketFolder//L1//',
+      ]) {
+        launched.clear();
+        await runner.run(<String>['code', target]);
+        expect(
+          launched.single[1],
+          path.join(legacy.path, 'L1.code-workspace'),
+          reason: target,
+        );
+      }
+
+      // Only one ticket is named that way, no repo inside it.
+      launched.clear();
+      await expectLater(
+        runner.run(<String>['code', '$ggMultiLegacyTicketFolder/L1/repo']),
+        throwsA(isA<UsageException>()),
+      );
+      expect(launched, isEmpty);
     });
 
     test('does not take a closed ticket in the trash for the ticket of the '
