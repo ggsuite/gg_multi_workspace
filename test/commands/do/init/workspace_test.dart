@@ -92,17 +92,72 @@ void main() {
       final root = tempDir.path.replaceAll(r'\', '/');
       expect(dnaCalls, [
         ['init', '--target', root, '--language', 'dart'],
-        ['add', workspaceDnaLayer, '--target', root],
-        ['build', '--target', root],
+        ['add', workspaceDnaLayer, '--target', root, '--workspace'],
+        ['build', '--target', root, '--workspace'],
       ]);
       expect(
         messages.last,
         contains('$workspaceDnaLayer instantiated in the workspace'),
       );
+    });
 
-      // The DNA build insists on a LICENSE; the workspace gets its own.
-      final license = File(path.join(tempDir.path, 'LICENSE'));
-      expect(license.readAsStringSync(), workspaceLicense);
+    test(
+      'removes the pub scaffold init/add needed once the build succeeded',
+      () async {
+        // The fake stands in for `helix init --language dart` and
+        // `dart pub get`, seeding what a real run would leave behind at
+        // that point — the directory must still be empty when `run()`
+        // checks, so this happens inside the fake, not before it.
+        Future<void> fakeRunDna(List<String> args) async {
+          dnaCalls.add(args);
+          if (args.first == 'init') {
+            File(path.join(tempDir.path, 'pubspec.yaml'))
+                .writeAsStringSync('name: workspace\n');
+          }
+          if (args.first == 'add') {
+            File(path.join(tempDir.path, 'pubspec.lock'))
+                .writeAsStringSync('# lock\n');
+            Directory(path.join(tempDir.path, '.dart_tool'))
+                .createSync(recursive: true);
+          }
+        }
+
+        final runner = runnerFor(tempDir.path, runDna: fakeRunDna);
+        await runner.run(['workspace']);
+
+        expect(
+          File(path.join(tempDir.path, 'pubspec.yaml')).existsSync(),
+          isFalse,
+        );
+        expect(
+          File(path.join(tempDir.path, 'pubspec.lock')).existsSync(),
+          isFalse,
+        );
+        expect(
+          Directory(path.join(tempDir.path, '.dart_tool')).existsSync(),
+          isFalse,
+        );
+      },
+    );
+
+    test('keeps the pub scaffold when the build failed', () async {
+      Future<void> fakeRunDna(List<String> args) async {
+        if (args.first == 'init') {
+          File(path.join(tempDir.path, 'pubspec.yaml'))
+              .writeAsStringSync('name: workspace\n');
+          return;
+        }
+        throw Exception('pub add failed');
+      }
+
+      final runner = runnerFor(tempDir.path, runDna: fakeRunDna);
+      await runner.run(['workspace']);
+
+      // Left in place — the reported manual command needs it to retry.
+      expect(
+        File(path.join(tempDir.path, 'pubspec.yaml')).existsSync(),
+        isTrue,
+      );
     });
 
     test('keeps the ocean and names the manual steps when dna fails', () async {
@@ -124,8 +179,9 @@ void main() {
       expect(
         messages.last,
         contains(
-          'gg dna init --language dart, gg dna add $workspaceDnaLayer, '
-          'gg dna build',
+          'gg dna init --language dart, '
+          'gg dna add $workspaceDnaLayer --workspace, '
+          'gg dna build --workspace',
         ),
       );
     });

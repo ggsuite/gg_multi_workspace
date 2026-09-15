@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.9.0 - 2026-09-15
+
+### Changed
+
+- Also pass --workspace to gg dna add, whose own internal build previously ignored it and instantiated the full package output before the explicit build --workspace step ran
+
 ## 4.8.0 - 2026-09-14
 
 ### Changed
