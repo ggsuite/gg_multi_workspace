@@ -92,7 +92,7 @@ void main() {
       final root = tempDir.path.replaceAll(r'\', '/');
       expect(dnaCalls, [
         ['init', '--target', root, '--language', 'dart'],
-        ['add', workspaceDnaLayer, '--target', root],
+        ['add', workspaceDnaLayer, '--target', root, '--workspace'],
         ['build', '--target', root, '--workspace'],
       ]);
       expect(
@@ -179,7 +179,8 @@ void main() {
       expect(
         messages.last,
         contains(
-          'gg dna init --language dart, gg dna add $workspaceDnaLayer, '
+          'gg dna init --language dart, '
+          'gg dna add $workspaceDnaLayer --workspace, '
           'gg dna build --workspace',
         ),
       );

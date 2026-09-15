@@ -125,11 +125,14 @@ class InitWorkspaceCommand extends Command<void> {
   // ...........................................................................
   /// Places the gg DNA into the workspace root — the folder holding the
   /// ocean. The same three steps as by hand: `gg dna init`, `gg dna add
-  /// dna_gg` and `gg dna build --workspace`. `add` resolves the latest
-  /// `dna_gg`, so a fresh workspace always starts from the current guides
-  /// and skills. `--workspace` instantiates only `.claude/` and the
-  /// managed `CLAUDE.md` block — a workspace is no package of its own, so
-  /// it never gets `doc/`, `scripts/`, `.github/` or a DNA manifest.
+  /// dna_gg --workspace` and `gg dna build --workspace`. `add` resolves
+  /// the latest `dna_gg`, so a fresh workspace always starts from the
+  /// current guides and skills. `--workspace` instantiates only
+  /// `.claude/` and the managed `CLAUDE.md` block — a workspace is no
+  /// package of its own, so it never gets `doc/`, `scripts/`, `.github/`
+  /// or a DNA manifest. `add` builds right after installing the layer
+  /// (the same instantiation `build` performs), so it needs the flag as
+  /// much as the explicit `build` call that follows it.
   ///
   /// A failure does not take the workspace down with it — the ocean is
   /// there and usable — it is reported with the commands to repeat by hand.
@@ -137,14 +140,21 @@ class InitWorkspaceCommand extends Command<void> {
     final target = root.replaceAll(r'\', '/');
     try {
       await _runDna(['init', '--target', target, '--language', 'dart']);
-      await _runDna(['add', workspaceDnaLayer, '--target', target]);
+      await _runDna([
+        'add',
+        workspaceDnaLayer,
+        '--target',
+        target,
+        '--workspace',
+      ]);
       await _runDna(['build', '--target', target, '--workspace']);
     } catch (e) {
       ggLog(cError('Could not instantiate $workspaceDnaLayer: $e'));
       ggLog(
         cAction(
           'Run manually: gg dna init --language dart, '
-          'gg dna add $workspaceDnaLayer, gg dna build --workspace',
+          'gg dna add $workspaceDnaLayer --workspace, '
+          'gg dna build --workspace',
         ),
       );
       return;
