@@ -4,5 +4,7 @@
 # change-refs-to-git-feature-branch and change-refs-to-pub-dev
 # remove it again.
 dependency_overrides:
+  gg_multi_core:
+    path: ../gg_multi_core
   helix:
     path: ../helix
