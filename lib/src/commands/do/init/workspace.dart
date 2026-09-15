@@ -24,15 +24,6 @@ typedef RunDna = Future<void> Function(List<String> args);
 /// and the managed `CLAUDE.md` block.
 const String workspaceDnaLayer = 'dna_gg';
 
-/// The LICENSE placed in the workspace root. The DNA build insists on one,
-/// and a workspace is no package: it says so instead of licensing anything.
-const String workspaceLicense = '''
-This folder is a gg workspace: a private working directory that holds
-checkouts of other repositories. It is not a published package and carries
-no license of its own. Every repository below .ocean and in the tickets is
-governed by its own LICENSE file.
-''';
-
 /// Answers the questions of helix through the prompts of the gg suite —
 /// the same menus `gg do publish` draws, and in an embedded gg whatever
 /// the embedder assigned to [GgPrompts.current].
@@ -134,28 +125,46 @@ class InitWorkspaceCommand extends Command<void> {
   // ...........................................................................
   /// Places the gg DNA into the workspace root — the folder holding the
   /// ocean. The same three steps as by hand: `gg dna init`, `gg dna add
-  /// dna_gg` and `gg dna build`. `add` resolves the latest `dna_gg`, so
-  /// a fresh workspace always starts from the current guides and skills.
+  /// dna_gg` and `gg dna build --workspace`. `add` resolves the latest
+  /// `dna_gg`, so a fresh workspace always starts from the current guides
+  /// and skills. `--workspace` instantiates only `.claude/` and the
+  /// managed `CLAUDE.md` block — a workspace is no package of its own, so
+  /// it never gets `doc/`, `scripts/`, `.github/` or a DNA manifest.
   ///
   /// A failure does not take the workspace down with it — the ocean is
   /// there and usable — it is reported with the commands to repeat by hand.
   Future<void> _instantiateDna(String root) async {
     final target = root.replaceAll(r'\', '/');
-    File(path.join(root, 'LICENSE')).writeAsStringSync(workspaceLicense);
     try {
       await _runDna(['init', '--target', target, '--language', 'dart']);
       await _runDna(['add', workspaceDnaLayer, '--target', target]);
-      await _runDna(['build', '--target', target]);
+      await _runDna(['build', '--target', target, '--workspace']);
     } catch (e) {
       ggLog(cError('Could not instantiate $workspaceDnaLayer: $e'));
       ggLog(
         cAction(
           'Run manually: gg dna init --language dart, '
-          'gg dna add $workspaceDnaLayer, gg dna build',
+          'gg dna add $workspaceDnaLayer, gg dna build --workspace',
         ),
       );
       return;
     }
+    _removeWorkspaceScaffold(root);
     ggLog(cDetail('✓ $workspaceDnaLayer instantiated in the workspace'));
+  }
+
+  // ...........................................................................
+  /// Removes what `init`/`add` needed only to resolve [workspaceDnaLayer]
+  /// — the pub manifest, its lock and the resolved package cache.
+  /// `build --workspace` already left every DNA-owned scaffold file
+  /// (`dna/`, a manifest) out of its own output; a workspace holds only
+  /// `.claude/` and `CLAUDE.md`.
+  void _removeWorkspaceScaffold(String root) {
+    for (final name in ['pubspec.yaml', 'pubspec.lock']) {
+      final file = File(path.join(root, name));
+      if (file.existsSync()) file.deleteSync();
+    }
+    final dartTool = Directory(path.join(root, '.dart_tool'));
+    if (dartTool.existsSync()) dartTool.deleteSync(recursive: true);
   }
 }
