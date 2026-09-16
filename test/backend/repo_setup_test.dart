@@ -122,7 +122,7 @@ void main() {
       expect(
         file.readAsStringSync(),
         '{"folders":[{"path":"a"},{"path":"b"}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"settings":${jsonEncode(codeWorkspaceSettings)},'
         '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
     });
@@ -152,7 +152,7 @@ void main() {
       expect(vitest['autoAttachChildProcesses'], isTrue);
     });
 
-    test('turns the automatic pub get of the Dart extension off', () {
+    test('writes the shared VS Code settings', () {
       // Its FileSystemWatcher fires on gg's own CLI writes too and rewrites
       // the lock file a second later, right under the running command.
       final ticketDir = Directory(path.join(tmp.path, 'settings_ticket'))
@@ -175,6 +175,10 @@ void main() {
             as Map<String, dynamic>)['dart.runPubGetOnPubspecChanges'],
         'never',
       );
+      expect(
+        (written['settings'] as Map<String, dynamic>)['files.associations'],
+        <String, String>{'**/dna/_dna.json': 'jsonc'},
+      );
     });
 
     test('falls back to the ticket folder when there is no repo', () {
@@ -186,7 +190,7 @@ void main() {
         File(path.join(ticketDir.path, 'empty_ticket.code-workspace'))
             .readAsStringSync(),
         '{"folders":[{"path":"."}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"settings":${jsonEncode(codeWorkspaceSettings)},'
         '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
     });
@@ -201,7 +205,7 @@ void main() {
       expect(
         file.readAsStringSync(),
         '{"folders":[{"path":"ggsuite/gg_foo"}],'
-        '"settings":{"dart.runPubGetOnPubspecChanges":"never"},'
+        '"settings":${jsonEncode(codeWorkspaceSettings)},'
         '"launch":${jsonEncode(codeWorkspaceLaunch)}}\n',
       );
     });

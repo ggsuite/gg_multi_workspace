@@ -68,8 +68,13 @@ Future<void> installRepoDependencies({
 ///
 /// The key is resource-scoped, so it applies to every folder of the
 /// workspace — but a folder's own `.vscode/settings.json` still wins over it.
+///
+/// DNA configuration files use JSONC: comments and trailing commas are part
+/// of their supported syntax. The association keeps VS Code from validating
+/// `_dna.json` as strict JSON in every repository of the ticket.
 const Map<String, Object?> codeWorkspaceSettings = <String, Object?>{
   'dart.runPubGetOnPubspecChanges': 'never',
+  'files.associations': <String, String>{'**/dna/_dna.json': 'jsonc'},
 };
 
 /// The launch configurations every ticket workspace carries.

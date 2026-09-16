@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Associate DNA configuration files with JSONC in workspaces
+
 ## 4.9.0 - 2026-09-15
 
 ### Changed
