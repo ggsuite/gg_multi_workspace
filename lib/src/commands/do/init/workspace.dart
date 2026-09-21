@@ -134,6 +134,12 @@ class InitWorkspaceCommand extends Command<void> {
   /// (the same instantiation `build` performs), so it needs the flag as
   /// much as the explicit `build` call that follows it.
   ///
+  /// `--quiet` keeps the instantiation to the one line this command
+  /// prints when it is through: which file the DNA wrote is detail of a
+  /// workspace nobody hand-maintains, and the automatic commit helix
+  /// tries could not work here at all — the folder becomes a repository
+  /// only if the user runs `git init` afterwards.
+  ///
   /// A failure does not take the workspace down with it — the ocean is
   /// there and usable — it is reported with the commands to repeat by hand.
   Future<void> _instantiateDna(String root) async {
@@ -146,8 +152,9 @@ class InitWorkspaceCommand extends Command<void> {
         '--target',
         target,
         '--workspace',
+        '--quiet',
       ]);
-      await _runDna(['build', '--target', target, '--workspace']);
+      await _runDna(['build', '--target', target, '--workspace', '--quiet']);
     } catch (e) {
       ggLog(cError('Could not instantiate $workspaceDnaLayer: $e'));
       ggLog(

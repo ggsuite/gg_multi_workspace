@@ -90,10 +90,12 @@ void main() {
 
       // init, add, build — in this order, all aimed at the workspace root.
       final root = tempDir.path.replaceAll(r'\', '/');
+      // Both instantiating steps run quiet: the line below is the whole
+      // report a workspace gets.
       expect(dnaCalls, [
         ['init', '--target', root, '--language', 'dart'],
-        ['add', workspaceDnaLayer, '--target', root, '--workspace'],
-        ['build', '--target', root, '--workspace'],
+        ['add', workspaceDnaLayer, '--target', root, '--workspace', '--quiet'],
+        ['build', '--target', root, '--workspace', '--quiet'],
       ]);
       expect(
         messages.last,
