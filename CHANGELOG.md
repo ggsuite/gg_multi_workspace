@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.9.2 - 2026-09-22
+
+### Changed
+
+- Run the DNA instantiation of a new workspace quietly
+
 ## 4.9.1 - 2026-09-16
 
 ### Changed
