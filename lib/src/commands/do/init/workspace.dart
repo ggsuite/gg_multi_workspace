@@ -87,6 +87,15 @@ class InitWorkspaceCommand extends Command<void> {
   @override
   String get description => 'Initialize the ocean';
 
+  /// An existing ocean makes the command a repetition, not an error: the
+  /// folder stays as it is and only the DNA is instantiated again. That is
+  /// what brings a workspace created before the DNA existed - or one whose
+  /// `CLAUDE.md` was lost - up to the current guides and skills.
+  ///
+  /// The two guards below only apply to a workspace that is about to be
+  /// created. A root that already holds the ocean is never empty, and
+  /// [WorkspaceUtils.isInsideExistingWorkspace] starts at the directory
+  /// itself, so both would refuse the repetition.
   @override
   Future<void> run() async {
     final rootDir = Directory(rootPath);
@@ -96,28 +105,27 @@ class InitWorkspaceCommand extends Command<void> {
 
     if (wsDir.existsSync()) {
       ggLog(cWarn('ocean already exists at: ${_rel(wsPath)}'));
-      return;
-    }
+    } else {
+      if (rootDir.listSync().isNotEmpty) {
+        ggLog(cError('The directory must be empty to initialize a workspace.'));
+        return;
+      }
 
-    if (rootDir.listSync().isNotEmpty) {
-      ggLog(cError('The directory must be empty to initialize a workspace.'));
-      return;
-    }
+      if (WorkspaceUtils.isInsideExistingWorkspace(rootDir.path)) {
+        ggLog(
+          cError(
+            'Cannot initialize a new workspace inside an existing Gg Multi '
+            'workspace.',
+          ),
+        );
+        return;
+      }
 
-    if (WorkspaceUtils.isInsideExistingWorkspace(rootDir.path)) {
-      ggLog(
-        cError(
-          'Cannot initialize a new workspace inside an existing Gg Multi '
-          'workspace.',
-        ),
-      );
-      return;
+      // ---------------------------------------------------------------------
+      // Create the workspace -------------------------------------------------
+      wsDir.createSync(recursive: true);
+      ggLog(cDetail('✓ ocean initialized at: ${_rel(wsPath)}'));
     }
-
-    // -----------------------------------------------------------------------
-    // Create the workspace ---------------------------------------------------
-    wsDir.createSync(recursive: true);
-    ggLog(cDetail('✓ ocean initialized at: ${_rel(wsPath)}'));
 
     await _instantiateDna(rootDir.path);
   }

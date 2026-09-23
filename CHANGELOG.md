@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.9.3 - 2026-09-23
+
+### Changed
+
+- Instantiate the workspace DNA also when the ocean already exists
+
 ## 4.9.2 - 2026-09-22
 
 ### Changed
