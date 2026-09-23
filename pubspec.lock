@@ -372,10 +372,9 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: "9b4b852445fd48c0e93022f4c70f8238ec35cacb1c01712278031598b83a8a6d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.6.2"
   gg_one:
     dependency: "direct main"
@@ -397,10 +396,10 @@ packages:
     dependency: transitive
     description:
       name: gg_one_core
-      sha256: "031526bdc781f2dd64fd1cd420f78ffe25071afc98030b88e52e42ac402d9dc3"
+      sha256: c1ac8cc660e45123c50e308e1ac8c461311c461a0d33eb8f6942067226e3d766
       url: "https://pub.dev"
     source: hosted
-    version: "2.8.1"
+    version: "2.9.0"
   gg_one_do_publish:
     dependency: transitive
     description:

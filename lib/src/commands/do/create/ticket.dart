@@ -104,6 +104,12 @@ class TicketCommand extends DirCommand<void> {
     // rewrites it with one entry per repository.
     writeCodeWorkspaceFile(ticketDir, const <String>[]);
 
+    // Creating a ticket is the moment the workspace is touched as a whole,
+    // so it is where the trash is swept: everything that has been lying in
+    // it for `Trash.maxAge` goes. Best-effort — a workspace that cannot be
+    // cleaned still gets its ticket.
+    await _expireTrash(ticketDir);
+
     // Every ticket gets its trash folder right away, so `do publish` has a
     // place to move the ticket's repos to and the user can find it even
     // before anything was removed.
@@ -118,5 +124,31 @@ class TicketCommand extends DirCommand<void> {
     ggLog(cCmd('    gg do add <repo1> <repo2> ...'));
 
     ggLog(cCmd('    code $issueId.code-workspace'));
+  }
+
+  // ...........................................................................
+  /// Drops the trash entries of the workspace holding [ticketDir] that are
+  /// older than [Trash.maxAge] and reports how many went.
+  ///
+  /// Nothing here may cost the user their ticket: a trash that cannot be
+  /// read or written — a locked folder, a read-only volume — is reported
+  /// and left to the next run.
+  Future<void> _expireTrash(Directory ticketDir) async {
+    try {
+      final removed = await Trash.expire(
+        rootPath: WorkspaceUtils.rootOfTicket(ticketDir),
+      );
+      if (removed.isNotEmpty) {
+        ggLog(
+          cDetail(
+            '✓ Emptied ${removed.length} trash '
+            '${removed.length == 1 ? 'entry' : 'entries'} older than '
+            '${Trash.maxAge.inDays} days',
+          ),
+        );
+      }
+    } on Object catch (e) {
+      ggLog(cWarn('⚠️ Could not empty the trash: $e'));
+    }
   }
 }
