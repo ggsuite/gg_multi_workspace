@@ -209,7 +209,7 @@ void main() {
     });
 
     test(
-      'should not recreate if already exists, and log accordingly',
+      'should not recreate if already exists, but instantiate the dna',
       () async {
         final wsPath = path.join(tempDir.path, ggMultiOceanFolder);
         Directory(wsPath).createSync(recursive: true);
@@ -220,9 +220,51 @@ void main() {
         expect(messages[0], contains('ocean already exists at:'));
         expect(messages[0], contains(ggMultiOceanFolder));
         expect(Directory(wsPath).existsSync(), isTrue);
-        expect(dnaCalls, isEmpty);
+
+        // The repetition is what brings a workspace without CLAUDE.md to
+        // the current guides, so the DNA runs like on a fresh one.
+        final root = tempDir.path.replaceAll(r'\', '/');
+        expect(dnaCalls, [
+          ['init', '--target', root, '--language', 'dart'],
+          [
+            'add',
+            workspaceDnaLayer,
+            '--target',
+            root,
+            '--workspace',
+            '--quiet',
+          ],
+          ['build', '--target', root, '--workspace', '--quiet'],
+        ]);
+        expect(
+          messages.last,
+          contains('$workspaceDnaLayer instantiated in the workspace'),
+        );
       },
     );
+
+    test('instantiates the dna although the root holds other files', () async {
+      // A workspace in use: the ocean is there and so are the tickets
+      // beside it. Neither may turn the repetition into an error.
+      Directory(path.join(tempDir.path, ggMultiOceanFolder))
+          .createSync(recursive: true);
+      Directory(path.join(tempDir.path, 'a_ticket')).createSync();
+      final runner = runnerFor(tempDir.path, runDna: runDna);
+
+      await runner.run(['workspace']);
+
+      expect(
+        messages,
+        isNot(
+          contains('The directory must be empty to initialize a workspace.'),
+        ),
+      );
+      expect(
+        messages.any((m) => m.contains('inside an existing Gg Multi')),
+        isFalse,
+      );
+      expect(dnaCalls.map((c) => c.first), ['init', 'add', 'build']);
+    });
 
     test('should not allow init inside non-empty directory', () async {
       // Arrange:
