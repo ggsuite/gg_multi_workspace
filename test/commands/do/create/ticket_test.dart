@@ -44,6 +44,64 @@ void main() {
       }
     });
 
+    group('empties the trash on the way', () {
+      test('and reports what it dropped', () async {
+        // Creating a ticket is where the workspace is swept: an entry that
+        // has been in the trash longer than Trash.maxAge goes.
+        final stale = Directory(path.join(tempDir.path, '.trash', 'OLD-1'))
+          ..createSync(recursive: true);
+        final long = DateTime.now()
+            .toUtc()
+            .subtract(Trash.maxAge + const Duration(days: 1))
+            .toIso8601String();
+        File(path.join(tempDir.path, '.trash', Trash.indexFileName))
+            .writeAsStringSync('{"OLD-1":"$long"}');
+
+        await runner.run([
+          'ticket',
+          '--input',
+          tempDir.path,
+          'CDM-1',
+          '-m',
+          'x',
+        ]);
+
+        expect(stale.existsSync(), isFalse);
+        expect(
+          messages.any((m) => m.contains('Emptied 1 trash entry older than')),
+          isTrue,
+        );
+      });
+
+      test('but never at the cost of the ticket', () async {
+        // A `.ocean` that is a file where a folder belongs makes the sweep
+        // throw — the ticket is created regardless.
+        Directory(path.join(tempDir.path, '.trash'))
+            .createSync(recursive: true);
+        File(path.join(tempDir.path, '.trash', '.ocean'))
+            .writeAsStringSync('not a folder');
+
+        await runner.run([
+          'ticket',
+          '--input',
+          tempDir.path,
+          'CDM-2',
+          '-m',
+          'x',
+        ]);
+
+        expect(
+          messages.any((m) => m.contains('Could not empty the trash')),
+          isTrue,
+        );
+        expect(
+          File(path.join(tempDir.path, 'CDM-2', ticketJsonFileName))
+              .existsSync(),
+          isTrue,
+        );
+      });
+    });
+
     test('creates folder and writes ticket.json file', () async {
       const issueId = 'CDM-128';
       const description = 'Fix some ugly bug';

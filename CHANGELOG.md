@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Expire trash entries and job directories after 30 days
+
 ## 4.9.3 - 2026-09-23
 
 ### Changed
