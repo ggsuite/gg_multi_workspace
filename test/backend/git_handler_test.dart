@@ -6,6 +6,8 @@
 
 import 'dart:io';
 
+import 'package:gg_git/gg_git.dart' show GitRetry;
+
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
@@ -84,6 +86,32 @@ void main() {
           expect(await parentDir.exists(), isTrue);
         },
       );
+
+      test('retries a clone the remote dropped', () async {
+        const repoUrl = 'https://github.com/example/repo.git';
+        final targetDirectory = path.join(tempDir.path, 'cloned_repo');
+        var calls = 0;
+        when(
+          () => mockProcessRunner('git', ['clone', repoUrl, targetDirectory]),
+        ).thenAnswer(
+          (_) async => ++calls == 1
+              ? ProcessResult(
+                  0,
+                  128,
+                  '',
+                  'Connection to github.com closed by remote host.',
+                )
+              : ProcessResult(0, 0, '', ''),
+        );
+
+        // No ggLog given: the notice of the retry goes nowhere.
+        await GitHandler(
+          processRunner: mockProcessRunner.call,
+          gitRetry: GitRetry.example,
+        ).cloneRepo(repoUrl, targetDirectory);
+
+        expect(calls, 2);
+      });
 
       test('throws an exception when the clone process fails', () async {
         // Arrange
@@ -282,6 +310,36 @@ void main() {
         expect(
           await gitHandler.remoteExists('https://github.com/org/repo.git'),
           isTrue,
+        );
+      });
+
+      test('is true after retrying a lookup the remote dropped', () async {
+        const repoUrl = 'https://github.com/org/repo.git';
+        final messages = <String>[];
+        var calls = 0;
+        when(() => mockProcessRunner('git', ['ls-remote', repoUrl])).thenAnswer(
+          (_) async => ++calls == 1
+              ? ProcessResult(
+                  0,
+                  128,
+                  '',
+                  'kex_exchange_identification: '
+                      'Connection closed by remote host',
+                )
+              : ProcessResult(0, 0, 'hash\tHEAD', ''),
+        );
+
+        final handler = GitHandler(
+          processRunner: mockProcessRunner.call,
+          ggLog: messages.add,
+          gitRetry: GitRetry.example,
+        );
+
+        expect(await handler.remoteExists(repoUrl), isTrue);
+        expect(calls, 2);
+        expect(
+          messages.join('\n'),
+          contains('git ls-remote $repoUrl failed with a transient'),
         );
       });
 

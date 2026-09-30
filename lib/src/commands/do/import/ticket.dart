@@ -68,7 +68,7 @@ class DoCheckoutCommand extends Command<dynamic> {
     CopyDirectory? copyDir,
     TicketJsonFetcher? fetchTicketJson,
     // coverage:ignore-start
-  }) : gitHandler = gitHandler ?? GitHandler(),
+  }) : gitHandler = gitHandler ?? GitHandler(ggLog: ggLog),
        _fetch = fetch ?? gg_git.Fetch(ggLog: ggLog),
        _checkout = checkout ?? gg_git.Checkout(ggLog: ggLog),
        _showFile = showFile ?? gg_git.ShowFile(ggLog: ggLog),
