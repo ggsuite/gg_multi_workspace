@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Retry git clone, ls-remote and the ocean fetches of do add on transient transport errors via gg_git's GitRetry
+
 ## 4.10.0 - 2026-09-30
 
 ### Changed

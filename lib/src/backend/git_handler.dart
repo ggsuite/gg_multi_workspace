@@ -9,6 +9,7 @@ import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_log/gg_log.dart';
 import 'package:gg_process/gg_process.dart';
 
 /// Typedef for a process runner function.
@@ -19,8 +20,20 @@ class GitHandler {
 
   /// Constructor accepts an optional [processRunner]
   /// to enable testing by injection.
-  GitHandler({ProcessRunner? processRunner})
-    : processRunner = processRunner ?? ggRunProcess;
+  ///
+  /// The network commands (clone, ls-remote) are retried by [gitRetry] when
+  /// the remote drops the connection; [ggLog] receives the notice of a retry.
+  GitHandler({
+    ProcessRunner? processRunner,
+    GgLog? ggLog,
+    this._gitRetry = const GitRetry(),
+  }) : processRunner = processRunner ?? ggRunProcess,
+       _ggLog = ggLog ?? _silent;
+
+  final GgLog _ggLog;
+  final GitRetry _gitRetry;
+
+  static void _silent(String message) {}
 
   /// Clones the repository from [repoUrl] into [targetDirectory].
   /// Throws an exception if cloning fails.
@@ -32,11 +45,11 @@ class GitHandler {
     final createdRoot = _createParentDirectories(directory);
 
     // Run the git clone command using the injected process runner.
-    final result = await processRunner('git', <String>[
-      'clone',
-      repoUrl,
-      targetDirectory,
-    ]);
+    final result = await _gitRetry.run(
+      () => processRunner('git', <String>['clone', repoUrl, targetDirectory]),
+      ggLog: _ggLog,
+      description: 'git clone $repoUrl',
+    );
     if (result.exitCode != 0) {
       _removeLeftovers(target: directory, createdRoot: createdRoot);
 
@@ -104,7 +117,11 @@ class GitHandler {
   /// but is still empty counts as present too.
   Future<bool> remoteExists(String repoUrl) async {
     try {
-      final result = await processRunner('git', <String>['ls-remote', repoUrl]);
+      final result = await _gitRetry.run(
+        () => processRunner('git', <String>['ls-remote', repoUrl]),
+        ggLog: _ggLog,
+        description: 'git ls-remote $repoUrl',
+      );
       return result.exitCode == 0;
     } catch (_) {
       // A missing git binary must not look like a missing repository.

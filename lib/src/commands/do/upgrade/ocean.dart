@@ -35,7 +35,7 @@ class UpdateOceanCommand extends Command<void> {
     DuplicateRepoCleanup? duplicateRepoCleanup,
     // coverage:ignore-start
   }) : rootPath = rootPath ?? Directory.current.path,
-       gitCloner = gitCloner ?? GitHandler(),
+       gitCloner = gitCloner ?? GitHandler(ggLog: ggLog),
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
        azureDevOpsPlatform = azureDevOpsPlatform ?? AzureDevOpsPlatform(),
        repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),

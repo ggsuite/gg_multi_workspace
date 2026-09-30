@@ -90,6 +90,7 @@ void main() {
       Graph? graph,
       FetchRepoUrl? fetchRepoUrl,
       DefaultBranch? defaultBranch,
+      GitRetry gitRetry = const GitRetry(),
     }) {
       final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
       runner = CommandRunner<void>('test', 'Test for AddCommand');
@@ -108,6 +109,7 @@ void main() {
           graph: graph,
           fetchRepoUrl: fetchRepoUrl,
           defaultBranch: defaultBranch ?? fakeDefaultBranch(),
+          gitRetry: gitRetry,
         ),
       );
     }
@@ -453,6 +455,79 @@ void main() {
       ]);
 
       verify(() => mockGitCloner.cloneRepo(any(), any())).called(1);
+    });
+
+    test('retries an ocean fetch the remote dropped', () async {
+      const repoName = 'testRepoRetry';
+      final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
+        ..createSync(recursive: true);
+      File(path.join(repoDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: project_retry\nversion: 1.0.0\n');
+      final ticketDir = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET'),
+      )..createSync(recursive: true);
+
+      final mockDoCommit = MockGgSystemCommit();
+      when(
+        () => mockDoCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
+        ),
+      ).thenAnswer(
+        (_) async => const gg.GgSystemCommitResult(
+          userCommitCreated: false,
+          systemCommitCreated: true,
+          ggOwnedPaths: ['pubspec_overrides.yaml'],
+          foreignPaths: [],
+        ),
+      );
+
+      // The first »git fetch« loses the connection; every other command
+      // succeeds and reports nothing.
+      var fetches = 0;
+      Future<ProcessResult> processRunner(
+        String executable,
+        List<String> arguments, {
+        String? workingDirectory,
+        Map<String, String>? environment,
+        bool runInShell = false,
+      }) async {
+        final isFetch = arguments.length == 1 && arguments.first == 'fetch';
+        if (isFetch && ++fetches == 1) {
+          return ProcessResult(
+            0,
+            128,
+            '',
+            'Connection to github.com closed by remote host.',
+          );
+        }
+        return ProcessResult(0, 0, '', '');
+      }
+
+      createRunner(
+        executionPath: ticketDir.path,
+        systemCommit: mockDoCommit,
+        processRunner: processRunner,
+        gitRetry: GitRetry.example,
+      );
+
+      await runner.run(['add', '--verbose', repoName]);
+
+      expect(fetches, 2);
+      expect(
+        logMessages.join('\n'),
+        contains('git fetch failed with a transient network error'),
+      );
+      expect(
+        File(path.join(ticketDir.path, repoName, 'pubspec.yaml')).existsSync(),
+        isTrue,
+      );
     });
 
     test('copies repo into ticket workspace and relocalizes ticket '

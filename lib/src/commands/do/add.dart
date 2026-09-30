@@ -117,13 +117,15 @@ class AddCommand extends Command<dynamic> {
     RepoFreshness? repoFreshness,
     DuplicateRepoCleanup? duplicateRepoCleanup,
     DefaultBranch? defaultBranch,
+    GitRetry gitRetry = const GitRetry(),
     // coverage:ignore-start
   }) : _selectOrganization = selectOrganization ?? defaultSelectOrganization,
        _repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),
        _defaultBranch = defaultBranch ?? DefaultBranch(ggLog: ggLog),
        _duplicateRepoCleanup =
            duplicateRepoCleanup ?? const DuplicateRepoCleanup(),
-       gitCloner = gitCloner ?? GitHandler(),
+       gitCloner = gitCloner ?? GitHandler(ggLog: ggLog, gitRetry: gitRetry),
+       _gitRetry = gitRetry,
        gitHubPlatform = gitHubPlatform ?? GitHubPlatform(),
        azureDevOpsPlatform = azureDevOpsPlatform ?? AzureDevOpsPlatform(),
        processRunner = processRunner ?? ggRunProcess,
@@ -211,6 +213,9 @@ class AddCommand extends Command<dynamic> {
 
   /// Instance to handle running general processes.
   final ProcessRunner processRunner;
+
+  /// Retries a git network command the remote dropped.
+  final GitRetry _gitRetry;
 
   /// Resolved ocean path.
   final String oceanWorkspacePath;
@@ -1205,20 +1210,30 @@ class AddCommand extends Command<dynamic> {
     throw Exception(cError('Repository $repoName in the ocean is not clean'));
   }
 
-  /// Runs a single git command in [repoDir] and logs success/failure.
+  /// Runs a single git command in [repoDir] and logs success/failure. A
+  /// [network] command (fetch) is retried when the remote drops the
+  /// connection.
   Future<ProcessResult> _runGit({
     required Directory repoDir,
     required List<String> arguments,
     required String successMessage,
     required String failureLabel,
     required GgLog ggLog,
+    bool network = false,
   }) async {
-    final result = await processRunner(
+    Future<ProcessResult> run() => processRunner(
       'git',
       arguments,
       workingDirectory: repoDir.path,
       runInShell: true,
     );
+    final result = network
+        ? await _gitRetry.run(
+            run,
+            ggLog: ggLog,
+            description: 'git ${arguments.join(' ')}',
+          )
+        : await run();
 
     if (result.exitCode != 0) {
       ggLog(cError('Failed to execute $failureLabel: ${result.stderr}'));
@@ -1248,13 +1263,18 @@ class AddCommand extends Command<dynamic> {
       successMessage: 'Executed git fetch in $repoName in ocean.',
       failureLabel: 'git fetch in $repoName in ocean',
       ggLog: ggLog,
+      network: true,
     );
 
-    final setHead = await processRunner(
-      'git',
-      <String>['remote', 'set-head', 'origin', '--auto'],
-      workingDirectory: repoDir.path,
-      runInShell: true,
+    final setHead = await _gitRetry.run(
+      () => processRunner(
+        'git',
+        <String>['remote', 'set-head', 'origin', '--auto'],
+        workingDirectory: repoDir.path,
+        runInShell: true,
+      ),
+      ggLog: ggLog,
+      description: 'git remote set-head origin --auto',
     );
     if (setHead.exitCode != 0) {
       ggLog(
@@ -1356,6 +1376,7 @@ class AddCommand extends Command<dynamic> {
       successMessage: 'Executed git fetch --tags in $repoName in ocean.',
       failureLabel: 'git fetch --tags in $repoName in ocean',
       ggLog: ggLog,
+      network: true,
     );
   }
 
@@ -1373,6 +1394,7 @@ class AddCommand extends Command<dynamic> {
           '$repoName in ocean.',
       failureLabel: 'git fetch --prune --tags in $repoName in ocean',
       ggLog: ggLog,
+      network: true,
     );
   }
 
