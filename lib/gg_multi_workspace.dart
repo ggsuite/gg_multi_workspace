@@ -17,6 +17,7 @@ export 'src/backend/list_backend.dart';
 export 'src/backend/organization_repo_lists.dart';
 export 'src/backend/repo_setup.dart';
 export 'src/backend/vscode_launcher.dart';
+export 'src/backend/workspace_dna.dart';
 export 'src/commands/do/add.dart';
 export 'src/commands/do/code.dart' hide DirectoryFactory;
 export 'src/commands/do/create.dart';

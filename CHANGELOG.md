@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.10.0 - 2026-09-30
+
+### Changed
+
+- Place the latest dna_gg in every new ticket and keep the workspace root on it
+- Keep the root DNA when pub.dev is unreachable, keep the block in do init claude
+
 ## 4.9.4 - 2026-09-23
 
 ### Changed
