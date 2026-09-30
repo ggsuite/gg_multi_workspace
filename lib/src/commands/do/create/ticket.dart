@@ -156,7 +156,7 @@ class TicketCommand extends DirCommand<void> {
         ggLog: ggLog,
         latestVersion: _latestDnaVersion,
       );
-      copyWorkspaceDna(root: root, ticketDir: ticketDir.path);
+      await copyWorkspaceDna(root: root, ticketDir: ticketDir.path);
     } on Object catch (e) {
       ggLog(cWarn('⚠️ Could not place $workspaceDnaLayer in the ticket: $e'));
     }

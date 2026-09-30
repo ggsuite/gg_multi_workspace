@@ -9,7 +9,6 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
-import 'package:path/path.dart' as p;
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
@@ -36,7 +35,7 @@ class InitWorkspaceCommand extends Command<void> {
 
   final RunDna _runDna;
 
-  String _rel(String absPath) => p.relative(absPath, from: rootPath);
+  String _rel(String absPath) => path.relative(absPath, from: rootPath);
 
   @override
   String get name => 'workspace';
@@ -88,7 +87,6 @@ class InitWorkspaceCommand extends Command<void> {
       root: rootDir.path,
       runDna: _runDna,
       ggLog: ggLog,
-      place: 'workspace',
     );
   }
 }

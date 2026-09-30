@@ -7,6 +7,7 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 import 'package:gg_multi_workspace/src/commands/do/init/claude.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
@@ -85,6 +86,22 @@ void main() {
 
       expect(messages.any((m) => m.contains('Creating CLAUDE.md')), isTrue);
       expect(messages, contains('Execute claude code with:\nclaude'));
+    });
+
+    test('keeps the gg DNA block of an existing ticket CLAUDE.md', () async {
+      const block = '$claudeMdStartMarker\n# gg workflow\n$claudeMdEndMarker';
+      final ticketClaudeFile = File(path.join(ticketDir.path, 'CLAUDE.md'))
+        ..writeAsStringSync('$block\n');
+      final runner = CommandRunner<void>('test', 'do claude ticket')
+        ..addCommand(DoClaudeCommand(ggLog: ggLog));
+
+      // Twice: the block is kept, not multiplied.
+      await runner.run(['claude', '--input', ticketDir.path]);
+      await runner.run(['claude', '--input', ticketDir.path]);
+
+      final content = ticketClaudeFile.readAsStringSync();
+      expect(content, contains('## Architecture'));
+      expect(block.allMatches(content), hasLength(1));
     });
 
     test('throws when a repository has no CLAUDE.md', () async {

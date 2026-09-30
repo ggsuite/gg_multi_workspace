@@ -14,6 +14,7 @@ import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 
 /// Creates a ticket-level CLAUDE.md file from all repositories in a ticket.
 class DoClaudeCommand extends DirCommand<void> {
@@ -102,6 +103,14 @@ class DoClaudeCommand extends DirCommand<void> {
     }
 
     buffer.writeln(claudeCodeStandards);
+
+    // The gg DNA block `do create ticket` placed survives the rewrite.
+    final dnaBlock = claudeMdBlockIn(ticketDir.path);
+    if (dnaBlock != null) {
+      buffer
+        ..writeln(dnaBlock)
+        ..writeln();
+    }
 
     final ticketClaudeFile = File(path.join(ticketDir.path, 'CLAUDE.md'));
     await ticketClaudeFile.writeAsString(buffer.toString());

@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_multi_core/gg_multi_core.dart' show copyDirectory;
 import 'package:gg_one/gg_one.dart' show GgPrompts;
 import 'package:helix/helix.dart' as helix;
 import 'package:http/http.dart' as http;
@@ -59,30 +60,28 @@ class _DnaCommand extends Command<dynamic> {
 }
 
 // .............................................................................
-/// Places [workspaceDnaLayer] into [root] — a workspace root or a ticket
-/// folder. The same three steps as by hand: `gg dna init`, `gg dna add
-/// dna_gg --workspace` and `gg dna build --workspace`. `add` resolves
-/// the latest `dna_gg`, so every call starts from the current guides and
-/// skills. `--workspace` instantiates only `.claude/` and the managed
-/// `CLAUDE.md` block — neither folder is a package of its own, so it
-/// never gets `doc/`, `scripts/`, `.github/` or a DNA manifest. `add`
+/// Places [workspaceDnaLayer] into the workspace [root] — the folder
+/// holding the ocean. The same three steps as by hand: `gg dna init`,
+/// `gg dna add dna_gg --workspace` and `gg dna build --workspace`. `add`
+/// resolves the latest `dna_gg`, so every call starts from the current
+/// guides and skills. `--workspace` instantiates only `.claude/` and the
+/// managed `CLAUDE.md` block — a workspace is no package of its own, so
+/// it never gets `doc/`, `scripts/`, `.github/` or a DNA manifest. `add`
 /// builds right after installing the layer (the same instantiation
 /// `build` performs), so it needs the flag as much as the explicit
 /// `build` call that follows it.
 ///
 /// `--quiet` keeps the instantiation to the one line reported when it is
-/// through: which file the DNA wrote is detail of a folder nobody
+/// through: which file the DNA wrote is detail of a workspace nobody
 /// hand-maintains, and the automatic commit helix tries could not work
-/// here at all — neither folder is a repository.
+/// here at all — the folder is no repository.
 ///
 /// A failure is reported with the commands to repeat by hand, never
-/// thrown: the workspace or ticket is usable without its DNA. [place]
-/// names the folder in the reports — `workspace` or `ticket`.
-Future<bool> instantiateWorkspaceDna({
+/// thrown: the workspace is usable without its DNA.
+Future<void> instantiateWorkspaceDna({
   required String root,
   required RunDna runDna,
   required GgLog ggLog,
-  required String place,
 }) async {
   final target = root.replaceAll(r'\', '/');
   try {
@@ -105,12 +104,11 @@ Future<bool> instantiateWorkspaceDna({
         'gg dna build --workspace',
       ),
     );
-    return false;
+    return;
   }
   _writeStamp(root);
   _removeScaffold(root);
-  ggLog(cDetail('✓ $workspaceDnaLayer instantiated in the $place'));
-  return true;
+  ggLog(cDetail('✓ $workspaceDnaLayer instantiated in the workspace'));
 }
 
 // .............................................................................
@@ -123,6 +121,21 @@ const String claudeMdStartMarker = '<!-- helix:claude_md:start -->';
 
 /// Marker that closes the managed `CLAUDE.md` block helix writes.
 const String claudeMdEndMarker = '<!-- helix:claude_md:end -->';
+
+/// The managed block of a `CLAUDE.md` [content], markers included —
+/// `null` when it holds no complete one.
+String? claudeMdBlock(String content) {
+  final start = content.indexOf(claudeMdStartMarker);
+  final end = content.indexOf(claudeMdEndMarker);
+  if (start < 0 || end < start) return null;
+  return content.substring(start, end + claudeMdEndMarker.length);
+}
+
+/// The managed block of the `CLAUDE.md` in [dir], `null` without one.
+String? claudeMdBlockIn(String dir) {
+  final file = File(path.join(dir, 'CLAUDE.md'));
+  return file.existsSync() ? claudeMdBlock(file.readAsStringSync()) : null;
+}
 
 /// Notes the [workspaceDnaLayer] version `add` resolved — read from the
 /// lock file before the scaffold goes — so [refreshWorkspaceDna] can tell
@@ -151,7 +164,7 @@ Future<String?> latestWorkspaceDnaVersion({
   try {
     final response = await fetch(
       Uri.parse('https://pub.dev/api/packages/$workspaceDnaLayer'),
-    ).timeout(const Duration(seconds: 5));
+    ).timeout(const Duration(seconds: 2));
     if (response.statusCode != 200) return null;
     final json = jsonDecode(response.body);
     final latest = json is Map ? json['latest'] : null;
@@ -164,66 +177,51 @@ Future<String?> latestWorkspaceDnaVersion({
 
 // .............................................................................
 /// Brings the gg DNA of the workspace [root] to the latest
-/// [workspaceDnaLayer]. The cheap path first: one look at pub.dev, and a
-/// root whose stamp already names that version and that still holds its
-/// `CLAUDE.md` is left as it is. Only a new release, a missing stamp or
-/// an unreachable pub.dev pays for the instantiation.
+/// [workspaceDnaLayer]. The cheap path first: one look at pub.dev
+/// ([latestVersion]), and a root that holds its managed `CLAUDE.md` block
+/// is left as it is when its stamp names that version — or when pub.dev
+/// cannot be asked: helix needs pub.dev as well, so offline the DNA that
+/// is there is the best there is. Only a new release or a root without
+/// its DNA pays for the instantiation.
 Future<void> refreshWorkspaceDna({
   required String root,
   required RunDna runDna,
   required GgLog ggLog,
-  Future<String?> Function()? latestVersion,
+  required Future<String?> Function() latestVersion,
 }) async {
-  final latest = await (latestVersion ?? latestWorkspaceDnaVersion)();
+  final latest = await latestVersion();
   final stamp = File(path.join(root, dnaVersionStampPath));
   final upToDate =
-      latest != null &&
+      claudeMdBlockIn(root) != null &&
       stamp.existsSync() &&
-      stamp.readAsStringSync().trim() == latest &&
-      File(path.join(root, 'CLAUDE.md')).existsSync();
+      (latest == null || stamp.readAsStringSync().trim() == latest);
   if (upToDate) return;
 
-  await instantiateWorkspaceDna(
-    root: root,
-    runDna: runDna,
-    ggLog: ggLog,
-    place: 'workspace',
-  );
+  await instantiateWorkspaceDna(root: root, runDna: runDna, ggLog: ggLog);
 }
 
 // .............................................................................
 /// Copies the gg DNA of the workspace [root] into [ticketDir]: the managed
 /// block of its `CLAUDE.md` — only the block, the user's own text around
-/// it stays in the root — and its `.claude/skills/`. A root without DNA
-/// leaves the ticket without it.
-void copyWorkspaceDna({required String root, required String ticketDir}) {
-  final rootClaude = File(path.join(root, 'CLAUDE.md'));
-  if (rootClaude.existsSync()) {
-    final content = rootClaude.readAsStringSync();
-    final start = content.indexOf(claudeMdStartMarker);
-    final end = content.indexOf(claudeMdEndMarker);
-    if (start >= 0 && end > start) {
-      final block = content.substring(start, end + claudeMdEndMarker.length);
-      File(path.join(ticketDir, 'CLAUDE.md')).writeAsStringSync('$block\n');
-    }
+/// it stays in the root — and everything in its `.claude/skills/`, the
+/// user's own skills included: which ones the DNA placed is not recorded.
+/// A root without DNA leaves the ticket without it.
+Future<void> copyWorkspaceDna({
+  required String root,
+  required String ticketDir,
+}) async {
+  final block = claudeMdBlockIn(root);
+  if (block != null) {
+    File(path.join(ticketDir, 'CLAUDE.md')).writeAsStringSync('$block\n');
   }
 
   final skills = Directory(path.join(root, '.claude', 'skills'));
   if (skills.existsSync()) {
-    _copyDir(skills, Directory(path.join(ticketDir, '.claude', 'skills')));
-  }
-}
-
-/// Copies [from] into [to], recursively.
-void _copyDir(Directory from, Directory to) {
-  to.createSync(recursive: true);
-  for (final entity in from.listSync()) {
-    final target = path.join(to.path, path.basename(entity.path));
-    if (entity is Directory) {
-      _copyDir(entity, Directory(target));
-    } else if (entity is File) {
-      entity.copySync(target);
-    }
+    await copyDirectory(
+      skills,
+      Directory(path.join(ticketDir, '.claude', 'skills')),
+      skipNames: const {},
+    );
   }
 }
 

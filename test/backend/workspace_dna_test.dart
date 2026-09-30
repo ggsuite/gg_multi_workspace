@@ -87,15 +87,13 @@ void main() {
     test(
       'runs init, add, build and keeps only .claude and CLAUDE.md',
       () async {
-        final ok = await instantiateWorkspaceDna(
+        await instantiateWorkspaceDna(
           root: tempDir.path,
           runDna: fakeDna(tempDir.path),
           ggLog: ggLog,
-          place: 'ticket',
         );
 
         final root = tempDir.path.replaceAll(r'\', '/');
-        expect(ok, isTrue);
         expect(dnaCalls, [
           ['init', '--target', root, '--language', 'dart'],
           [
@@ -112,7 +110,7 @@ void main() {
         expect(file('pubspec.lock').existsSync(), isFalse);
         expect(Directory(file('.dart_tool').path).existsSync(), isFalse);
         expect(file('CLAUDE.md').existsSync(), isTrue);
-        expect(messages.last, '✓ dna_gg instantiated in the ticket');
+        expect(messages.last, '✓ dna_gg instantiated in the workspace');
       },
     );
 
@@ -121,7 +119,6 @@ void main() {
         root: tempDir.path,
         runDna: fakeDna(tempDir.path, version: '0.7.0'),
         ggLog: ggLog,
-        place: 'workspace',
       );
       expect(file(dnaVersionStampPath).readAsStringSync(), '0.7.0');
     });
@@ -132,7 +129,6 @@ void main() {
         root: tempDir.path,
         runDna: (_) async {},
         ggLog: ggLog,
-        place: 'workspace',
       );
       expect(file(dnaVersionStampPath).existsSync(), isFalse);
 
@@ -145,7 +141,6 @@ void main() {
           }
         },
         ggLog: ggLog,
-        place: 'workspace',
       );
       expect(file(dnaVersionStampPath).existsSync(), isFalse);
     });
@@ -153,7 +148,7 @@ void main() {
     test(
       'reports a failure with the manual steps and keeps the scaffold',
       () async {
-        final ok = await instantiateWorkspaceDna(
+        await instantiateWorkspaceDna(
           root: tempDir.path,
           runDna: (args) async {
             if (args.first == 'init') {
@@ -163,10 +158,7 @@ void main() {
             throw Exception('pub add failed');
           },
           ggLog: ggLog,
-          place: 'workspace',
         );
-
-        expect(ok, isFalse);
         expect(file('pubspec.yaml').existsSync(), isTrue);
         expect(
           messages,
@@ -250,11 +242,25 @@ void main() {
       expect(dnaCalls, hasLength(3));
     });
 
-    test('instantiates when pub.dev cannot be asked', () async {
+    test('keeps what is there when pub.dev cannot be asked', () async {
       await refresh('0.5.1');
       dnaCalls.clear();
 
       await refresh(null);
+      expect(dnaCalls, isEmpty);
+    });
+
+    test('instantiates a root without DNA even offline', () async {
+      await refresh(null);
+      expect(dnaCalls, hasLength(3));
+    });
+
+    test('instantiates again when the managed block was lost', () async {
+      await refresh('0.5.1');
+      file('CLAUDE.md').writeAsStringSync('# Only my own notes\n');
+      dnaCalls.clear();
+
+      await refresh('0.5.1');
       expect(dnaCalls, hasLength(3));
     });
   });
@@ -268,7 +274,7 @@ void main() {
 
     File inTicket(String rel) => File(path.join(ticket.path, rel));
 
-    test('copies only the managed block and all skills', () {
+    test('copies only the managed block and all skills', () async {
       file('CLAUDE.md').writeAsStringSync('# My notes\n\n$_block\n\nMore.\n');
       file('.claude/skills/gg/SKILL.md')
         ..createSync(recursive: true)
@@ -278,7 +284,7 @@ void main() {
         ..writeAsStringSync('push');
       file(dnaVersionStampPath).writeAsStringSync('0.5.1');
 
-      copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
 
       expect(inTicket('CLAUDE.md').readAsStringSync(), '$_block\n');
       expect(inTicket('.claude/skills/gg/SKILL.md').readAsStringSync(), 'gg');
@@ -290,30 +296,41 @@ void main() {
       expect(inTicket(dnaVersionStampPath).existsSync(), isFalse);
     });
 
-    test('leaves the ticket alone when the root has no DNA', () {
-      copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+    test('leaves the ticket alone when the root has no DNA', () async {
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
       expect(inTicket('CLAUDE.md').existsSync(), isFalse);
       expect(Directory(inTicket('.claude').path).existsSync(), isFalse);
     });
 
-    test('copies no CLAUDE.md without a complete managed block', () {
+    test('copies no CLAUDE.md without a complete managed block', () async {
       file('CLAUDE.md').writeAsStringSync('# Only my own notes\n');
-      copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
       expect(inTicket('CLAUDE.md').existsSync(), isFalse);
 
       file('CLAUDE.md')
           .writeAsStringSync('$claudeMdEndMarker\n$claudeMdStartMarker');
-      copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
       expect(inTicket('CLAUDE.md').existsSync(), isFalse);
     });
 
-    test('skips what is neither file nor folder', () {
+    test('copies a link as a link', () async {
       final skills = Directory(path.join(tempDir.path, '.claude', 'skills'))
         ..createSync(recursive: true);
-      Link(path.join(skills.path, 'dangling')).createSync('/does/not/exist');
+      Link(path.join(skills.path, 'shared')).createSync('../shared');
 
-      copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
-      expect(Directory(inTicket('.claude/skills').path).listSync(), isEmpty);
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+      expect(
+        Link(inTicket('.claude/skills/shared').path).targetSync(),
+        '../shared',
+      );
+    });
+  });
+
+  group('claudeMdBlock', () {
+    test('returns the block with its markers, null without one', () {
+      expect(claudeMdBlock('before\n$_block\nafter'), _block);
+      expect(claudeMdBlock('no block'), isNull);
+      expect(claudeMdBlock(claudeMdStartMarker), isNull);
     });
   });
 

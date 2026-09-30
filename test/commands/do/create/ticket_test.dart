@@ -48,7 +48,7 @@ void main() {
         ..writeAsStringSync('# gg');
     }
 
-    setUp(() {
+    setUp(() async {
       messages.clear();
       dnaCalls.clear();
       tempDir = Directory.systemTemp.createTempSync('ticket_test_');
@@ -65,7 +65,7 @@ void main() {
 
       // A workspace root that already carries the latest dna_gg: creating
       // a ticket only copies it, helix does not run.
-      runDna(['build', '--target', tempDir.path]);
+      await runDna(['build', '--target', tempDir.path]);
       dnaCalls.clear();
       File(path.join(tempDir.path, dnaVersionStampPath))
           .writeAsStringSync('0.5.1');
