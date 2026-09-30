@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
+import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 
 /// Typedef for creating Directory instances (for testing).
 typedef DirectoryFactory = Directory Function(String path);
@@ -21,15 +22,20 @@ typedef DirectoryFactory = Directory Function(String path);
 /// Command to create a ticket folder and save ticket data as JSON.
 class TicketCommand extends DirCommand<void> {
   /// Constructor with optional workspace [rootPath] and [directoryFactory].
+  /// [runDna] and [latestDnaVersion] replace helix and pub.dev in tests.
   TicketCommand({
     required super.ggLog,
     String? rootPath,
     DirectoryFactory? directoryFactory,
+    RunDna? runDna,
+    Future<String?> Function()? latestDnaVersion,
     super.name = 'ticket',
     super.description = 'Create a ticket folder with its ticket data',
     // coverage:ignore-start
   }) : rootPath = rootPath ?? WorkspaceUtils.defaultGgMultiWorkspacePath(),
-       directoryFactory = directoryFactory ?? Directory.new
+       directoryFactory = directoryFactory ?? Directory.new,
+       _runDna = runDna ?? helixDnaRunner(ggLog),
+       _latestDnaVersion = latestDnaVersion ?? latestWorkspaceDnaVersion
   // coverage:ignore-end
   {
     // The ticket message
@@ -46,6 +52,10 @@ class TicketCommand extends DirCommand<void> {
 
   /// Factory to create Directory instances
   final DirectoryFactory directoryFactory;
+
+  final RunDna _runDna;
+
+  final Future<String?> Function() _latestDnaVersion;
 
   @override
   Future<void> exec({
@@ -115,6 +125,10 @@ class TicketCommand extends DirCommand<void> {
     // before anything was removed.
     Trash.createDirForTicket(ticketDir);
 
+    // The ticket is where Claude is started, so it gets the gg DNA of the
+    // workspace — refreshed first, so both carry the latest dna_gg.
+    await _placeDna(ticketDir);
+
     ggLog(cSuccess('✓ Created ticket $issueId'));
 
     ggLog(cAction('  Please run:'));
@@ -124,6 +138,28 @@ class TicketCommand extends DirCommand<void> {
     ggLog(cCmd('    gg do add <repo1> <repo2> ...'));
 
     ggLog(cCmd('    code $issueId.code-workspace'));
+  }
+
+  // ...........................................................................
+  /// Brings the DNA of the workspace root to the latest `dna_gg` and copies
+  /// it into [ticketDir]. The root is instantiated only when pub.dev has a
+  /// newer release than the root carries; the ticket always gets a plain
+  /// copy — one helix run per release instead of one per ticket.
+  ///
+  /// Like the trash sweep it never costs the user their ticket.
+  Future<void> _placeDna(Directory ticketDir) async {
+    try {
+      final root = WorkspaceUtils.rootOfTicket(ticketDir);
+      await refreshWorkspaceDna(
+        root: root,
+        runDna: _runDna,
+        ggLog: ggLog,
+        latestVersion: _latestDnaVersion,
+      );
+      copyWorkspaceDna(root: root, ticketDir: ticketDir.path);
+    } on Object catch (e) {
+      ggLog(cWarn('⚠️ Could not place $workspaceDnaLayer in the ticket: $e'));
+    }
   }
 
   // ...........................................................................

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Place the latest dna_gg in every new ticket and keep the workspace root on it
+
 ## 4.9.4 - 2026-09-23
 
 ### Changed

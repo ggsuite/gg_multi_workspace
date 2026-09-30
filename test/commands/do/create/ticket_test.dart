@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:args/command_runner.dart';
 import 'package:gg_capture_print/gg_capture_print.dart';
+import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 import 'package:gg_multi_workspace/src/commands/do/create/ticket.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
@@ -20,13 +21,36 @@ void main() {
     late Directory tempDir;
     late CommandRunner<void> runner;
     final messages = <String>[];
+    final dnaCalls = <List<String>>[];
 
     void ggLog(String msg) {
       messages.add(rmControls(msg));
     }
 
+    /// What the root holds beside the DNA the setUp seeds.
+    List<String> createdInRoot() => tempDir
+        .listSync()
+        .map((e) => path.basename(e.path))
+        .where((name) => name != 'CLAUDE.md' && name != '.claude')
+        .toList();
+
+    /// Stands in for helix: `build` leaves the managed block and a skill
+    /// in the folder it targets.
+    Future<void> runDna(List<String> args) async {
+      dnaCalls.add(args);
+      if (args.first != 'build') return;
+      final target = args[args.indexOf('--target') + 1];
+      File(path.join(target, 'CLAUDE.md')).writeAsStringSync(
+        '$claudeMdStartMarker\n# gg workflow\n$claudeMdEndMarker\n',
+      );
+      File(path.join(target, '.claude', 'skills', 'gg', 'SKILL.md'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# gg');
+    }
+
     setUp(() {
       messages.clear();
+      dnaCalls.clear();
       tempDir = Directory.systemTemp.createTempSync('ticket_test_');
       runner = CommandRunner<void>('test', 'TicketCommand Test')
         ..addCommand(
@@ -34,8 +58,111 @@ void main() {
             ggLog: ggLog,
             rootPath: tempDir.path,
             directoryFactory: (p) => Directory(p),
+            runDna: runDna,
+            latestDnaVersion: () async => '0.5.1',
           ),
         );
+
+      // A workspace root that already carries the latest dna_gg: creating
+      // a ticket only copies it, helix does not run.
+      runDna(['build', '--target', tempDir.path]);
+      dnaCalls.clear();
+      File(path.join(tempDir.path, dnaVersionStampPath))
+          .writeAsStringSync('0.5.1');
+    });
+
+    group('places the gg DNA', () {
+      test('copies an up-to-date root without running helix', () async {
+        await runner.run(['ticket', '--input', tempDir.path, 'D-0', '-m', 'x']);
+
+        expect(dnaCalls, isEmpty);
+        expect(
+          File(path.join(tempDir.path, 'D-0', 'CLAUDE.md')).readAsStringSync(),
+          contains('# gg workflow'),
+        );
+        expect(
+          File(
+            path.join(
+              tempDir.path,
+              'D-0',
+              '.claude',
+              'skills',
+              'gg',
+              'SKILL.md',
+            ),
+          ).existsSync(),
+          isTrue,
+        );
+      });
+
+      test(
+        'refreshes an outdated root and copies it into the ticket',
+        () async {
+          File(path.join(tempDir.path, dnaVersionStampPath))
+              .writeAsStringSync('0.4.0');
+
+          await runner.run([
+            'ticket',
+            '--input',
+            tempDir.path,
+            'D-1',
+            '-m',
+            'x',
+          ]);
+
+          // helix ran — on the root only, never on the ticket.
+          final root = tempDir.path.replaceAll(r'\', '/');
+          expect(dnaCalls.map((c) => c[c.indexOf('--target') + 1]).toSet(), {
+            root,
+          });
+
+          final ticket = path.join(tempDir.path, 'D-1');
+          for (final dir in [tempDir.path, ticket]) {
+            expect(
+              File(path.join(dir, 'CLAUDE.md')).readAsStringSync(),
+              contains('# gg workflow'),
+            );
+            expect(
+              File(path.join(dir, '.claude', 'skills', 'gg', 'SKILL.md'))
+                  .existsSync(),
+              isTrue,
+            );
+          }
+        },
+      );
+
+      test('but never at the cost of the ticket', () async {
+        // Anything thrown on the way is reported, the ticket is created.
+        final failing = CommandRunner<void>('test', 'TicketCommand Test')
+          ..addCommand(
+            TicketCommand(
+              ggLog: ggLog,
+              rootPath: tempDir.path,
+              runDna: runDna,
+              latestDnaVersion: () async => throw Exception('boom'),
+            ),
+          );
+
+        await failing.run([
+          'ticket',
+          '--input',
+          tempDir.path,
+          'D-2',
+          '-m',
+          'x',
+        ]);
+
+        expect(
+          messages.any(
+            (m) => m.contains('Could not place dna_gg in the ticket'),
+          ),
+          isTrue,
+        );
+        expect(
+          File(path.join(tempDir.path, 'D-2', ticketJsonFileName)).existsSync(),
+          isTrue,
+        );
+      });
     });
 
     tearDown(() {
@@ -295,7 +422,7 @@ void main() {
           reason: issueId,
         );
       }
-      expect(tempDir.listSync(), isEmpty);
+      expect(createdInRoot(), isEmpty);
     });
 
     test('drops the trailing separator a tab completion appends', () async {
@@ -417,7 +544,7 @@ void main() {
         );
       }
 
-      expect(tempDir.listSync(), isEmpty);
+      expect(createdInRoot(), isEmpty);
     });
 
     test('refuses a name the root holds as a folder or a file that is no '

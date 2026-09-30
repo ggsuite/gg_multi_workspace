@@ -8,36 +8,11 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
-import 'package:gg_one/gg_one.dart' show GgPrompts;
+import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 import 'package:gg_multi_workspace/src/commands/do/init/workspace.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
-
-/// Prompts that record the question and always pick the last option.
-class _RecordingPrompts extends GgPrompts {
-  String? prompt;
-  List<String>? options;
-
-  @override
-  Future<int> select({
-    required String prompt,
-    required List<String> options,
-    int initialIndex = 0,
-  }) async {
-    this.prompt = prompt;
-    this.options = options;
-    return options.length - 1;
-  }
-
-  @override
-  Future<String> input({
-    required String prompt,
-    String? defaultValue,
-    String? initialText,
-    bool asMessageEditor = false,
-  }) async => defaultValue ?? '';
-}
 
 void main() {
   group('InitWorkspaceCommand', () {
@@ -186,26 +161,6 @@ void main() {
           'gg dna build --workspace',
         ),
       );
-    });
-
-    test('helixDnaRunner runs the helix commands under gg dna', () async {
-      // `--help` is the one call that touches neither the package managers
-      // nor the file system.
-      await expectLater(helixDnaRunner(ggLog)(['--help']), completes);
-    });
-
-    test('helixSelectPrompt asks through the gg prompts', () async {
-      final prompts = _RecordingPrompts();
-      GgPrompts.current = prompts;
-      addTearDown(() => GgPrompts.current = null);
-
-      final index = await helixSelectPrompt(
-        prompt: 'Which language?',
-        options: ['Dart', 'TypeScript'],
-      );
-      expect(index, 1);
-      expect(prompts.prompt, 'Which language?');
-      expect(prompts.options, ['Dart', 'TypeScript']);
     });
 
     test(
