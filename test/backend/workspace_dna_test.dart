@@ -95,7 +95,7 @@ void main() {
 
         final root = tempDir.path.replaceAll(r'\', '/');
         expect(dnaCalls, [
-          ['init', '--target', root, '--language', 'dart'],
+          ['init', '--target', root, '--language', 'dart', '--quiet'],
           [
             'add',
             workspaceDnaLayer,

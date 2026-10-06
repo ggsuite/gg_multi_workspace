@@ -65,10 +65,10 @@ void main() {
 
       // init, add, build — in this order, all aimed at the workspace root.
       final root = tempDir.path.replaceAll(r'\', '/');
-      // Both instantiating steps run quiet: the line below is the whole
-      // report a workspace gets.
+      // All three steps run quiet: the line below is the whole report a
+      // workspace gets — no next steps from init either.
       expect(dnaCalls, [
-        ['init', '--target', root, '--language', 'dart'],
+        ['init', '--target', root, '--language', 'dart', '--quiet'],
         ['add', workspaceDnaLayer, '--target', root, '--workspace', '--quiet'],
         ['build', '--target', root, '--workspace', '--quiet'],
       ]);
@@ -180,7 +180,7 @@ void main() {
         // the current guides, so the DNA runs like on a fresh one.
         final root = tempDir.path.replaceAll(r'\', '/');
         expect(dnaCalls, [
-          ['init', '--target', root, '--language', 'dart'],
+          ['init', '--target', root, '--language', 'dart', '--quiet'],
           [
             'add',
             workspaceDnaLayer,
