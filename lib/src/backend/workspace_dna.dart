@@ -74,7 +74,9 @@ class _DnaCommand extends Command<dynamic> {
 /// `--quiet` keeps the instantiation to the one line reported when it is
 /// through: which file the DNA wrote is detail of a workspace nobody
 /// hand-maintains, and the automatic commit helix tries could not work
-/// here at all — the folder is no repository.
+/// here at all — the folder is no repository. For `init` it also drops
+/// the next steps it suggests by hand, `git init` and `gg dna add`: this
+/// function adds the layer itself, and the folder stays no repository.
 ///
 /// A failure is reported with the commands to repeat by hand, never
 /// thrown: the workspace is usable without its DNA.
@@ -85,7 +87,7 @@ Future<void> instantiateWorkspaceDna({
 }) async {
   final target = root.replaceAll(r'\', '/');
   try {
-    await runDna(['init', '--target', target, '--language', 'dart']);
+    await runDna(['init', '--target', target, '--language', 'dart', '--quiet']);
     await runDna([
       'add',
       workspaceDnaLayer,
