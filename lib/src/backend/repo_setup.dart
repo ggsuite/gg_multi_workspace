@@ -4,54 +4,13 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
-import 'package:gg_git/gg_git.dart';
-
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:gg_console_colors/gg_console_colors.dart';
-import 'package:gg_log/gg_log.dart';
-import 'package:gg_one/gg_one.dart' as gg;
 import 'package:path/path.dart' as path;
 
-/// Installs dependencies for every package manager the repo in [dir] uses.
-///
-/// A cross-language bridge repo carrying both a `pubspec.yaml` and a
-/// `package.json` gets both its Dart and its TypeScript dependencies
-/// installed. When [upgradeDart] is true, `dart pub upgrade` is used instead
-/// of `dart pub get` (used after re-localizing references).
-Future<void> installRepoDependencies({
-  required Directory dir,
-  required String repoName,
-  required GgLog ggLog,
-  required ProcessRunner processRunner,
-  bool upgradeDart = false,
-}) async {
-  final commands = <List<String>>[];
-
-  if (File(path.join(dir.path, 'pubspec.yaml')).existsSync()) {
-    commands.add(<String>['dart', 'pub', upgradeDart ? 'upgrade' : 'get']);
-  }
-  if (File(path.join(dir.path, 'package.json')).existsSync()) {
-    final pm = gg.detectTypeScriptPackageManager(dir).executable;
-    commands.add(<String>[pm, 'install']);
-  }
-
-  for (final command in commands) {
-    final result = await processRunner(
-      command.first,
-      command.sublist(1),
-      workingDirectory: dir.path,
-      runInShell: true,
-    );
-    final cmd = command.join(' ');
-    if (result.exitCode == 0) {
-      ggLog(darkGray('Executed $cmd in $repoName.'));
-    } else {
-      ggLog(cError('Failed to execute $cmd in $repoName: ${result.stderr}'));
-    }
-  }
-}
+// Moved to gg_multi_core, which localizes the refs of a ticket with it.
+export 'package:gg_multi_core/gg_multi_core.dart' show installRepoDependencies;
 
 /// The settings every ticket workspace carries.
 ///

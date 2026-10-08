@@ -48,8 +48,6 @@ class MockGgSystemCommit extends Mock implements gg.GgSystemCommit {}
 
 class MockSortedProcessingList extends Mock implements SortedProcessingList {}
 
-class MockUnlocalizeRefs extends Mock implements ChangeRefsToPubDev {}
-
 class MockGraph extends Mock implements Graph {}
 
 /// A [DefaultBranch] that answers [name] for every repository — `main` by
@@ -64,6 +62,35 @@ DefaultBranch fakeDefaultBranch([String name = 'main']) {
     ),
   ).thenAnswer((_) async => name);
   return mock;
+}
+
+/// Creates [name] in [ticketDir] as a git checkout on the ticket's branch
+/// with [pubspec] as its committed manifest.
+Future<Directory> gitTicketRepo(
+  Directory ticketDir,
+  String name,
+  String pubspec,
+) async {
+  final dir = Directory(path.join(ticketDir.path, name))..createSync();
+  File(path.join(dir.path, 'pubspec.yaml')).writeAsStringSync(pubspec);
+  for (final args in [
+    ['init', '-q', '-b', 'main'],
+    ['config', 'user.email', 'test@example.com'],
+    ['config', 'user.name', 'Test'],
+    ['add', '.'],
+    ['commit', '-q', '-m', 'Initial commit'],
+    ['checkout', '-q', '-b', path.basename(ticketDir.path)],
+  ]) {
+    final result = await Process.run('git', args, workingDirectory: dir.path);
+    expect(result.exitCode, 0, reason: '${result.stderr}');
+  }
+  return dir;
+}
+
+/// Runs git in [dir] and returns its trimmed output.
+Future<String> gitOutput(Directory dir, List<String> args) async {
+  final result = await Process.run('git', args, workingDirectory: dir.path);
+  return '${result.stdout}'.trim();
 }
 
 void main() {
@@ -84,7 +111,6 @@ void main() {
       ProcessRunner? processRunner,
       gg.GgSystemCommit? systemCommit,
       SortedProcessingList? sortedProcessingList,
-      ChangeRefsToPubDev? unlocalizeRefs,
       ChangeRefsToLocal? localizeRefs,
       BackupPublishTo? backupPublishTo,
       Graph? graph,
@@ -103,7 +129,6 @@ void main() {
           executionPath: executionPath ?? execPath,
           systemCommit: systemCommit,
           sortedProcessingList: sortedProcessingList,
-          unlocalizeRefs: unlocalizeRefs,
           localizeRefs: localizeRefs,
           backupPublishTo: backupPublishTo,
           graph: graph,
@@ -134,6 +159,7 @@ void main() {
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -259,6 +285,7 @@ void main() {
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -334,6 +361,7 @@ void main() {
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -478,6 +506,7 @@ void main() {
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -530,8 +559,7 @@ void main() {
       );
     });
 
-    test('copies repo into ticket workspace and relocalizes ticket '
-        '(two passes)', () async {
+    test('copies a repo into the ticket and localizes it', () async {
       const repoName = 'testRepoCommit';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
@@ -562,6 +590,7 @@ dev_dependencies:
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -659,25 +688,25 @@ dev_dependencies:
       );
       expect(copiedFileInTicket.existsSync(), isTrue);
 
-      verify(
+      // The copy of a plain ocean folder is no git checkout: there is
+      // nothing gg could commit to (see »keeps the user's work …«).
+      verifyNever(
         () => mockDoCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          message: '#gg: changed references to path',
+          message: any(named: 'message'),
           paths: any(named: 'paths'),
           includeUntracked: any(named: 'includeUntracked'),
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
-          // Localizing rewrites the manifests, so the recorded »everything
-          // is committed« hash has to be taken anew — otherwise the next
-          // command in the ticket sees a repo that looks uncommitted.
-          stateKey: gg.GgState.doCommitKey,
+          stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
-      ).called(greaterThanOrEqualTo(1));
+      );
 
       expect(
         logMessages.any(
-          (m) => m.contains('Re-localized all repositories in ticket'),
+          (m) => m.contains('Localized the references of all repos in ticket'),
         ),
         isTrue,
       );
@@ -740,6 +769,7 @@ dev_dependencies:
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -898,6 +928,7 @@ dev_dependencies:
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -973,6 +1004,7 @@ dev_dependencies:
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1058,6 +1090,7 @@ dev_dependencies:
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1134,6 +1167,7 @@ dev_dependencies:
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1257,6 +1291,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1437,6 +1472,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1451,6 +1487,7 @@ version: 1.0.0
         () => mockGraph.get(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
+          packageDirs: any(named: 'packageDirs'),
         ),
       ).thenAnswer((_) async => <String, Node>{});
 
@@ -1648,7 +1685,7 @@ version: 1.0.0
     });
 
     test('does not set status if localization fails in ticket '
-        'relocalization', () async {
+        'localization', () async {
       const repoName = 'failStatusRepo';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
@@ -1668,6 +1705,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -1692,6 +1730,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       );
     });
@@ -1721,6 +1760,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -1883,7 +1923,7 @@ version: 1.0.0
 
         await runner.run(['add', '--verbose', repoName]);
 
-        // npm install runs twice: after copy and after relocalize.
+        // npm install runs twice: after copy and after localizing.
         verify(
           () => mockProcessRunner(
             'npm',
@@ -1973,6 +2013,7 @@ version: 1.0.0
               ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
               userCommitMessage: any(named: 'userCommitMessage'),
               stateKey: any(named: 'stateKey'),
+              keepForeignChanges: any(named: 'keepForeignChanges'),
             ),
           ).thenAnswer(
             (_) async => const gg.GgSystemCommitResult(
@@ -2169,6 +2210,7 @@ version: 1.0.0
               ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
               userCommitMessage: any(named: 'userCommitMessage'),
               stateKey: any(named: 'stateKey'),
+              keepForeignChanges: any(named: 'keepForeignChanges'),
             ),
           ).thenAnswer(
             (_) async => const gg.GgSystemCommitResult(
@@ -2238,6 +2280,7 @@ version: 1.0.0
               ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
               userCommitMessage: any(named: 'userCommitMessage'),
               stateKey: any(named: 'stateKey'),
+              keepForeignChanges: any(named: 'keepForeignChanges'),
             ),
           ).thenAnswer(
             (_) async => const gg.GgSystemCommitResult(
@@ -2282,7 +2325,7 @@ version: 1.0.0
               runInShell: true,
             ),
           ).called(greaterThanOrEqualTo(1));
-          // After relocalize: dart pub upgrade also runs.
+          // After localizing: dart pub upgrade also runs.
           verify(
             () => mockProc(
               'dart',
@@ -2295,7 +2338,7 @@ version: 1.0.0
       );
     });
 
-    test('commit failures are logged and aborts immediately', () async {
+    test('commit failures are logged and end the run', () async {
       const repoName = 'commitFailRepo';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
@@ -2311,6 +2354,9 @@ version: 1.0.0
         ),
       )..createSync(recursive: true);
 
+      // The ticket already holds a git checkout of the repo.
+      await gitTicketRepo(ticketDir, repoName, 'name: x\n');
+
       final mockDoCommit = MockGgSystemCommit();
       when(
         () => mockDoCommit.commit(
@@ -2322,10 +2368,19 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenThrow(Exception('commit error'));
 
       final mockProc = MockProcessRunner();
+      when(
+        () => mockProc(
+          'git',
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+          runInShell: true,
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
       when(
         () => mockProc(
           'git',
@@ -2405,7 +2460,16 @@ version: 1.0.0
         processRunner: mockProc.call,
       );
 
-      await runner.run(['add', '--verbose', repoName]);
+      await expectLater(
+        runner.run(['add', '--verbose', repoName]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls('$e'),
+            'message',
+            contains('Failed to commit the localized refs of $repoName'),
+          ),
+        ),
+      );
 
       expect(
         logMessages.any(
@@ -2433,6 +2497,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -2469,7 +2534,7 @@ version: 1.0.0
       },
     );
 
-    test('relocalization aborts and logs when localize fails', () async {
+    test('localization aborts and logs when localize fails', () async {
       const repoName = 'localizeFailRepo';
       final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
         ..createSync(recursive: true);
@@ -2481,7 +2546,6 @@ version: 1.0.0
       )..createSync(recursive: true);
 
       final mockSorted = MockSortedProcessingList();
-      final mockUnloc = MockUnlocalizeRefs();
       final mockLoc = MockLocalizeRefs();
       final mockDoCommit = MockGgSystemCommit();
 
@@ -2495,6 +2559,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -2520,12 +2585,6 @@ version: 1.0.0
         ),
       ).thenAnswer((_) async => await futureNode());
 
-      when(
-        () => mockUnloc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
       when(
         () => mockLoc.get(
           directory: any(named: 'directory'),
@@ -2572,7 +2631,6 @@ version: 1.0.0
         processRunner: mockRunner.call,
         systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
-        unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
       );
 
@@ -2660,6 +2718,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -2699,7 +2758,9 @@ version: 1.0.0
 
         expect(
           logMessages.any(
-            (m) => m.contains('Re-localized all repositories in ticket TXYZ'),
+            (m) => m.contains(
+              'Localized the references of all repos in ticket TXYZ',
+            ),
           ),
           isTrue,
         );
@@ -2790,6 +2851,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -2878,6 +2940,8 @@ version: 1.0.0
         final existingC = Directory(path.join(ticketDir.path, 'c'))
           ..createSync(recursive: true);
         File(path.join(existingC.path, 'dummy.txt')).writeAsStringSync('x');
+        File(path.join(existingC.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: c\nversion: 1.0.0\n');
 
         final mockRunner = MockProcessRunner();
         when(
@@ -2916,6 +2980,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -2959,13 +3024,276 @@ version: 1.0.0
         expect(
           logMessages.any(
             (m) => m.contains(
-              'Re-localized all repositories in ticket TXYZ_EXISTING',
+              'Localized the references of all repos in ticket TXYZ_EXISTING',
             ),
           ),
           isTrue,
         );
       },
     );
+
+    group('ticket state', () {
+      // A process runner that answers every git/dart call successfully.
+      MockProcessRunner anyProcessRunner() {
+        final mockProc = MockProcessRunner();
+        when(
+          () => mockProc(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: any(named: 'runInShell'),
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+        return mockProc;
+      }
+
+      void oceanRepo(String name, [String deps = '']) {
+        final dir = Directory(path.join(oceanWorkspacePath, name))
+          ..createSync(recursive: true);
+        File(path.join(dir.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: $name\nversion: 1.0.0\n$deps');
+      }
+
+      Directory ticket(String name) =>
+          Directory(path.join(tempDir.path, name))..createSync();
+
+      test('keeps the user\'s work out of gg\'s commit', () async {
+        oceanRepo('b');
+        final ticketDir = ticket('T_WIP');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_WIP"}');
+        final a = await gitTicketRepo(
+          ticketDir,
+          'a',
+          'name: a\nversion: 1.0.0\nenvironment:\n  sdk: ^3.0.0\n',
+        );
+
+        // Unfinished work: a new dependency and a new file.
+        final pubspec = File(path.join(a.path, 'pubspec.yaml'));
+        pubspec.writeAsStringSync(
+          '${pubspec.readAsStringSync()}dependencies:\n  b: ^1.0.0\n',
+        );
+        File(path.join(a.path, 'wip.dart')).writeAsStringSync('// wip');
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+        );
+        await runner.run(['add', 'b']);
+
+        // gg's override is committed on its own ...
+        expect(
+          File(path.join(a.path, 'pubspec_overrides.yaml')).readAsStringSync(),
+          contains('path: ../b'),
+        );
+        expect(
+          await gitOutput(a, ['log', '--format=%s']),
+          '#gg: changed references to path\nInitial commit',
+        );
+        expect(
+          await gitOutput(a, ['show', '--name-only', '--format=', 'HEAD']),
+          contains('pubspec_overrides.yaml'),
+        );
+
+        // ... the user's work stays uncommitted.
+        expect(
+          await gitOutput(a, ['status', '--porcelain']),
+          'M pubspec.yaml\n?? wip.dart',
+        );
+      });
+
+      test('records the commit state of the repos copied now only', () async {
+        // b is a git repo of the ocean, copied by this run.
+        final b = Directory(path.join(oceanWorkspacePath, 'b'))
+          ..createSync(recursive: true);
+        File(path.join(b.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: b\nversion: 1.0.0\nenvironment:\n  sdk: ^3.0.0\n',
+        );
+        for (final args in [
+          ['init', '-q', '-b', 'main'],
+          ['config', 'user.email', 'test@example.com'],
+          ['config', 'user.name', 'Test'],
+          ['add', '.'],
+          ['commit', '-q', '-m', 'Initial commit'],
+        ]) {
+          await Process.run('git', args, workingDirectory: b.path);
+        }
+        when(() => mockGitCloner.checkoutBranch(any(), any())).thenAnswer(
+          (invocation) => Process.run('git', [
+            'checkout',
+            '-q',
+            '-b',
+            invocation.positionalArguments[0] as String,
+          ], workingDirectory: invocation.positionalArguments[1] as String),
+        );
+
+        // a was in the ticket; its new dependency was committed with plain
+        // git, so its checks never ran.
+        final ticketDir = ticket('T_STATE');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_STATE"}');
+        final a = await gitTicketRepo(
+          ticketDir,
+          'a',
+          'name: a\nversion: 1.0.0\nenvironment:\n  sdk: ^3.0.0\n',
+        );
+        final pubspec = File(path.join(a.path, 'pubspec.yaml'));
+        pubspec.writeAsStringSync(
+          '${pubspec.readAsStringSync()}dependencies:\n  b: ^1.0.0\n',
+        );
+        await gitOutput(a, ['commit', '-qam', 'Use b']);
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+        );
+        await runner.run(['add', 'b']);
+
+        Future<bool> committed(String repo) =>
+            gg.GgState(ggLog: ggLog).readSuccess(
+              directory: Directory(path.join(ticketDir.path, repo)),
+              key: gg.GgState.doCommitKey,
+              ggLog: ggLog,
+            );
+        expect(
+          await gitOutput(a, ['log', '-1', '--format=%s']),
+          '#gg: changed references to path',
+        );
+        expect(await gitOutput(a, ['status', '--porcelain']), isEmpty);
+        expect(await committed('a'), isFalse);
+        expect(await committed('b'), isTrue);
+      });
+
+      test('adds the repos between the ticket repos along an edge only the '
+          'ticket has', () async {
+        oceanRepo('a');
+        oceanRepo('c', 'dependencies:\n  d: ^1.0.0\n');
+        oceanRepo('d');
+
+        // On its feature branch, a newly depends on c.
+        final ticketDir = ticket('T_EDGE');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_EDGE"}');
+        final a = Directory(path.join(ticketDir.path, 'a'))..createSync();
+        File(path.join(a.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: a\nversion: 1.0.0\ndependencies:\n  c: ^1.0.0\n',
+        );
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+        );
+        await runner.run(['add', '--no-localize', 'd']);
+
+        expect(Directory(path.join(ticketDir.path, 'c')).existsSync(), isTrue);
+        expect(Directory(path.join(ticketDir.path, 'd')).existsSync(), isTrue);
+      });
+
+      test('clones a dependency only a ticket repo declares', () async {
+        oceanRepo('tx_other');
+
+        final ticketDir = ticket('T_CLONE');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_CLONE"}');
+        final repo = Directory(path.join(ticketDir.path, 'tx_ticket'))
+          ..createSync();
+        File(path.join(repo.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: tx_ticket\n'
+          'version: 1.0.0\n'
+          'dependencies:\n'
+          '  tx_new_dep:\n'
+          '    git:\n'
+          '      url: https://github.com/some_org/tx_new_dep.git\n',
+        );
+
+        // The clone declares a dependency of its own, which is followed too.
+        when(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/tx_new_dep/tx_new_dep.git',
+            any(),
+          ),
+        ).thenAnswer((invocation) async {
+          final target = invocation.positionalArguments[1] as String;
+          File(path.join(target, 'pubspec.yaml'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync(
+              'name: tx_new_dep\n'
+              'version: 1.0.0\n'
+              'dependencies:\n'
+              '  tx_deeper:\n'
+              '    git:\n'
+              '      url: https://github.com/some_org/tx_deeper.git\n',
+            );
+        });
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+        );
+        await runner.run(['add', '--no-localize', 'tx_other']);
+
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/tx_new_dep/tx_new_dep.git',
+            any(),
+          ),
+        ).called(1);
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'https://github.com/tx_deeper/tx_deeper.git',
+            any(),
+          ),
+        ).called(1);
+      });
+
+      test('does not refresh what the ticket repos merely depend on', () async {
+        oceanRepo('tx_other');
+        oceanRepo('tx_tooling');
+
+        final ticketDir = ticket('T_FRESH');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_FRESH"}');
+        final repo = Directory(path.join(ticketDir.path, 'tx_ticket'))
+          ..createSync();
+        File(path.join(repo.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: tx_ticket\nversion: 1.0.0\n'
+          'dev_dependencies:\n  tx_tooling: ^1.0.0\n',
+        );
+
+        final refreshed = <String>[];
+        final repoFreshness = MockRepoFreshness();
+        registerFallbackValue(<Directory>[]);
+        when(
+          () => repoFreshness.updateAll(
+            ggLog: any(named: 'ggLog'),
+            directories: any(named: 'directories'),
+            workspacePath: any(named: 'workspacePath'),
+          ),
+        ).thenAnswer((invocation) async {
+          final dirs =
+              invocation.namedArguments[#directories] as Iterable<Directory>;
+          refreshed.addAll(dirs.map((d) => path.basename(d.path)));
+        });
+
+        runner = CommandRunner<void>('test', 'Test for AddCommand')
+          ..addCommand(
+            AddCommand(
+              ggLog: ggLog,
+              gitCloner: mockGitCloner,
+              processRunner: anyProcessRunner().call,
+              oceanWorkspacePath: oceanWorkspacePath,
+              executionPath: ticketDir.path,
+              repoFreshness: repoFreshness,
+              defaultBranch: fakeDefaultBranch(),
+            ),
+          );
+        await runner.run(['add', '--no-localize', 'tx_other']);
+
+        // Only the requested repo's closure is fetched, not the ticket's.
+        expect(refreshed, contains('tx_other'));
+        expect(refreshed, isNot(contains('tx_tooling')));
+      });
+    });
 
     test('logs when dependency graph building fails and continues', () async {
       const repoName = 'graphFailRepo';
@@ -2982,6 +3310,7 @@ version: 1.0.0
         () => mockGraph.get(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
+          packageDirs: any(named: 'packageDirs'),
         ),
       ).thenThrow(Exception('graph error'));
 
@@ -3020,7 +3349,7 @@ version: 1.0.0
       );
     });
 
-    group('dart pub upgrade in relocalization', () {
+    group('dart pub upgrade in localization', () {
       test(
         'executes dart pub upgrade after localize and logs success',
         () async {
@@ -3050,14 +3379,7 @@ version: 1.0.0
             ],
           );
 
-          final mockUnloc = MockUnlocalizeRefs();
           final mockLoc = MockLocalizeRefs();
-          when(
-            () => mockUnloc.get(
-              directory: any(named: 'directory'),
-              ggLog: any(named: 'ggLog'),
-            ),
-          ).thenAnswer((_) async {});
           when(
             () => mockLoc.get(
               directory: any(named: 'directory'),
@@ -3102,6 +3424,7 @@ version: 1.0.0
               ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
               userCommitMessage: any(named: 'userCommitMessage'),
               stateKey: any(named: 'stateKey'),
+              keepForeignChanges: any(named: 'keepForeignChanges'),
             ),
           ).thenAnswer(
             (_) async => const gg.GgSystemCommitResult(
@@ -3125,7 +3448,6 @@ version: 1.0.0
             processRunner: mockProc.call,
             systemCommit: mockDoCommit,
             sortedProcessingList: mockSorted,
-            unlocalizeRefs: mockUnloc,
             localizeRefs: mockLoc,
           );
 
@@ -3141,7 +3463,7 @@ version: 1.0.0
       );
 
       test('logs error and aborts when dart pub upgrade '
-          'fails in relocalization', () async {
+          'fails in localization', () async {
         const repoName = 'upgradeFailRepo';
         final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
           ..createSync(recursive: true);
@@ -3168,14 +3490,7 @@ version: 1.0.0
           ],
         );
 
-        final mockUnloc = MockUnlocalizeRefs();
         final mockLoc = MockLocalizeRefs();
-        when(
-          () => mockUnloc.get(
-            directory: any(named: 'directory'),
-            ggLog: any(named: 'ggLog'),
-          ),
-        ).thenAnswer((_) async {});
         when(
           () => mockLoc.get(
             directory: any(named: 'directory'),
@@ -3220,6 +3535,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -3243,7 +3559,6 @@ version: 1.0.0
           processRunner: mockProc.call,
           systemCommit: mockDoCommit,
           sortedProcessingList: mockSorted,
-          unlocalizeRefs: mockUnloc,
           localizeRefs: mockLoc,
         );
 
@@ -3259,266 +3574,6 @@ version: 1.0.0
           isTrue,
         );
       });
-    });
-
-    test('unlocalizes when backup file exists in ticket repository', () async {
-      const repoName = 'backupRepo';
-      final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
-        ..createSync(recursive: true);
-
-      File(path.join(oceanRepoDir.path, 'pubspec.yaml'))
-          .writeAsStringSync('name: $repoName');
-
-      File(path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'))
-          .writeAsStringSync('{}');
-
-      final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-BACKUP'),
-      )..createSync(recursive: true);
-
-      final mockSorted = MockSortedProcessingList();
-      final mockUnloc = MockUnlocalizeRefs();
-      final mockLoc = MockLocalizeRefs();
-      final mockDoCommit = MockGgSystemCommit();
-      final mockProc = MockProcessRunner();
-
-      when(
-        () => mockDoCommit.commit(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          paths: any(named: 'paths'),
-          includeUntracked: any(named: 'includeUntracked'),
-          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
-          userCommitMessage: any(named: 'userCommitMessage'),
-          stateKey: any(named: 'stateKey'),
-        ),
-      ).thenAnswer(
-        (_) async => const gg.GgSystemCommitResult(
-          userCommitCreated: false,
-          systemCommitCreated: true,
-          ggOwnedPaths: ['pubspec_overrides.yaml'],
-          foreignPaths: [],
-        ),
-      );
-
-      when(
-        () => mockProc(
-          'git',
-          any(),
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'dart',
-          ['pub', 'get'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'dart',
-          ['pub', 'upgrade'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-
-      when(
-        () => mockSorted.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((invocation) async {
-        final dir = invocation.namedArguments[#directory] as Directory;
-        final ticketRepoDir = Directory(path.join(dir.path, repoName));
-        return [
-          Node(
-            name: repoName,
-            directory: ticketRepoDir,
-            manifest: DartPackageManifest(pubspec: Pubspec(repoName)),
-          ),
-        ];
-      });
-
-      when(
-        () => mockUnloc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
-      when(
-        () => mockLoc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
-      when(
-        () => mockProc(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      createRunner(
-        executionPath: ticketDir.path,
-        processRunner: mockProc.call,
-        systemCommit: mockDoCommit,
-        sortedProcessingList: mockSorted,
-        unlocalizeRefs: mockUnloc,
-        localizeRefs: mockLoc,
-      );
-
-      await runner.run(['add', repoName]);
-
-      final ticketRepoBackup = File(
-        path.join(ticketDir.path, repoName, '.gg_localize_refs_backup.json'),
-      );
-      expect(ticketRepoBackup.existsSync(), isTrue);
-
-      verify(
-        () => mockUnloc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).called(1);
-    });
-
-    test('logs error and aborts when unlocalize fails '
-        'in relocalization pass', () async {
-      const repoName = 'unlocFailRepo';
-      final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
-        ..createSync(recursive: true);
-
-      File(path.join(oceanRepoDir.path, 'pubspec.yaml'))
-          .writeAsStringSync('name: $repoName');
-
-      File(path.join(oceanRepoDir.path, '.gg_localize_refs_backup.json'))
-          .writeAsStringSync('{}');
-
-      final ticketDir = Directory(
-        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET-UNLOC-FAIL'),
-      )..createSync(recursive: true);
-
-      final mockSorted = MockSortedProcessingList();
-      final mockUnloc = MockUnlocalizeRefs();
-      final mockLoc = MockLocalizeRefs();
-      final mockDoCommit = MockGgSystemCommit();
-      final mockProc = MockProcessRunner();
-
-      when(
-        () => mockDoCommit.commit(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          paths: any(named: 'paths'),
-          includeUntracked: any(named: 'includeUntracked'),
-          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
-          userCommitMessage: any(named: 'userCommitMessage'),
-          stateKey: any(named: 'stateKey'),
-        ),
-      ).thenAnswer(
-        (_) async => const gg.GgSystemCommitResult(
-          userCommitCreated: false,
-          systemCommitCreated: true,
-          ggOwnedPaths: ['pubspec_overrides.yaml'],
-          foreignPaths: [],
-        ),
-      );
-
-      when(
-        () => mockProc(
-          'git',
-          any(),
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'dart',
-          ['pub', 'get'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'dart',
-          ['pub', 'upgrade'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-
-      when(
-        () => mockSorted.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((invocation) async {
-        final dir = invocation.namedArguments[#directory] as Directory;
-        final ticketRepoDir = Directory(path.join(dir.path, repoName));
-        return [
-          Node(
-            name: repoName,
-            directory: ticketRepoDir,
-            manifest: DartPackageManifest(pubspec: Pubspec(repoName)),
-          ),
-        ];
-      });
-
-      when(
-        () => mockUnloc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenThrow(Exception('unloc failed'));
-
-      when(
-        () => mockLoc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
-      when(
-        () => mockProc(
-          'git',
-          ['status', '--porcelain', '--untracked-files=no'],
-          workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      createRunner(
-        executionPath: ticketDir.path,
-        processRunner: mockProc.call,
-        systemCommit: mockDoCommit,
-        sortedProcessingList: mockSorted,
-        unlocalizeRefs: mockUnloc,
-        localizeRefs: mockLoc,
-      );
-
-      await expectLater(
-        () async => await runner.run(['add', '--verbose', repoName]),
-        throwsA(isA<Exception>()),
-      );
-
-      expect(
-        logMessages.any(
-          (m) => m.contains(
-            'Failed to unlocalize refs for $repoName: '
-            'Exception: unloc failed',
-          ),
-        ),
-        isTrue,
-      );
     });
 
     test(
@@ -3640,6 +3695,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -3713,19 +3769,12 @@ version: 1.0.0
         ],
       );
 
-      final mockUnloc = MockUnlocalizeRefs();
       final mockLoc = MockLocalizeRefs();
       final mockBackup = MockBackupPublishTo();
 
       final order = <String>[];
       when(
-        () => mockUnloc.get(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-      when(
-        () => mockBackup.exec(
+        () => mockBackup.get(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
         ),
@@ -3762,6 +3811,7 @@ version: 1.0.0
           ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
+          keepForeignChanges: any(named: 'keepForeignChanges'),
         ),
       ).thenAnswer(
         (_) async => const gg.GgSystemCommitResult(
@@ -3785,7 +3835,6 @@ version: 1.0.0
         processRunner: mockProc.call,
         systemCommit: mockDoCommit,
         sortedProcessingList: mockSorted,
-        unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
         backupPublishTo: mockBackup,
       );
@@ -3822,6 +3871,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -4052,7 +4102,6 @@ version: 1.0.0
 
     group('--localize, --org and --all', () {
       late MockLocalizeRefs mockLoc;
-      late MockUnlocalizeRefs mockUnloc;
       late MockGgSystemCommit mockDoCommit;
       late MockProcessRunner mockProc;
 
@@ -4075,14 +4124,6 @@ version: 1.0.0
           ),
         ).thenAnswer((_) async {});
 
-        mockUnloc = MockUnlocalizeRefs();
-        when(
-          () => mockUnloc.get(
-            directory: any(named: 'directory'),
-            ggLog: any(named: 'ggLog'),
-          ),
-        ).thenAnswer((_) async {});
-
         mockDoCommit = MockGgSystemCommit();
         when(
           () => mockDoCommit.commit(
@@ -4094,6 +4135,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(
@@ -4125,7 +4167,6 @@ version: 1.0.0
         executionPath: ticketDir.path,
         processRunner: mockProc.call,
         systemCommit: mockDoCommit,
-        unlocalizeRefs: mockUnloc,
         localizeRefs: mockLoc,
       );
 
@@ -4197,12 +4238,6 @@ version: 1.0.0
           ),
         );
         verifyNever(
-          () => mockUnloc.get(
-            directory: any(named: 'directory'),
-            ggLog: any(named: 'ggLog'),
-          ),
-        );
-        verifyNever(
           () => mockDoCommit.commit(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
@@ -4212,6 +4247,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         );
 
@@ -4344,6 +4380,7 @@ version: 1.0.0
             ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
             userCommitMessage: any(named: 'userCommitMessage'),
             stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
           ),
         ).thenAnswer(
           (_) async => const gg.GgSystemCommitResult(

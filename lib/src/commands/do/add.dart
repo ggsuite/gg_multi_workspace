@@ -97,7 +97,9 @@ List<String> matchOceanRepoNames(
 /// `--no-transitive` copies only the requested repos and leaves the
 /// repos between them in the dependency graph out of the ticket.
 class AddCommand extends Command<dynamic> {
-  /// Constructor for AddCommand.
+  /// Constructor. [localizeRefs], [backupPublishTo], [systemCommit] and
+  /// [processRunner] reach the localization only when [ticketLocalizer] is
+  /// null; [unlocalizeRefs] is ignored.
   AddCommand({
     required this.ggLog,
     GitHandler? gitCloner,
@@ -108,9 +110,11 @@ class AddCommand extends Command<dynamic> {
     String? executionPath,
     gg.GgSystemCommit? systemCommit,
     SortedProcessingList? sortedProcessingList,
+    @Deprecated('Unused: change-refs-to-local repairs legacy refs itself')
     ChangeRefsToPubDev? unlocalizeRefs,
     ChangeRefsToLocal? localizeRefs,
     BackupPublishTo? backupPublishTo,
+    TicketLocalizer? ticketLocalizer,
     Graph? graph,
     FetchRepoUrl? fetchRepoUrl,
     SelectOrganization? selectOrganization,
@@ -132,12 +136,17 @@ class AddCommand extends Command<dynamic> {
        executionPath = executionPath ?? Directory.current.path,
        oceanWorkspacePath =
            oceanWorkspacePath ?? WorkspaceUtils.defaultOceanWorkspacePath(),
-       _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
-       _unlocalizeRefs = unlocalizeRefs ?? ChangeRefsToPubDev(ggLog: ggLog),
-       _localizeRefs = localizeRefs ?? ChangeRefsToLocal(ggLog: ggLog),
-       _backupPublishTo = backupPublishTo ?? BackupPublishTo(ggLog: ggLog),
+       _ticketLocalizer =
+           ticketLocalizer ??
+           TicketLocalizer(
+             ggLog: ggLog,
+             localizeRefs: localizeRefs,
+             backupPublishTo: backupPublishTo,
+             systemCommit: systemCommit,
+             processRunner: processRunner,
+           ),
        _graph = graph ?? Graph(ggLog: ggLog),
        _fetchRepoUrl = fetchRepoUrl ?? fetchDependencyRepoUrl
   // coverage:ignore-end
@@ -223,9 +232,6 @@ class AddCommand extends Command<dynamic> {
   /// The path from which the command was executed.
   final String executionPath;
 
-  /// gg do commit used after localization with --git in ticket copies.
-  final gg.GgSystemCommit _systemCommit;
-
   /// Brings the repositories this run reasons about to their remote state.
   final RepoFreshness _repoFreshness;
 
@@ -238,14 +244,8 @@ class AddCommand extends Command<dynamic> {
   /// Sorted processing helper for ticket-wide iteration.
   final SortedProcessingList _sortedProcessingList;
 
-  /// Unlocalize refs helper.
-  final ChangeRefsToPubDev _unlocalizeRefs;
-
-  /// Localize refs helper.
-  final ChangeRefsToLocal _localizeRefs;
-
-  /// Captures original `publish_to` so it can be restored on publish.
-  final BackupPublishTo _backupPublishTo;
+  /// Localizes the refs between the ticket repos and commits gg's changes.
+  final TicketLocalizer _ticketLocalizer;
 
   /// Graph helper for determining nodes between endpoints.
   final Graph _graph;
@@ -317,7 +317,7 @@ class AddCommand extends Command<dynamic> {
     if (ticketPath != null) {
       // A ticket goes the opposite way: it holds its repos flat, so the ones
       // an older gg put into organization folders move back up. The ticket is
-      // re-localized at the end of this run, which repairs the relative path
+      // localized at the end of this run, which repairs the relative path
       // references the move invalidates.
       migrateTicketToFlatFolders(ticketPath: ticketPath, ggLog: ggLog);
     }
@@ -409,15 +409,20 @@ class AddCommand extends Command<dynamic> {
       await _cloneMissingTransitiveDeps(
         ggLog: ggLog,
         requestedRepoNames: requestedRepoNames,
+        ticketPath: ticketPath,
         fetch: fetch,
       );
 
-      // Build dep graph of ocean + compute nodes between endpoints.
+      // Ticket-shadowed: an edge only the ticket has pulls its repos in too.
       Map<String, Node> allNodes = const {};
       try {
         allNodes = await _graph.get(
           directory: Directory(oceanWorkspacePath),
           ggLog: ggLog,
+          packageDirs: graphPackageDirs(
+            oceanPath: oceanWorkspacePath,
+            ticketPath: ticketPath,
+          ).dirs,
         );
       } catch (e) {
         ggLog(cError('Failed to build dependency graph: $e'));
@@ -469,13 +474,20 @@ class AddCommand extends Command<dynamic> {
 
     final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
-    await _copyReposToTicket(
+    final copiedDirs = await _copyReposToTicket(
       ticketPath: ticketPath,
       repoNames: finalToCopy,
       repoUrls: requestedRepoUrls,
       ggLog: taskLog,
       reportLog: ggLog,
     );
+
+    // Taken before gg writes anything: what is dirty now is the user's.
+    final baseline = localize
+        ? await _ticketLocalizer.baseline(
+            RepoFolderResolver.repoDirs(ticketPath),
+          )
+        : const <String, RepoBaseline>{};
 
     // Write config files (workspace, .gitattributes) before commit.
     await GgStatusPrinter<void>(
@@ -484,14 +496,19 @@ class AddCommand extends Command<dynamic> {
       dark: true,
     ).run(() => _writeProjectConfigFiles(ticketDir: ticketDir, ggLog: taskLog));
 
-    // Finally perform a single re-localization pass for the whole ticket.
+    // Finally localize the references of the whole ticket in one pass.
     if (localize) {
       await GgStatusPrinter<void>(
         message: 'Localize dependencies',
         ggLog: ggLog,
         dark: true,
       ).run(
-        () => _relocalizeAllReposInTicket(ticketDir: ticketDir, ggLog: taskLog),
+        () => _localizeTicket(
+          ticketDir: ticketDir,
+          baseline: baseline,
+          copiedDirs: copiedDirs,
+          ggLog: taskLog,
+        ),
       );
     } else {
       // Without localization the ticket description is still kept current — it
@@ -588,22 +605,13 @@ class AddCommand extends Command<dynamic> {
 
   // Ticket support helpers
   // ...........................................................................
-  /// Clones the missing dependencies of [requestedRepoNames] and of every
-  /// repository they reach. Git deps go via [addRepositoryHelper]; hosted deps
-  /// via pub.dev lookup. Loops to a fixpoint; failures are swallowed (the
-  /// helper already logs).
-  ///
-  /// Only the dependency closure is walked, not the whole ocean: the ocean
-  /// holds every repository the user ever added, and the manifest of one that
-  /// this ticket does not reach says nothing about what belongs in it.
-  ///
-  /// With [fetch] the closure is brought to the state of its remote default
-  /// branch before
-  /// any manifest is read — resolving against a checkout that lags behind
-  /// means resolving dependencies that were renamed or dropped since.
+  /// Clones the missing dependencies of [requestedRepoNames], of what they
+  /// reach and of the repos in [ticketPath] (scanned, never fetched); loops to
+  /// a fixpoint. See CLAUDE.md, »Cloning missing dependencies«.
   Future<void> _cloneMissingTransitiveDeps({
     required GgLog ggLog,
     required Set<String> requestedRepoNames,
+    required String ticketPath,
     required bool fetch,
   }) async {
     final oceanDir = Directory(oceanWorkspacePath);
@@ -628,6 +636,10 @@ class AddCommand extends Command<dynamic> {
     // during this run is on it by construction, so nothing is fetched twice.
     final updated = <String>{};
 
+    final ticketDirs = RepoFolderResolver.repoDirs(ticketPath);
+    // A repo cloned for a ticket repo joins the closure: its deps count too.
+    final seeds = <String>{...requestedRepoNames};
+
     while (true) {
       final existingDirs = RepoFolderResolver.repoDirs(oceanWorkspacePath);
 
@@ -643,7 +655,7 @@ class AddCommand extends Command<dynamic> {
         knownPackages.addAll(RepoFolderResolver.packageNames(dir));
       }
 
-      final closure = _dependencyClosure(requestedRepoNames);
+      final closure = _dependencyClosure(seeds);
 
       if (fetch) {
         final pending = closure
@@ -660,7 +672,7 @@ class AddCommand extends Command<dynamic> {
       // Plan: depName -> the dependency and the manifest that declared it.
       final plan = <String, _PlannedDep>{};
 
-      for (final repoDir in closure) {
+      for (final repoDir in [...closure, ...ticketDirs]) {
         final pubspecPath = path.join(repoDir.path, 'pubspec.yaml');
 
         Future<void> scan(Map<String, Dependency> deps) async {
@@ -771,6 +783,7 @@ class AddCommand extends Command<dynamic> {
         );
         if (destDir != null) {
           addedAny = true;
+          seeds.add(depName);
         }
       }
 
@@ -782,15 +795,15 @@ class AddCommand extends Command<dynamic> {
   }
 
   // ...........................................................................
-  /// The repositories of the ocean [requestedRepoNames] reach: themselves plus
-  /// everything their manifests depend on, transitively.
+  /// The repositories of the ocean the names in [seeds] reach: themselves
+  /// plus everything their manifests depend on, transitively.
   ///
   /// A dependency that resolves to no ocean folder is a third-party package or
   /// one that still has to be cloned; both are simply not part of the closure
   /// yet — the caller's fixpoint loop reaches them in a later round.
-  List<Directory> _dependencyClosure(Set<String> requestedRepoNames) {
+  List<Directory> _dependencyClosure(Set<String> seeds) {
     final visited = <String, Directory>{};
-    final frontier = <String>[...requestedRepoNames];
+    final frontier = <String>[...seeds];
 
     while (frontier.isNotEmpty) {
       final name = frontier.removeLast();
@@ -980,10 +993,10 @@ class AddCommand extends Command<dynamic> {
     return null;
   }
 
-  /// Copies all [repoNames] from ocean into the ticket at [ticketPath].
-  /// Up to [maxParallel] parallel; status via [reportLog], verbose via
-  /// [ggLog].
-  Future<void> _copyReposToTicket({
+  /// Copies all [repoNames] from ocean into the ticket at [ticketPath] and
+  /// returns the paths of the repos copied now. Up to [maxParallel] in
+  /// parallel; status via [reportLog], verbose via [ggLog].
+  Future<Set<String>> _copyReposToTicket({
     required String ticketPath,
     required Set<String> repoNames,
     required Map<String, String> repoUrls,
@@ -992,6 +1005,7 @@ class AddCommand extends Command<dynamic> {
     int maxParallel = 4,
   }) async {
     final queue = repoNames.toList();
+    final copiedDirs = <String>{};
     var nextIndex = 0;
 
     Future<void> worker() async {
@@ -1002,16 +1016,19 @@ class AddCommand extends Command<dynamic> {
         }
         index = nextIndex++;
         final repoName = queue[index];
-        final copied = await _copyRepoToTicket(
+        final (:found, :copiedDir) = await _copyRepoToTicket(
           repoName: repoName,
           repoUrl: repoUrls[repoName],
           ticketPath: ticketPath,
           ggLog: ggLog,
         );
+        if (copiedDir != null) {
+          copiedDirs.add(copiedDir.path);
+        }
         // Without the check a repository that never made it into the ticket
         // would still be reported as added — the verbose-only log below is
         // invisible in a normal run.
-        if (copied) {
+        if (found) {
           reportLog(cDetail('  ✓ $repoName'));
         } else {
           reportLog(cError('  ✗ $repoName not found in ocean.'));
@@ -1024,13 +1041,15 @@ class AddCommand extends Command<dynamic> {
     ];
 
     await Future.wait(workers);
+    return copiedDirs;
   }
 
   /// Copies the repository from the ocean to the [ticketPath] but
   /// does not trigger a ticket-wide relocalization.
   ///
-  /// Returns false when the repository is not in the ocean at all.
-  Future<bool> _copyRepoToTicket({
+  /// `found` is false when the repository is not in the ocean at all;
+  /// `copiedDir` is its ticket folder when it was copied now.
+  Future<({bool found, Directory? copiedDir})> _copyRepoToTicket({
     required String repoName,
     required String? repoUrl,
     required String ticketPath,
@@ -1052,7 +1071,7 @@ class AddCommand extends Command<dynamic> {
         );
     if (srcDir == null) {
       ggLog(cError('Repository $repoName not found in ocean.'));
-      return false;
+      return (found: false, copiedDir: null);
     }
 
     // The ticket holds its repos flat — it only falls back to an organization
@@ -1069,7 +1088,7 @@ class AddCommand extends Command<dynamic> {
     );
     if (destDir.existsSync() && destDir.listSync().isNotEmpty) {
       ggLog(darkGray('$repoName already exists in ticket workspace.'));
-      return true;
+      return (found: true, copiedDir: null);
     }
 
     await _prepareOceanRepositoryForCopy(
@@ -1099,7 +1118,7 @@ class AddCommand extends Command<dynamic> {
     );
 
     ggLog(cDetail('Added repository $repoName to ticket workspace.'));
-    return true;
+    return (found: true, copiedDir: destDir);
   }
 
   /// Prepares the ocean repository state before copying it into a ticket.
@@ -1427,86 +1446,31 @@ class AddCommand extends Command<dynamic> {
     return nodes;
   }
 
-  /// Re-localizes all ticket repos in two passes (sorted order):
-  /// 1) unlocalize, 2) localize --git + pub upgrade + commit.
-  Future<void> _relocalizeAllReposInTicket({
+  /// Localizes the references between all ticket repos (sorted order),
+  /// upgrades their dependencies and commits what gg changed since
+  /// [baseline]; the user's own changes stay uncommitted.
+  Future<void> _localizeTicket({
     required Directory ticketDir,
+    required Map<String, RepoBaseline> baseline,
+    required Set<String> copiedDirs,
     required GgLog ggLog,
   }) async {
-    final ticketName = path.basename(ticketDir.path);
-
     final nodes = await _writeTicketJson(ticketDir: ticketDir, ggLog: ggLog);
-
     if (nodes.isEmpty) {
       return;
     }
 
-    // Iteration 1: Unlocalize all ---------------------------------------------
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final repoName = path.basename(repoDir.path);
-      try {
-        // Dart and TypeScript each keep their own backup in .gg today; the
-        // shared and root-level names are what older checkouts still carry.
-        final backupFiles = [
-          for (final name in const <String>[
-            'gg_localize_refs_backup_dart.json',
-            'gg_localize_refs_backup_ts.json',
-            'gg_localize_refs_backup.json',
-          ])
-            File(path.join(repoDir.path, '.gg', name)),
-          File(path.join(repoDir.path, '.gg_localize_refs_backup.json')),
-        ];
-        if (backupFiles.any((f) => f.existsSync())) {
-          await _unlocalizeRefs.get(directory: repoDir, ggLog: ggLog);
-        }
-      } catch (e) {
-        ggLog(cError('Failed to unlocalize refs for $repoName: $e'));
-        throw Exception(cError('Failed to relocalize ticket'));
-      }
-    }
+    await _ticketLocalizer.localize(repos: nodes, ggLog: ggLog, upgrade: true);
+    // Only the repos copied now are clean ocean code: record them.
+    await _ticketLocalizer.commit(
+      repoDirs: RepoFolderResolver.repoDirs(ticketDir.path),
+      baseline: baseline,
+      ggLog: ggLog,
+      recordStateFor: copiedDirs,
+    );
 
-    // Iteration 2: Localize ---------------------------------------------------
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final repoName = path.basename(repoDir.path);
-      try {
-        await _backupPublishTo.exec(directory: repoDir, ggLog: ggLog);
-        await _localizeRefs.get(directory: repoDir, ggLog: ggLog);
-      } catch (e) {
-        ggLog(cError('Failed to localize refs for $repoName: $e'));
-        throw Exception(cError('Failed to relocalize ticket'));
-      }
-
-      // Refresh deps after relocalize (dart pub upgrade and/or pm install).
-      await installRepoDependencies(
-        dir: repoDir,
-        repoName: repoName,
-        ggLog: ggLog,
-        processRunner: processRunner,
-        upgradeDart: true,
-      );
-
-      // A system commit per repo: only gg's own reference files belong in
-      // it. »do add« pulls a repository into a ticket that may well carry
-      // unfinished work — that work gets its own, prefix-less commit first
-      // instead of vanishing into gg's bookkeeping.
-      try {
-        await _systemCommit.commit(
-          directory: repoDir,
-          ggLog: ggLog,
-          message: '${gg.ggCommitPrefix}changed references to path',
-          userCommitMessage: gg.readTicketDescriptionForRepo,
-          // Localizing rewrites the manifests, so the recorded »everything is
-          // committed« hash no longer matches the tree it was taken from.
-          stateKey: gg.GgState.doCommitKey,
-        );
-      } catch (e) {
-        ggLog(cError('Failed to commit $repoName: $e'));
-      }
-    }
-
-    ggLog('✓ Re-localized all repositories in ticket $ticketName.');
+    final ticketName = path.basename(ticketDir.path);
+    ggLog('✓ Localized the references of all repos in ticket $ticketName.');
   }
 
   /// Rewrites the VS Code `.code-workspace` file for the given [ticketDir]
@@ -1547,7 +1511,7 @@ class AddCommand extends Command<dynamic> {
   /// (`ensureLockFilesNotIgnored`). A lock file belongs into git, and while it
   /// is ignored, every background `pub get` rewrites a file the checks cannot
   /// see. Running it here migrates a repository the first time it enters a
-  /// ticket; the `#gg:` force commit that follows picks the lock file up.
+  /// ticket; the `#gg:` commit that follows picks the lock file up.
   Future<void> _writeProjectConfigFiles({
     required Directory ticketDir,
     required GgLog ggLog,
