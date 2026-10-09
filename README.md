@@ -24,7 +24,27 @@ underlying model lives in `gg_multi_core`.
 | `do code`                                   | open the current ticket in VS Code                                                            |
 | `do init claude`                            | aggregate each repo's `CLAUDE.md` into one ticket-level `CLAUDE.md`                           |
 | `do exec cmd <cmd>`                         | run a shell command in every ticket repo in dependency order                                  |
+| `do localize`                               | localize the references between the ticket repos and commit gg's files                        |
 | `do ls repos\|organizations\|deps\|tickets` | list workspace contents with metadata                                                         |
+
+### Localized references
+
+Inside a ticket every repo resolves its sibling repos from their checkouts,
+not from the registry. `do add` localizes the whole ticket at its end;
+`do localize` does the same without adding anything — run it after adding a
+dependency on a sibling repo by hand. Both commit only gg's own files
+(`pubspec_overrides.yaml`, `pnpm-workspace.yaml`, lock files, `.gg/`, and
+what gg itself wrote during the run) as a `#gg:` commit. Unfinished work —
+including the manifest edit that added the dependency — stays uncommitted
+and goes into your own commit. `do localize` touches only the repos whose
+references are out of sync and reports when there is nothing to do. When a
+repo of the ocean lies between two ticket repos but is not in the ticket,
+it asks you to run `gg do add <repo>`.
+
+`do add` also takes the ticket's own state into account: the repos lying
+between the ticket repos are found in the dependency graph in which the
+ticket repos replace their ocean copies, and a dependency only a ticket
+repo declares is cloned into the ocean as well.
 
 ### Debugging across the repos of a ticket
 
