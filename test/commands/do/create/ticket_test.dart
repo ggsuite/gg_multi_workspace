@@ -34,12 +34,17 @@ void main() {
         .where((name) => name != 'CLAUDE.md' && name != '.claude')
         .toList();
 
-    /// Stands in for helix: `build` leaves the managed block and a skill
-    /// in the folder it targets.
+    /// Stands in for helix: `add` leaves the lock that resolved dna_gg
+    /// 0.5.1, `build` the managed block and a skill in the folder it
+    /// targets.
     Future<void> runDna(List<String> args) async {
       dnaCalls.add(args);
-      if (args.first != 'build') return;
       final target = args[args.indexOf('--target') + 1];
+      if (args.first == 'add') {
+        File(path.join(target, 'pubspec.lock'))
+            .writeAsStringSync('packages:\n  dna_gg:\n    version: "0.5.1"\n');
+      }
+      if (args.first != 'build') return;
       File(path.join(target, 'CLAUDE.md')).writeAsStringSync(
         '$claudeMdStartMarker\n# gg workflow\n$claudeMdEndMarker\n',
       );
@@ -110,11 +115,19 @@ void main() {
             'x',
           ]);
 
-          // helix ran — on the root only, never on the ticket.
-          final root = tempDir.path.replaceAll(r'\', '/');
-          expect(dnaCalls.map((c) => c[c.indexOf('--target') + 1]).toSet(), {
-            root,
-          });
+          // helix ran in one temporary folder — neither in the root nor in
+          // the ticket, which both only receive its .claude and CLAUDE.md.
+          final targets = dnaCalls
+              .map((c) => c[c.indexOf('--target') + 1])
+              .toSet();
+          expect(targets, hasLength(1));
+          expect(path.isWithin(tempDir.path, targets.single), isFalse);
+          expect(path.equals(tempDir.path, targets.single), isFalse);
+          expect(
+            File(path.join(tempDir.path, dnaVersionStampPath))
+                .readAsStringSync(),
+            '0.5.1',
+          );
 
           final ticket = path.join(tempDir.path, 'D-1');
           for (final dir in [tempDir.path, ticket]) {

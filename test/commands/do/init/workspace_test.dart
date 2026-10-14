@@ -59,18 +59,30 @@ void main() {
       expect(Directory(wsPath).existsSync(), isTrue);
     });
 
-    test('instantiates dna_gg in the workspace root', () async {
+    /// The one folder all [dnaCalls] aimed at — checked to be no part of
+    /// the workspace root.
+    String buildFolder() {
+      final targets = dnaCalls.map((c) => c[c.indexOf('--target') + 1]).toSet();
+      expect(targets, hasLength(1));
+      final target = targets.single;
+      expect(path.isWithin(tempDir.path, target), isFalse);
+      expect(path.equals(tempDir.path, target), isFalse);
+      return target;
+    }
+
+    test('instantiates dna_gg for the workspace root', () async {
       final runner = runnerFor(tempDir.path, runDna: runDna);
       await runner.run(['workspace']);
 
-      // init, add, build — in this order, all aimed at the workspace root.
-      final root = tempDir.path.replaceAll(r'\', '/');
+      // init, add, build — in this order, all aimed at one temporary
+      // folder, never at the workspace root.
+      final build = buildFolder();
       // All three steps run quiet: the line below is the whole report a
       // workspace gets — no next steps from init either.
       expect(dnaCalls, [
-        ['init', '--target', root, '--language', 'dart', '--quiet'],
-        ['add', workspaceDnaLayer, '--target', root, '--workspace', '--quiet'],
-        ['build', '--target', root, '--workspace', '--quiet'],
+        ['init', '--target', build, '--language', 'dart', '--quiet'],
+        ['add', workspaceDnaLayer, '--target', build, '--workspace', '--quiet'],
+        ['build', '--target', build, '--workspace', '--quiet'],
       ]);
       expect(
         messages.last,
@@ -78,50 +90,14 @@ void main() {
       );
     });
 
-    test(
-      'removes the pub scaffold init/add needed once the build succeeded',
-      () async {
-        // The fake stands in for `helix init --language dart` and
-        // `dart pub get`, seeding what a real run would leave behind at
-        // that point — the directory must still be empty when `run()`
-        // checks, so this happens inside the fake, not before it.
-        Future<void> fakeRunDna(List<String> args) async {
-          dnaCalls.add(args);
-          if (args.first == 'init') {
-            File(path.join(tempDir.path, 'pubspec.yaml'))
-                .writeAsStringSync('name: workspace\n');
-          }
-          if (args.first == 'add') {
-            File(path.join(tempDir.path, 'pubspec.lock'))
-                .writeAsStringSync('# lock\n');
-            Directory(path.join(tempDir.path, '.dart_tool'))
-                .createSync(recursive: true);
-          }
-        }
-
-        final runner = runnerFor(tempDir.path, runDna: fakeRunDna);
-        await runner.run(['workspace']);
-
-        expect(
-          File(path.join(tempDir.path, 'pubspec.yaml')).existsSync(),
-          isFalse,
-        );
-        expect(
-          File(path.join(tempDir.path, 'pubspec.lock')).existsSync(),
-          isFalse,
-        );
-        expect(
-          Directory(path.join(tempDir.path, '.dart_tool')).existsSync(),
-          isFalse,
-        );
-      },
-    );
-
-    test('keeps the pub scaffold when the build failed', () async {
+    test('leaves no pub scaffold in the root when a step failed', () async {
       Future<void> fakeRunDna(List<String> args) async {
+        dnaCalls.add(args);
+        final target = args[args.indexOf('--target') + 1];
         if (args.first == 'init') {
-          File(path.join(tempDir.path, 'pubspec.yaml'))
+          File(path.join(target, 'pubspec.yaml'))
               .writeAsStringSync('name: workspace\n');
+          Directory(path.join(target, 'dna')).createSync();
           return;
         }
         throw Exception('pub add failed');
@@ -130,14 +106,15 @@ void main() {
       final runner = runnerFor(tempDir.path, runDna: fakeRunDna);
       await runner.run(['workspace']);
 
-      // Left in place — the reported manual command needs it to retry.
-      expect(
-        File(path.join(tempDir.path, 'pubspec.yaml')).existsSync(),
-        isTrue,
-      );
+      final entries = tempDir
+          .listSync()
+          .map((e) => path.basename(e.path))
+          .toList();
+      expect(entries, [ggMultiOceanFolder]);
+      expect(Directory(buildFolder()).existsSync(), isFalse);
     });
 
-    test('keeps the ocean and names the manual steps when dna fails', () async {
+    test('keeps the ocean and names the retry when dna fails', () async {
       final runner = runnerFor(
         tempDir.path,
         runDna: (args) async => throw Exception('pub add failed'),
@@ -155,11 +132,7 @@ void main() {
       );
       expect(
         messages.last,
-        contains(
-          'gg dna init --language dart, '
-          'gg dna add $workspaceDnaLayer --workspace, '
-          'gg dna build --workspace',
-        ),
+        'Run gg do init workspace in the workspace root to try again.',
       );
     });
 
@@ -178,19 +151,8 @@ void main() {
 
         // The repetition is what brings a workspace without CLAUDE.md to
         // the current guides, so the DNA runs like on a fresh one.
-        final root = tempDir.path.replaceAll(r'\', '/');
-        expect(dnaCalls, [
-          ['init', '--target', root, '--language', 'dart', '--quiet'],
-          [
-            'add',
-            workspaceDnaLayer,
-            '--target',
-            root,
-            '--workspace',
-            '--quiet',
-          ],
-          ['build', '--target', root, '--workspace', '--quiet'],
-        ]);
+        expect(dnaCalls.map((c) => c.first), ['init', 'add', 'build']);
+        buildFolder();
         expect(
           messages.last,
           contains('$workspaceDnaLayer instantiated in the workspace'),
