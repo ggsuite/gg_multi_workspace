@@ -6,6 +6,14 @@
 
 - Add do localize, find between repos in the ticket graph and keep user work out of gg commits in do add
 
+## 4.12.0 - 2026-10-14
+
+### Changed
+
+- Build the workspace DNA in a temporary folder and copy only .claude and the CLAUDE.md block into the root, so a failing step leaves no pubspec.yaml or dna/ there
+- Suggest dart pub global activate gg when the helix inside gg is too old for the latest dna_gg, otherwise gg do init workspace instead of the manual gg dna steps
+- Remove the pubspec.yaml, pubspec.lock, .dart_tool and dna folder a failed earlier run left in the workspace root
+
 ## 4.11.1 - 2026-10-06
 
 ### Changed

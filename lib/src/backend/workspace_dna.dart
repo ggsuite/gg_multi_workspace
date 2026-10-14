@@ -71,22 +71,45 @@ class _DnaCommand extends Command<dynamic> {
 /// `build` performs), so it needs the flag as much as the explicit
 /// `build` call that follows it.
 ///
+/// The three steps run in an empty temporary folder, never in [root]:
+/// `init` and `add` need a pub manifest, a lock, `.dart_tool/` and a
+/// `dna/` scaffold to resolve the layer, and a step that fails half way
+/// would leave them in the workspace. Only when all three steps are
+/// through is the result taken over (see [_takeOver]): its `.claude/` is
+/// copied into [root] — over the files of the same name, beside the
+/// user's own — and its managed `CLAUDE.md` block replaces the one in the
+/// root's `CLAUDE.md`, or is appended to it; the user's own text stays.
+/// The temporary folder is removed either way. It starts empty on
+/// purpose: helix refuses to overwrite an existing file outside a git
+/// repository, and neither the folder nor a workspace root is one. A
+/// temporary folder that happens to lie inside a git work tree gets a
+/// repository of its own first, so the commit helix tries after a build
+/// never lands in that unrelated repository.
+///
+/// A successful run also removes what an earlier run of the in-root
+/// instantiation left behind when it failed half way — see
+/// [_removeOldScaffold].
+///
 /// `--quiet` keeps the instantiation to the one line reported when it is
 /// through: which file the DNA wrote is detail of a workspace nobody
-/// hand-maintains, and the automatic commit helix tries could not work
-/// here at all — the folder is no repository. For `init` it also drops
-/// the next steps it suggests by hand, `git init` and `gg dna add`: this
-/// function adds the layer itself, and the folder stays no repository.
+/// hand-maintains. For `init` it also drops the next steps it suggests by
+/// hand, `git init` and `gg dna add`: this function adds the layer
+/// itself.
 ///
-/// A failure is reported with the commands to repeat by hand, never
-/// thrown: the workspace is usable without its DNA.
+/// A failure is reported with what to do about it, never thrown: the
+/// workspace is usable without its DNA. [createTemp] replaces the system
+/// temporary folder in tests.
 Future<void> instantiateWorkspaceDna({
   required String root,
   required RunDna runDna,
   required GgLog ggLog,
+  Directory Function()? createTemp,
 }) async {
-  final target = root.replaceAll(r'\', '/');
+  Directory? build;
   try {
+    build = (createTemp ?? _systemTemp)();
+    await _isolateFromEnclosingRepo(build.path);
+    final target = build.path.replaceAll(r'\', '/');
     await runDna(['init', '--target', target, '--language', 'dart', '--quiet']);
     await runDna([
       'add',
@@ -97,20 +120,179 @@ Future<void> instantiateWorkspaceDna({
       '--quiet',
     ]);
     await runDna(['build', '--target', target, '--workspace', '--quiet']);
+    await _takeOver(build: build.path, root: root);
   } catch (e) {
     ggLog(cError('Could not instantiate $workspaceDnaLayer: $e'));
-    ggLog(
-      cAction(
-        'Run manually: gg dna init --language dart, '
-        'gg dna add $workspaceDnaLayer --workspace, '
-        'gg dna build --workspace',
-      ),
-    );
+    ggLog(cAction(_failureHint(e)));
     return;
+  } finally {
+    if (build != null) _remove(build);
   }
-  _writeStamp(root);
-  _removeScaffold(root);
+  try {
+    _removeOldScaffold(root);
+    // coverage:ignore-start
+  } on FileSystemException catch (e) {
+    ggLog(cWarn('Could not remove the old DNA scaffold from the root: $e'));
+  }
+  // coverage:ignore-end
   ggLog(cDetail('✓ $workspaceDnaLayer instantiated in the workspace'));
+}
+
+Directory _systemTemp() =>
+    Directory.systemTemp.createTempSync('gg_workspace_dna_');
+
+/// Gives [dir] a git repository of its own when it lies inside a git
+/// work tree — the folder git would otherwise report and commit to.
+Future<void> _isolateFromEnclosingRepo(String dir) async {
+  var current = Directory(dir).absolute;
+  while (true) {
+    final dotGit = path.join(current.path, '.git');
+    if (FileSystemEntity.typeSync(dotGit) != FileSystemEntityType.notFound) {
+      break;
+    }
+    final parent = current.parent;
+    if (parent.path == current.path) return;
+    current = parent;
+  }
+  final result = await Process.run('git', [
+    'init',
+    '-q',
+  ], workingDirectory: dir);
+  if (result.exitCode != 0) {
+    throw Exception('git init failed in $dir: ${result.stderr}'.trim());
+  }
+}
+
+/// What helix reports when a layer's `dna/_dna.json` carries a format
+/// version newer than the helix gg was installed with.
+final RegExp _unsupportedFormatVersion = RegExp(
+  r'format version \d+ is not supported',
+);
+
+/// What to do after [instantiateWorkspaceDna] failed with [error]. A
+/// layer in a format the helix inside gg cannot read needs a newer gg —
+/// `dart pub global activate gg` resolves gg's dependencies anew and
+/// brings the newest helix gg allows. A broken managed block in the
+/// root's `CLAUDE.md` fails every run until it is repaired. Anything else
+/// is repeated by the command that instantiates the DNA of an existing
+/// workspace again.
+String _failureHint(Object error) {
+  if (_unsupportedFormatVersion.hasMatch('$error')) {
+    return 'The helix inside gg is too old for the latest '
+        '$workspaceDnaLayer. Update gg: dart pub global activate gg';
+  }
+  if (error is StateError) {
+    return 'Add the missing "$claudeMdEndMarker" to CLAUDE.md in the '
+        'workspace root, then run gg do init workspace there.';
+  }
+  return 'Run gg do init workspace in the workspace root to try again.';
+}
+
+/// Copies what the DNA build in [build] produced for the workspace into
+/// [root]: `.claude/` and the managed `CLAUDE.md` block, then the stamp
+/// of the version it resolved. The new `CLAUDE.md` is worked out before
+/// anything is written, so a root `CLAUDE.md` whose block cannot be
+/// replaced leaves the root as it was. The stamp goes first and comes
+/// back last: a copy that fails half way leaves a root without stamp,
+/// which the next ticket instantiates again.
+///
+/// `copyDirectory` renames a `*.darta` file to `*.dart` — no `dna_gg`
+/// file is named that way.
+Future<void> _takeOver({required String build, required String root}) async {
+  final block = claudeMdBlockIn(build);
+  final claudeMd = File(path.join(root, 'CLAUDE.md'));
+  final newClaudeMd = block == null
+      ? null
+      : upsertClaudeMdBlock(
+          claudeMd.existsSync() ? claudeMd.readAsStringSync() : '',
+          block,
+        );
+
+  final stamp = File(path.join(root, dnaVersionStampPath));
+  if (stamp.existsSync()) stamp.deleteSync();
+
+  final claude = Directory(path.join(build, '.claude'));
+  if (claude.existsSync()) {
+    await copyDirectory(
+      claude,
+      Directory(path.join(root, '.claude')),
+      skipNames: const {},
+    );
+  }
+  if (newClaudeMd != null) claudeMd.writeAsStringSync(newClaudeMd);
+  _writeStamp(build: build, root: root);
+}
+
+/// [content] of a `CLAUDE.md` with its managed block replaced by [block]
+/// — or [block] appended after a blank line when it has none yet, the
+/// way helix places it. Throws a [StateError] when a start marker has no
+/// end marker after it: appending would leave the file with two blocks.
+String upsertClaudeMdBlock(String content, String block) {
+  final old = claudeMdBlock(content);
+  if (old != null) return content.replaceFirst(old, block);
+  if (content.contains(claudeMdStartMarker)) {
+    throw StateError(
+      'CLAUDE.md holds "$claudeMdStartMarker" without a matching '
+      '"$claudeMdEndMarker".',
+    );
+  }
+  final own = content.trimRight();
+  return own.isEmpty ? '$block\n' : '$own\n\n$block\n';
+}
+
+/// Removes the temporary [dir] of [instantiateWorkspaceDna]. A folder
+/// that cannot be removed — a file another process still holds — stays
+/// for the system to clean up: it is no reason to fail the run.
+void _remove(Directory dir) {
+  try {
+    dir.deleteSync(recursive: true);
+    // coverage:ignore-start
+  } on FileSystemException catch (_) {}
+  // coverage:ignore-end
+}
+
+/// Removes from [root] what the in-root instantiation of gg versions
+/// before the temporary folder left there when a step failed: the pub
+/// scaffold — `pubspec.yaml`, `pubspec.lock`, `.dart_tool/` — and the
+/// `dna/` folder. Only a `pubspec.yaml` that is recognizably that
+/// scaffold counts — the skeleton `helix init` writes (`description: A
+/// Dart project.`, `publish_to: none`) with [workspaceDnaLayer] as a dev
+/// dependency — and `dna/` only beside it and only while it holds
+/// nothing but the config files `init` and `add` write. Anything else in
+/// the root belongs to the user and stays.
+void _removeOldScaffold(String root) {
+  final pubspec = File(path.join(root, 'pubspec.yaml'));
+  if (!pubspec.existsSync() || !_isDnaScaffold(pubspec)) return;
+  pubspec.deleteSync();
+  final lock = File(path.join(root, 'pubspec.lock'));
+  if (lock.existsSync()) lock.deleteSync();
+  final dartTool = Directory(path.join(root, '.dart_tool'));
+  if (dartTool.existsSync()) dartTool.deleteSync(recursive: true);
+  final dna = Directory(path.join(root, 'dna'));
+  if (!dna.existsSync()) return;
+  final names = dna
+      .listSync(recursive: true)
+      .map((e) => path.relative(e.path, from: dna.path))
+      .toSet();
+  if (names.difference(const {'_dna.json', '_vars.json'}).isEmpty) {
+    dna.deleteSync(recursive: true);
+  }
+}
+
+/// Whether [pubspec] is the scaffold `helix init` and `add` write for
+/// [workspaceDnaLayer] — see [_removeOldScaffold].
+bool _isDnaScaffold(File pubspec) {
+  try {
+    final yaml = loadYaml(pubspec.readAsStringSync());
+    if (yaml is! YamlMap) return false;
+    final devDependencies = yaml['dev_dependencies'];
+    return yaml['description'] == 'A Dart project.' &&
+        yaml['publish_to'] == 'none' &&
+        devDependencies is YamlMap &&
+        devDependencies.containsKey(workspaceDnaLayer);
+  } on Exception {
+    return false;
+  }
 }
 
 // .............................................................................
@@ -128,8 +310,11 @@ const String claudeMdEndMarker = '<!-- helix:claude_md:end -->';
 /// `null` when it holds no complete one.
 String? claudeMdBlock(String content) {
   final start = content.indexOf(claudeMdStartMarker);
-  final end = content.indexOf(claudeMdEndMarker);
-  if (start < 0 || end < start) return null;
+  if (start < 0) return null;
+  // Searched from the start marker on: an end marker standing alone
+  // before the block must not hide it.
+  final end = content.indexOf(claudeMdEndMarker, start);
+  if (end < 0) return null;
   return content.substring(start, end + claudeMdEndMarker.length);
 }
 
@@ -139,11 +324,11 @@ String? claudeMdBlockIn(String dir) {
   return file.existsSync() ? claudeMdBlock(file.readAsStringSync()) : null;
 }
 
-/// Notes the [workspaceDnaLayer] version `add` resolved — read from the
-/// lock file before the scaffold goes — so [refreshWorkspaceDna] can tell
-/// an up-to-date folder without asking pub again.
-void _writeStamp(String root) {
-  final lock = File(path.join(root, 'pubspec.lock'));
+/// Notes in [root] the [workspaceDnaLayer] version `add` resolved — read
+/// from the lock file of the [build] folder — so [refreshWorkspaceDna]
+/// can tell an up-to-date folder without asking pub again.
+void _writeStamp({required String build, required String root}) {
+  final lock = File(path.join(build, 'pubspec.lock'));
   if (!lock.existsSync()) return;
   final yaml = loadYaml(lock.readAsStringSync());
   final packages = yaml is YamlMap ? yaml['packages'] : null;
@@ -225,19 +410,4 @@ Future<void> copyWorkspaceDna({
       skipNames: const {},
     );
   }
-}
-
-// .............................................................................
-/// Removes what `init`/`add` needed only to resolve [workspaceDnaLayer]
-/// — the pub manifest, its lock and the resolved package cache.
-/// `build --workspace` already left every DNA-owned scaffold file
-/// (`dna/`, a manifest) out of its own output; what stays is `.claude/`
-/// and `CLAUDE.md`.
-void _removeScaffold(String root) {
-  for (final name in ['pubspec.yaml', 'pubspec.lock']) {
-    final file = File(path.join(root, name));
-    if (file.existsSync()) file.deleteSync();
-  }
-  final dartTool = Directory(path.join(root, '.dart_tool'));
-  if (dartTool.existsSync()) dartTool.deleteSync(recursive: true);
 }
