@@ -1460,13 +1460,15 @@ class AddCommand extends Command<dynamic> {
       return;
     }
 
-    await _ticketLocalizer.localize(repos: nodes, ggLog: ggLog, upgrade: true);
-    // Only the repos copied now are clean ocean code: record them.
-    await _ticketLocalizer.commit(
+    // Commits the repos localized before a failing one all the same.
+    await _ticketLocalizer.localizeAndCommit(
+      repos: nodes,
       repoDirs: RepoFolderResolver.repoDirs(ticketDir.path),
       baseline: baseline,
       ggLog: ggLog,
+      // Only the repos copied now are clean ocean code: record them.
       recordStateFor: copiedDirs,
+      upgrade: true,
     );
 
     final ticketName = path.basename(ticketDir.path);

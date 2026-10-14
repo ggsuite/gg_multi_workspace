@@ -34,6 +34,26 @@ class MockLocalizeRefs extends Mock implements ChangeRefsToLocal {}
 
 class MockBackupPublishTo extends Mock implements BackupPublishTo {}
 
+/// Localizes the refs of every repo but the one named [failing].
+class FailingChangeRefsToLocal extends ChangeRefsToLocal {
+  /// Constructor.
+  FailingChangeRefsToLocal({required super.ggLog, required this.failing});
+
+  /// The folder name of the repo that fails.
+  final String failing;
+
+  @override
+  Future<void> get({
+    required Directory directory,
+    required void Function(String) ggLog,
+  }) async {
+    if (path.basename(directory.path) == failing) {
+      throw Exception('localize failed');
+    }
+    await super.get(directory: directory, ggLog: ggLog);
+  }
+}
+
 class MockProcessRunner extends Mock {
   Future<ProcessResult> call(
     String executable,
@@ -3100,6 +3120,55 @@ version: 1.0.0
           await gitOutput(a, ['status', '--porcelain']),
           'M pubspec.yaml\n?? wip.dart',
         );
+      });
+
+      test('commits the repos localized before a failing one', () async {
+        // x and y use b, y also x: b, x and y are localized in that order.
+        oceanRepo('b');
+        final ticketDir = ticket('T_FAIL');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_FAIL"}');
+        const sdk = 'environment:\n  sdk: ^3.0.0\n';
+        final x = await gitTicketRepo(
+          ticketDir,
+          'x',
+          'name: x\nversion: 1.0.0\n${sdk}dependencies:\n  b: ^1.0.0\n',
+        );
+        final y = await gitTicketRepo(
+          ticketDir,
+          'y',
+          'name: y\nversion: 1.0.0\n$sdk'
+              'dependencies:\n  b: ^1.0.0\n  x: ^1.0.0\n',
+        );
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: anyProcessRunner().call,
+          localizeRefs: FailingChangeRefsToLocal(ggLog: ggLog, failing: 'y'),
+        );
+        await expectLater(
+          runner.run(['add', 'b']),
+          throwsA(
+            isA<Exception>().having(
+              (e) => e.toString(),
+              'message',
+              contains('Failed to localize the refs of y'),
+            ),
+          ),
+        );
+
+        // x's override is committed, though y failed after it ...
+        expect(
+          File(path.join(x.path, 'pubspec_overrides.yaml')).readAsStringSync(),
+          contains('path: ../b'),
+        );
+        expect(
+          await gitOutput(x, ['log', '--format=%s']),
+          '#gg: changed references to path\nInitial commit',
+        );
+        expect(await gitOutput(x, ['status', '--porcelain']), isEmpty);
+        // ... while gg leaves the failed y alone.
+        expect(await gitOutput(y, ['log', '--format=%s']), 'Initial commit');
       });
 
       test('records the commit state of the repos copied now only', () async {
