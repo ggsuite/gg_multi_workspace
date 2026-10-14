@@ -51,25 +51,37 @@ void main() {
 
   File file(String rel) => File(path.join(tempDir.path, rel));
 
-  /// Stands in for `gg dna init/add/build`: leaves what a real run leaves
-  /// in [root] — the pub scaffold with the resolved [version] in the lock,
-  /// the managed CLAUDE.md block and one skill.
-  RunDna fakeDna(String root, {String version = '0.5.1'}) => (args) async {
+  /// The folders the `gg dna` calls ran in, one per `--target`.
+  final targets = <String>{};
+
+  /// Stands in for `gg dna init/add/build`: leaves in the `--target`
+  /// folder — always an empty temporary one — what a real run leaves
+  /// there: the pub scaffold and the `dna/` folder, the resolved
+  /// [version] in the lock, a CLAUDE.md holding the managed block and
+  /// one skill.
+  RunDna fakeDna({String version = '0.5.1'}) => (args) async {
     dnaCalls.add(args);
+    final target = args[args.indexOf('--target') + 1];
+    targets.add(target);
+    File at(String rel) => File(path.join(target, rel));
     switch (args.first) {
       case 'init':
-        File(path.join(root, 'pubspec.yaml')).writeAsStringSync('name: ws\n');
+        at('pubspec.yaml').writeAsStringSync('name: ws\n');
+        at(path.join('dna', '_dna.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{}\n');
       case 'add':
-        File(path.join(root, 'pubspec.lock')).writeAsStringSync(
+        at('pubspec.lock').writeAsStringSync(
           'packages:\n'
           '  dna_gg:\n'
           '    dependency: "direct dev"\n'
           '    version: "$version"\n',
         );
-        Directory(path.join(root, '.dart_tool')).createSync();
+        Directory(path.join(target, '.dart_tool')).createSync();
       case 'build':
-        File(path.join(root, 'CLAUDE.md')).writeAsStringSync('$_block\n');
-        File(path.join(root, '.claude', 'skills', 'gg', 'SKILL.md'))
+        expect(at('CLAUDE.md').existsSync(), isFalse);
+        at('CLAUDE.md').writeAsStringSync('$_block\n');
+        at(path.join('.claude', 'skills', 'gg', 'SKILL.md'))
           ..createSync(recursive: true)
           ..writeAsStringSync('# gg $version\n');
     }
@@ -78,66 +90,110 @@ void main() {
   setUp(() {
     messages.clear();
     dnaCalls.clear();
+    targets.clear();
     tempDir = Directory.systemTemp.createTempSync('workspace_dna_test_');
   });
 
   tearDown(() => tempDir.deleteSync(recursive: true));
 
+  /// The names [tempDir] holds, sorted.
+  List<String> rootEntries() =>
+      tempDir.listSync().map((e) => path.basename(e.path)).toList()..sort();
+
   group('instantiateWorkspaceDna', () {
+    test('runs init, add, build in a temporary folder and copies only '
+        '.claude and CLAUDE.md into the root', () async {
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+      );
+
+      expect(targets, hasLength(1));
+      final build = targets.single;
+      expect(build, isNot(contains(r'\')));
+      expect(
+        path.equals(build, tempDir.path),
+        isFalse,
+        reason: 'helix must never run in the workspace root',
+      );
+      expect(dnaCalls, [
+        ['init', '--target', build, '--language', 'dart', '--quiet'],
+        ['add', workspaceDnaLayer, '--target', build, '--workspace', '--quiet'],
+        ['build', '--target', build, '--workspace', '--quiet'],
+      ]);
+      expect(rootEntries(), ['.claude', 'CLAUDE.md']);
+      expect(file('CLAUDE.md').readAsStringSync(), '$_block\n');
+      expect(
+        file(path.join('.claude', 'skills', 'gg', 'SKILL.md')).existsSync(),
+        isTrue,
+      );
+      expect(Directory(build).existsSync(), isFalse);
+      expect(messages.last, '✓ dna_gg instantiated in the workspace');
+    });
+
     test(
-      'runs init, add, build and keeps only .claude and CLAUDE.md',
+      'keeps the own text of CLAUDE.md and the own files of .claude',
       () async {
+        file('CLAUDE.md').writeAsStringSync(
+          '# My notes\n\n$claudeMdStartMarker\nold\n$claudeMdEndMarker\n\n'
+          '## More notes\n',
+        );
+        file(path.join('.claude', 'settings.local.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{}\n');
+        file(path.join('.claude', 'skills', 'gg', 'SKILL.md'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# gg old\n');
+
         await instantiateWorkspaceDna(
           root: tempDir.path,
-          runDna: fakeDna(tempDir.path),
+          runDna: fakeDna(version: '0.6.0'),
           ggLog: ggLog,
         );
 
-        final root = tempDir.path.replaceAll(r'\', '/');
-        expect(dnaCalls, [
-          ['init', '--target', root, '--language', 'dart', '--quiet'],
-          [
-            'add',
-            workspaceDnaLayer,
-            '--target',
-            root,
-            '--workspace',
-            '--quiet',
-          ],
-          ['build', '--target', root, '--workspace', '--quiet'],
-        ]);
-        expect(file('pubspec.yaml').existsSync(), isFalse);
-        expect(file('pubspec.lock').existsSync(), isFalse);
-        expect(Directory(file('.dart_tool').path).existsSync(), isFalse);
-        expect(file('CLAUDE.md').existsSync(), isTrue);
-        expect(messages.last, '✓ dna_gg instantiated in the workspace');
+        expect(
+          file('CLAUDE.md').readAsStringSync(),
+          '# My notes\n\n$_block\n\n## More notes\n',
+        );
+        expect(
+          file(path.join('.claude', 'settings.local.json')).existsSync(),
+          isTrue,
+        );
+        expect(
+          file(path.join('.claude', 'skills', 'gg', 'SKILL.md'))
+              .readAsStringSync(),
+          '# gg 0.6.0\n',
+        );
       },
     );
 
     test('stamps the version the lock resolved', () async {
       await instantiateWorkspaceDna(
         root: tempDir.path,
-        runDna: fakeDna(tempDir.path, version: '0.7.0'),
+        runDna: fakeDna(version: '0.7.0'),
         ggLog: ggLog,
       );
       expect(file(dnaVersionStampPath).readAsStringSync(), '0.7.0');
     });
 
     test('writes no stamp without a lock or a dna_gg entry in it', () async {
-      // No lock at all.
+      // No lock at all — and no output either: the root stays empty.
       await instantiateWorkspaceDna(
         root: tempDir.path,
         runDna: (_) async {},
         ggLog: ggLog,
       );
-      expect(file(dnaVersionStampPath).existsSync(), isFalse);
+      expect(rootEntries(), isEmpty);
 
       // A lock that does not name dna_gg.
       await instantiateWorkspaceDna(
         root: tempDir.path,
         runDna: (args) async {
           if (args.first == 'add') {
-            file('pubspec.lock').writeAsStringSync('packages:\n  other: {}\n');
+            final target = args[args.indexOf('--target') + 1];
+            File(path.join(target, 'pubspec.lock'))
+                .writeAsStringSync('packages:\n  other: {}\n');
           }
         },
         ggLog: ggLog,
@@ -145,28 +201,254 @@ void main() {
       expect(file(dnaVersionStampPath).existsSync(), isFalse);
     });
 
+    test('leaves the root untouched when a step fails', () async {
+      file('CLAUDE.md').writeAsStringSync('# My notes\n');
+      final fake = fakeDna();
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: (args) async {
+          if (args.first == 'build') throw Exception('build failed');
+          await fake(args);
+        },
+        ggLog: ggLog,
+      );
+
+      expect(rootEntries(), ['CLAUDE.md']);
+      expect(file('CLAUDE.md').readAsStringSync(), '# My notes\n');
+      expect(Directory(targets.single).existsSync(), isFalse);
+      expect(
+        messages,
+        contains('Could not instantiate dna_gg: Exception: build failed'),
+      );
+      expect(
+        messages.last,
+        'Run gg do init workspace in the workspace root to try again.',
+      );
+    });
+
+    test('names the gg update when helix cannot read the layer', () async {
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: (args) async {
+          targets.add(args[args.indexOf('--target') + 1]);
+          if (args.first == 'add') {
+            throw Exception(
+              'dna_gg/dna/_dna.json: format version 2 is not supported — '
+              'this helix reads version 1',
+            );
+          }
+        },
+        ggLog: ggLog,
+      );
+
+      expect(rootEntries(), isEmpty);
+      expect(Directory(targets.single).existsSync(), isFalse);
+      expect(
+        messages.last,
+        'The helix inside gg is too old for the latest dna_gg. '
+        'Update gg: dart pub global activate gg',
+      );
+    });
+
+    test('reports a temporary folder that cannot be created', () async {
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+        createTemp: () => throw const FileSystemException('no temp'),
+      );
+
+      expect(dnaCalls, isEmpty);
+      expect(rootEntries(), isEmpty);
+      expect(messages.first, contains('Could not instantiate dna_gg'));
+      expect(
+        messages.last,
+        'Run gg do init workspace in the workspace root to try again.',
+      );
+    });
+
     test(
-      'reports a failure with the manual steps and keeps the scaffold',
+      'leaves the root as it was when its CLAUDE.md block cannot be replaced',
       () async {
+        const broken = '# My notes\n\n$claudeMdStartMarker\nold\n';
+        file('CLAUDE.md').writeAsStringSync(broken);
+        file(path.join('.claude', 'skills', 'gg', 'SKILL.md'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('# gg old\n');
+        file(dnaVersionStampPath).writeAsStringSync('0.4.0');
+
         await instantiateWorkspaceDna(
           root: tempDir.path,
-          runDna: (args) async {
-            if (args.first == 'init') {
-              file('pubspec.yaml').writeAsStringSync('name: ws\n');
-              return;
-            }
-            throw Exception('pub add failed');
-          },
+          runDna: fakeDna(version: '0.6.0'),
+          ggLog: ggLog,
+        );
+
+        expect(file('CLAUDE.md').readAsStringSync(), broken);
+        expect(
+          file(path.join('.claude', 'skills', 'gg', 'SKILL.md'))
+              .readAsStringSync(),
+          '# gg old\n',
+        );
+        expect(file(dnaVersionStampPath).readAsStringSync(), '0.4.0');
+        expect(Directory(targets.single).existsSync(), isFalse);
+        expect(
+          messages.last,
+          'Add the missing "$claudeMdEndMarker" to CLAUDE.md in the '
+          'workspace root, then run gg do init workspace there.',
+        );
+      },
+    );
+
+    test('finds its block again behind a lone end marker', () async {
+      file('CLAUDE.md').writeAsStringSync('Mentions $claudeMdEndMarker.\n');
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+      );
+
+      expect(
+        file('CLAUDE.md').readAsStringSync(),
+        'Mentions $claudeMdEndMarker.\n\n$_block\n',
+      );
+      expect(claudeMdBlockIn(tempDir.path), _block);
+    });
+
+    test('gives a temporary folder inside a git work tree its own '
+        'repository', () async {
+      final enclosing = Directory(path.join(tempDir.path, 'repo'))
+        ..createSync();
+      Directory(path.join(enclosing.path, '.git')).createSync();
+      final fake = fakeDna();
+      final ownRepo = <bool>[];
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: (args) async {
+          final target = args[args.indexOf('--target') + 1];
+          ownRepo.add(Directory(path.join(target, '.git')).existsSync());
+          await fake(args);
+        },
+        ggLog: ggLog,
+        createTemp: () =>
+            Directory(path.join(enclosing.path, 'build'))..createSync(),
+      );
+
+      expect(ownRepo, [true, true, true]);
+      expect(messages.last, '✓ dna_gg instantiated in the workspace');
+    });
+
+    test('reports a git init that fails', () async {
+      // A `.git` file that is no gitfile makes `git init` fail.
+      final build = Directory(path.join(tempDir.path, 'build'))..createSync();
+      File(path.join(build.path, '.git')).writeAsStringSync('garbage\n');
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+        createTemp: () => build,
+      );
+
+      expect(dnaCalls, isEmpty);
+      expect(build.existsSync(), isFalse);
+      expect(
+        messages,
+        contains(
+          startsWith('Could not instantiate dna_gg: Exception: git init'),
+        ),
+      );
+    });
+
+    group('removes the scaffold a failed in-root run left', () {
+      void seedScaffold({String description = 'A Dart project.'}) {
+        file('pubspec.yaml').writeAsStringSync(
+          'name: ws\n'
+          'description: $description\n'
+          'version: 0.1.0\n'
+          'publish_to: none\n'
+          '\n'
+          'dev_dependencies:\n'
+          '  dna_gg: ^0.8.0\n'
+          '  helix: ^1.11.0\n',
+        );
+        file('pubspec.lock').writeAsStringSync('packages: {}\n');
+        Directory(path.join(tempDir.path, '.dart_tool')).createSync();
+        file(path.join('dna', '_dna.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{}\n');
+      }
+
+      test('once a run succeeds', () async {
+        seedScaffold();
+
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: fakeDna(),
+          ggLog: ggLog,
+        );
+
+        expect(rootEntries(), ['.claude', 'CLAUDE.md']);
+      });
+
+      test('but not when the run fails', () async {
+        seedScaffold();
+
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: (_) async => throw Exception('offline'),
+          ggLog: ggLog,
+        );
+
+        expect(rootEntries(), [
+          '.dart_tool',
+          'dna',
+          'pubspec.lock',
+          'pubspec.yaml',
+        ]);
+      });
+
+      test('keeps a dna folder holding more than the configs', () async {
+        seedScaffold();
+        file(path.join('dna', 'notes.md')).writeAsStringSync('mine\n');
+
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: fakeDna(),
+          ggLog: ggLog,
+        );
+
+        expect(rootEntries(), ['.claude', 'CLAUDE.md', 'dna']);
+      });
+
+      test('never a pubspec.yaml of the user', () async {
+        seedScaffold(description: 'My own package.');
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: fakeDna(),
           ggLog: ggLog,
         );
         expect(file('pubspec.yaml').existsSync(), isTrue);
-        expect(
-          messages,
-          contains('Could not instantiate dna_gg: Exception: pub add failed'),
+
+        file('pubspec.yaml').writeAsStringSync('- not a map\n');
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: fakeDna(),
+          ggLog: ggLog,
         );
-        expect(messages.last, contains('gg dna build --workspace'));
-      },
-    );
+        expect(file('pubspec.yaml').existsSync(), isTrue);
+
+        file('pubspec.yaml').writeAsStringSync('name: [unclosed\n');
+        await instantiateWorkspaceDna(
+          root: tempDir.path,
+          runDna: fakeDna(),
+          ggLog: ggLog,
+        );
+        expect(file('pubspec.yaml').existsSync(), isTrue);
+        expect(file('pubspec.lock').existsSync(), isTrue);
+      });
+    });
   });
 
   group('latestWorkspaceDnaVersion', () {
@@ -204,7 +486,7 @@ void main() {
     Future<void> refresh(String? latest, {String version = '0.5.1'}) =>
         refreshWorkspaceDna(
           root: tempDir.path,
-          runDna: fakeDna(tempDir.path, version: version),
+          runDna: fakeDna(version: version),
           ggLog: ggLog,
           latestVersion: () async => latest,
         );
@@ -322,6 +604,39 @@ void main() {
       expect(
         Link(inTicket('.claude/skills/shared').path).targetSync(),
         '../shared',
+      );
+    });
+  });
+
+  group('upsertClaudeMdBlock', () {
+    test('replaces the block and keeps the text around it', () {
+      expect(
+        upsertClaudeMdBlock(
+          'A\n$claudeMdStartMarker\nold\n$claudeMdEndMarker\nB\n',
+          _block,
+        ),
+        'A\n$_block\nB\n',
+      );
+    });
+
+    test('appends the block after a blank line when there is none', () {
+      expect(
+        upsertClaudeMdBlock('# Notes\n\n', _block),
+        '# Notes\n\n$_block\n',
+      );
+      expect(upsertClaudeMdBlock('', _block), '$_block\n');
+    });
+
+    test('throws on a start marker without an end marker', () {
+      expect(
+        () => upsertClaudeMdBlock('$claudeMdStartMarker\nold\n', _block),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('without a matching'),
+          ),
+        ),
       );
     });
   });
