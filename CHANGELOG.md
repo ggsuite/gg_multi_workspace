@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.13.0 - 2026-10-14
+
+### Added
+
+- Add do localize, find between repos in the ticket graph and keep user work out of gg commits in do add
+
 ## 4.12.0 - 2026-10-14
 
 ### Changed

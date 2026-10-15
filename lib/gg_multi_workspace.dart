@@ -34,6 +34,7 @@ export 'src/commands/do/list/deps.dart';
 export 'src/commands/do/list/organizations.dart';
 export 'src/commands/do/list/repos.dart';
 export 'src/commands/do/list/tickets.dart';
+export 'src/commands/do/localize.dart';
 export 'src/commands/do/ls.dart';
 export 'src/commands/do/rm.dart';
 export 'src/commands/do/rm/repo.dart' hide DirectoryFactory;

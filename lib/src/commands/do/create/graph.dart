@@ -115,16 +115,10 @@ class GraphCommand extends DirCommand<void> {
     // the checked out repos come first: they shadow the ocean version of the
     // same repo, while the remaining ocean repos stay available so that
     // dependencies pointing outside the ticket can still be resolved.
-    final oceanDirs = RepoFolderResolver.repoDirs(oceanPath);
-    final ticketDirs = ticketPath == null
-        ? const <Directory>[]
-        : RepoFolderResolver.repoDirs(ticketPath);
-    final ticketNames = ticketDirs.map((d) => p.basename(d.path)).toSet();
-
-    var dirs = <Directory>[
-      ...ticketDirs,
-      ...oceanDirs.where((d) => !ticketNames.contains(p.basename(d.path))),
-    ];
+    var (:dirs, :ticketNames) = graphPackageDirs(
+      oceanPath: oceanPath,
+      ticketPath: ticketPath,
+    );
 
     if (org != null) {
       dirs = dirs
