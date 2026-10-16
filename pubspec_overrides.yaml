@@ -4,6 +4,8 @@
 # change-refs-to-git-feature-branch and change-refs-to-pub-dev
 # remove it again.
 dependency_overrides:
+  gg_create_repo:
+    path: ../gg_create_repo
   gg_interact:
     path: ../gg_interact
   gg_multi_core:
