@@ -8,6 +8,7 @@ import 'package:args/command_runner.dart';
 import 'package:gg_log/gg_log.dart';
 
 import 'package:gg_multi_workspace/src/commands/do/create/graph.dart';
+import 'package:gg_multi_workspace/src/commands/do/create/repo.dart';
 import 'package:gg_multi_workspace/src/commands/do/create/ticket.dart';
 
 /// Command to create resources such as tickets.
@@ -16,6 +17,7 @@ class CreateCommand extends Command<void> {
   CreateCommand({required this.ggLog}) {
     addSubcommand(TicketCommand(ggLog: ggLog));
     addSubcommand(GraphCommand(ggLog: ggLog));
+    addSubcommand(RepoCommand(ggLog: ggLog));
   }
 
   /// Log function
@@ -25,5 +27,5 @@ class CreateCommand extends Command<void> {
   String get name => 'create';
 
   @override
-  String get description => 'Create tickets and other resources';
+  String get description => 'Create tickets, repositories and graphs';
 }
