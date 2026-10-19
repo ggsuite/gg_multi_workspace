@@ -6,6 +6,10 @@
 
 - Add gg do create repo
 
+### Changed
+
+- Harden gg do create repo in the workspace
+
 ## 4.13.1 - 2026-10-16
 
 ## 4.13.0 - 2026-10-14

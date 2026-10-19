@@ -16,44 +16,47 @@ import 'package:test/test.dart';
 void main() {
   late Directory root;
   late String ocean;
+  late String inTicket;
 
-  /// Writes [content] to [relativePath] below the workspace root.
-  void write(String relativePath, String content) {
-    File(p.join(root.path, relativePath))
-      ..parent.createSync(recursive: true)
-      ..writeAsStringSync(content);
+  /// Makes [relativePath] a git checkout whose origin is [url].
+  void gitRemote(String relativePath, String url) {
+    final dir = p.join(root.path, relativePath);
+    Directory(dir).createSync(recursive: true);
+    for (final args in [
+      ['init', '-q'],
+      ['remote', 'add', 'origin', url],
+    ]) {
+      final result = Process.runSync('git', args, workingDirectory: dir);
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+    }
   }
 
-  setUp(() {
+  /// The orgs `.organizations` lists.
+  List<String> registeredOrgs() {
+    final file = File(p.join(ocean, '.organizations'));
+    final list = jsonDecode(file.readAsStringSync()) as List<dynamic>;
+    return [
+      for (final org in list) (org as Map<String, dynamic>)['name'] as String,
+    ];
+  }
+
+  setUp(() async {
     root = Directory.systemTemp.createTempSync('workspace_repo_host_');
     ocean = p.join(root.path, ggMultiOceanFolder);
-    write(
-      '.ocean/.organizations',
-      jsonEncode([
-        {'id': '1', 'name': 'ggsuite', 'url': 'https://github.com/ggsuite/'},
-      ]),
+    inTicket = p.join(root.path, 'ticket');
+    await copyDirectory(
+      Directory(p.join('test', 'sample_folder', 'workspace_repo_host')),
+      root,
     );
-    write('.ocean/ggsuite/dna_ggsuite/pubspec.yaml', 'name: dna_ggsuite\n');
-    write('.ocean/ggsuite/dna_ggsuite/dna/_dna.json', '{}');
-    write('.ocean/tssuite/dna_tssuite/pubspec.yaml', 'name: dna_tssuite\n');
-    write(
-      '.ocean/tssuite/dna_tssuite/package.json',
-      '{"name": "@tssuite/dna-tssuite"}',
-    );
-    write('.ocean/tssuite/dna_tssuite/dna/_dna.json', '{}');
-    write('.ocean/tssuite/dna_plain/package.json', '{"name": "dna-plain"}');
-    write('.ocean/ggsuite/gg_existing/pubspec.yaml', 'name: gg_existing\n');
-    write('.ocean/ggsuite/broken/pubspec.yaml', 'name: [unclosed');
-    write('.ocean/ggsuite/list/package.json', '[]');
-    write('.ocean/ggsuite/dna_broken/pubspec.yaml', '- a list');
-    write('.ocean/ggsuite/dna_broken/dna/_dna.json', '{}');
-    write('.ocean/ggsuite/.hidden/pubspec.yaml', 'name: hidden\n');
-    write('.ocean/.git/config', '');
-    write('ticket/ticket.json', '{}');
-    write('ticket/taken/README.md', '');
+    // copyDirectory skips ticket.json, the file that makes a ticket.
+    File(p.join(inTicket, 'ticket.json')).writeAsStringSync('{}');
+    OrganizationUtils.clearCache();
   });
 
-  tearDown(() => root.deleteSync(recursive: true));
+  tearDown(() {
+    OrganizationUtils.clearCache();
+    root.deleteSync(recursive: true);
+  });
 
   WorkspaceRepoHost host({
     String? executionPath,
@@ -68,9 +71,43 @@ void main() {
 
   group('WorkspaceRepoHost', () {
     // #########################################################################
+    group('example()', () {
+      test('works without arguments, outside of any workspace', () {
+        final example = WorkspaceRepoHost.example();
+        expect(example.executionPath, Directory.systemTemp.path);
+        expect(
+          example.oceanPath,
+          p.join(Directory.systemTemp.path, ggMultiOceanFolder),
+        );
+        expect(example.addToTicket, true);
+      });
+    });
+
+    // #########################################################################
     group('knownOrgs()', () {
       test('lists the registered orgs and the org folders once', () async {
-        expect(await host().knownOrgs(), ['ggsuite', 'tssuite']);
+        expect(await host().knownOrgs(), [
+          'ggsuite',
+          'audanika-private',
+          'othersuite',
+          'tssuite',
+        ]);
+      });
+
+      test('prefers the spelling of an org folder', () async {
+        File(p.join(ocean, '.organizations')).writeAsStringSync(
+          jsonEncode([
+            {'id': '1', 'name': 'mixedorg', 'url': 'https://github.com/x/'},
+          ]),
+        );
+        File(p.join(ocean, 'MixedOrg', 'gg_mixed', 'pubspec.yaml'))
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync('name: gg_mixed\n');
+
+        final orgs = await host().knownOrgs();
+
+        expect(orgs, contains('MixedOrg'));
+        expect(orgs, isNot(contains('mixedorg')));
       });
 
       test('is empty without an ocean', () async {
@@ -83,14 +120,77 @@ void main() {
     group('dnaCandidates()', () {
       test('offers the Dart names of the DNA repos for Dart', () {
         final candidates = host().dnaCandidates(RepoSpec.example());
-        expect(candidates.map((c) => c.ref), ['dna_ggsuite', 'dna_tssuite']);
-        expect(candidates.map((c) => c.label), ['dna_ggsuite', 'dna_tssuite']);
+        expect(candidates.map((c) => c.label), [
+          'dna_audanika_private',
+          'dna_ggsuite',
+          'dna_tssuite',
+        ]);
+        expect(candidates.map((c) => c.ref), [
+          'dna_audanika_private',
+          'dna_ggsuite',
+          'dna_tssuite',
+        ]);
       });
 
       test('offers the npm names of the DNA repos for TypeScript', () {
         final spec = RepoSpec.example(language: RepoLanguage.typescript);
         final candidates = host().dnaCandidates(spec);
-        expect(candidates.map((c) => c.ref), ['@tssuite/dna-tssuite']);
+        expect(candidates.map((c) => c.label), [
+          '@tssuite/dna-ts-private',
+          '@tssuite/dna-tssuite',
+        ]);
+        expect(candidates.last.ref, '@tssuite/dna-tssuite');
+      });
+
+      test('refers to unpublished layers by their git remote', () {
+        const dartUrl = 'git@github.com:audanika-private/dna_audanika.git';
+        const tsUrl = 'https://github.com/tssuite/dna_ts_private.git';
+        gitRemote('.ocean/audanika-private/dna_audanika', dartUrl);
+        gitRemote('.ocean/tssuite/dna_ts_private', tsUrl);
+
+        final dart = host().dnaCandidates(RepoSpec.example()).first;
+        expect(dart.label, 'dna_audanika_private');
+        expect(dart.ref, dartUrl);
+
+        final ts = host()
+            .dnaCandidates(RepoSpec.example(language: RepoLanguage.typescript))
+            .first;
+        expect(ts.label, '@tssuite/dna-ts-private');
+        expect(ts.ref, tsUrl);
+      });
+    });
+
+    // #########################################################################
+    group('layerDir()', () {
+      String? dirOf(String layer) => host().layerDir(layer)?.path;
+
+      test('finds a layer by its package name', () {
+        expect(dirOf('dna_ggsuite'), p.join(ocean, 'ggsuite', 'dna_ggsuite'));
+      });
+
+      test('finds a repo with two manifests by either name', () {
+        final dir = p.join(ocean, 'tssuite', 'dna_tssuite');
+        expect(dirOf('dna_tssuite'), dir);
+        expect(dirOf('@tssuite/dna-tssuite'), dir);
+      });
+
+      test('finds a layer by its git remote, ssh or https', () {
+        gitRemote(
+          '.ocean/audanika-private/dna_audanika',
+          'git@github.com:audanika-private/dna_audanika.git',
+        );
+        final dir = p.join(ocean, 'audanika-private', 'dna_audanika');
+        expect(
+          dirOf('https://github.com/Audanika-Private/dna_audanika.git'),
+          dir,
+        );
+        expect(dirOf('git@github.com:audanika-private/dna_audanika'), dir);
+      });
+
+      test('is null for a layer the ocean does not have', () {
+        expect(dirOf('dna_unknown'), isNull);
+        expect(dirOf('https://github.com/ggsuite/dna_unknown.git'), isNull);
+        expect(dirOf('https://github.com'), isNull);
       });
     });
 
@@ -105,42 +205,121 @@ void main() {
         expect(host(executionPath: ocean).presetOrg, isNull);
         expect(host().presetOrg, isNull);
       });
+
+      test('is null in a flat repo and in a hidden folder', () {
+        final flat = p.join(ocean, 'gg_flat');
+        final hidden = p.join(ocean, '.hidden_org', 'gg_hidden');
+        expect(host(executionPath: flat).presetOrg, isNull);
+        expect(host(executionPath: hidden).presetOrg, isNull);
+      });
     });
 
     // #########################################################################
-    test('targetDir() is the org folder in the ocean', () {
-      expect(
-        host().targetDir(RepoSpec.example(org: 'ggsuite', name: 'gg_new')).path,
-        p.join(ocean, 'ggsuite', 'gg_new'),
-      );
+    group('targetDir()', () {
+      String target(String org) =>
+          host().targetDir(RepoSpec.example(org: org, name: 'gg_new')).path;
+
+      test('is the org folder in the ocean', () {
+        expect(target('ggsuite'), p.join(ocean, 'ggsuite', 'gg_new'));
+      });
+
+      test('uses the existing org folder in any case', () {
+        expect(target('GgSuite'), p.join(ocean, 'ggsuite', 'gg_new'));
+      });
+
+      test('uses a lower-case folder for a new org', () {
+        expect(target('NewOrg'), p.join(ocean, 'neworg', 'gg_new'));
+      });
     });
 
     // #########################################################################
     group('check()', () {
+      Future<List<String>> check(
+        RepoSpec spec, {
+        String? executionPath,
+        bool? addToTicket,
+        bool resumes = false,
+      }) => host(
+        executionPath: executionPath,
+        addToTicket: addToTicket,
+      ).check(spec, resumes: resumes);
+
       test('has nothing against a new name', () async {
-        expect(await host().check(RepoSpec.example(name: 'gg_new')), isEmpty);
+        expect(await check(RepoSpec.example(name: 'gg_new')), isEmpty);
       });
 
       test('rejects the name of a gg command', () async {
-        final problems = await host().check(RepoSpec.example(name: 'can'));
+        final problems = await check(RepoSpec.example(name: 'can'));
         expect(problems.single, contains('is a gg command'));
       });
 
       test('rejects a package name the ocean already has', () async {
         final spec = RepoSpec.example(org: 'tssuite', name: 'gg_existing');
-        final problems = await host().check(spec);
-        expect(problems.single, contains('already has a package'));
+        final problems = await check(spec);
+        expect(problems.first, contains('already has a package'));
+        expect(problems.last, contains('exists in org ggsuite too'));
+      });
+
+      test('rejects a name another org has, in any case', () async {
+        final spec = RepoSpec.example(org: 'ggsuite', name: 'GG_TWIN');
+        final problems = await check(spec);
+        expect(
+          problems.single,
+          '»GG_TWIN« exists in org othersuite too: '
+          '»gg do add GG_TWIN« would be ambiguous.',
+        );
+      });
+
+      test('rejects the name of a flat repo of the ocean', () async {
+        final spec = RepoSpec.example(org: 'ggsuite', name: 'gg_flat');
+        final problems = await check(spec);
+        expect(problems.last, contains('exists in the ocean too'));
       });
 
       test('does not count the target folder itself', () async {
-        final spec = RepoSpec.example(org: 'ggsuite', name: 'gg_existing');
-        expect(await host().check(spec), isEmpty);
+        final spec = RepoSpec.example(org: 'GgSuite', name: 'gg_existing');
+        expect(await check(spec), isEmpty);
       });
 
       test('rejects a folder the ticket already has', () async {
-        final inTicket = p.join(root.path, 'ticket');
-        final problems = await host(executionPath: inTicket)
-            .check(RepoSpec.example(name: 'taken'));
+        final spec = RepoSpec.example(name: 'taken');
+        final problems = await check(
+          spec,
+          executionPath: inTicket,
+          resumes: true,
+        );
+        expect(problems.single, 'The ticket already has a folder »taken«.');
+      });
+
+      test('ignores the ticket when it does not add to it', () async {
+        final spec = RepoSpec.example(name: 'taken');
+        expect(
+          await check(spec, executionPath: inTicket, addToTicket: false),
+          isEmpty,
+        );
+      });
+
+      test('accepts the repo of the earlier run in the ticket', () async {
+        gitRemote('ticket/gg_new', 'git@github.com:ggsuite/gg_new.git');
+        final spec = RepoSpec.example(org: 'GgSuite', name: 'gg_new');
+
+        expect(
+          await check(spec, executionPath: inTicket, resumes: true),
+          isEmpty,
+        );
+        expect(await check(spec, executionPath: inTicket), [
+          'The ticket already has a folder »gg_new«.',
+        ]);
+      });
+
+      test('rejects another repo of that name in the ticket', () async {
+        gitRemote('ticket/gg_new', 'git@github.com:other/gg_new.git');
+        final spec = RepoSpec.example(name: 'gg_new');
+        final problems = await check(
+          spec,
+          executionPath: inTicket,
+          resumes: true,
+        );
         expect(problems.single, contains('ticket already has a folder'));
       });
     });
@@ -150,7 +329,6 @@ void main() {
       final spec = RepoSpec.example();
 
       test('names the ticket inside a ticket', () {
-        final inTicket = p.join(root.path, 'ticket');
         expect(
           host(executionPath: inTicket).afterCreateDescription(spec),
           'add it to the ticket ticket',
@@ -158,7 +336,6 @@ void main() {
       });
 
       test('keeps the repository in the ocean otherwise', () {
-        final inTicket = p.join(root.path, 'ticket');
         expect(
           host(
             executionPath: inTicket,
@@ -172,33 +349,48 @@ void main() {
 
     // #########################################################################
     group('afterCreate()', () {
-      test('registers the org and adds the repo to the ticket', () async {
+      test('registers the org and adds the repo by its url', () async {
         final added = <String>[];
-        final inTicket = p.join(root.path, 'ticket');
-        final spec = RepoSpec.example(org: 'neworg', name: 'gg_new');
-
-        await host(
+        final spec = RepoSpec.example(org: 'NewOrg', name: 'gg_new');
+        final ticketHost = host(
           executionPath: inTicket,
           add:
               ({
-                required name,
+                required url,
                 required ticketPath,
                 required oceanPath,
                 required ggLog,
               }) async {
-                added.add('$name $ticketPath $oceanPath');
+                added.add('$url $ticketPath $oceanPath');
               },
-        ).afterCreate(spec: spec, directory: root, ggLog: (_) {});
+        );
 
-        expect(added, ['gg_new $inTicket $ocean']);
-        final orgs = File(p.join(ocean, '.organizations')).readAsStringSync();
-        expect(orgs, contains('neworg'));
+        await ticketHost.afterCreate(
+          spec: spec,
+          directory: root,
+          ggLog: (_) {},
+        );
+        await ticketHost.afterCreate(
+          spec: spec,
+          directory: root,
+          ggLog: (_) {},
+        );
+
+        const url = 'https://github.com/NewOrg/gg_new.git';
+        expect(added, List.filled(2, '$url $inTicket $ocean'));
+        expect(registeredOrgs(), ['ggsuite', 'neworg']);
+      });
+
+      test('does not register an org twice in another case', () async {
+        final spec = RepoSpec.example(org: 'GgSuite');
+        await host().afterCreate(spec: spec, directory: root, ggLog: (_) {});
+        expect(registeredOrgs(), ['ggsuite']);
       });
 
       test('adds nothing outside of a ticket', () async {
         await host(
           add: ({
-            required name,
+            required url,
             required ticketPath,
             required oceanPath,
             required ggLog,

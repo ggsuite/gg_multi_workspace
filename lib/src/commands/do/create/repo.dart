@@ -7,7 +7,9 @@
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_create_repo/gg_create_repo.dart';
+import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 
 import '../../../backend/workspace_repo_host.dart';
@@ -54,6 +56,14 @@ class RepoCommand extends CreateRepo {
     if (!WorkspaceUtils.isInsideExistingWorkspace(executionPath)) {
       return CreateRepo.standaloneHost(args);
     }
+    if (args.wasParsed('output')) {
+      throw Exception(
+        cError(
+          '--output is only for use outside of a workspace; inside one the '
+          'repo goes to .ocean/<org>/<name>.',
+        ),
+      );
+    }
     return WorkspaceRepoHost(
       executionPath: executionPath,
       oceanPath: WorkspaceUtils.defaultOceanWorkspacePath(
@@ -63,4 +73,22 @@ class RepoCommand extends CreateRepo {
       add: addToTicket,
     );
   }
+
+  // ...........................................................................
+  /// A command outside of any workspace; tests pass what they care about.
+  factory RepoCommand.example({
+    GgLog? ggLog,
+    String? executionPath,
+    AddToTicket? addToTicket,
+    SpecCollector? collector,
+    Preflight? preflight,
+    RepoCreator? creator,
+  }) => RepoCommand(
+    ggLog: ggLog ?? (_) {},
+    executionPath: executionPath ?? Directory.systemTemp.path,
+    addToTicket: addToTicket,
+    collector: collector,
+    preflight: preflight,
+    creator: creator,
+  );
 }

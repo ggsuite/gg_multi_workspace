@@ -10,9 +10,8 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_create_repo/gg_create_repo.dart' show GgDna;
 import 'package:gg_multi_core/gg_multi_core.dart' show copyDirectory;
-import 'package:gg_one/gg_one.dart' show GgPrompts;
-import 'package:helix/helix.dart' as helix;
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
@@ -25,38 +24,12 @@ typedef RunDna = Future<void> Function(List<String> args);
 /// guides, the skills and the managed `CLAUDE.md` block.
 const String workspaceDnaLayer = 'dna_gg';
 
-/// Answers the questions of helix through the prompts of the gg suite —
-/// the same menus `gg do publish` draws, and in an embedded gg whatever
-/// the embedder assigned to [GgPrompts.current].
-Future<int> helixSelectPrompt({
-  required String prompt,
-  required List<String> options,
-}) => GgPrompts.current.select(prompt: prompt, options: options);
-
 /// The `gg dna` runner used outside of tests: helix's own commands, with
 /// the prompts of the gg suite — what `gg dna` itself runs.
 RunDna helixDnaRunner(GgLog ggLog) {
   final runner = CommandRunner<dynamic>('gg', 'gg')
-    ..addCommand(_DnaCommand(ggLog: ggLog));
+    ..addCommand(GgDna(ggLog: ggLog));
   return (args) => runner.run(['dna', ...args]);
-}
-
-// .............................................................................
-/// `gg dna` — helix's subcommands under the name the user knows them by,
-/// so a usage error reads `gg dna add …`, not `gg helix add …`.
-class _DnaCommand extends Command<dynamic> {
-  _DnaCommand({required GgLog ggLog}) {
-    helix.Helix(
-      ggLog: ggLog,
-      selectPrompt: helixSelectPrompt,
-    ).subcommands.values.forEach(addSubcommand);
-  }
-
-  @override
-  String get name => 'dna';
-
-  @override
-  String get description => 'Manage the DNA of a repo';
 }
 
 // .............................................................................

@@ -16,9 +16,9 @@ import 'package:yaml/yaml.dart';
 
 import '../commands/do/add.dart';
 
-/// Adds the repository [name] to the ticket at [ticketPath].
+/// Adds the repository cloned from [url] to the ticket at [ticketPath].
 typedef AddToTicket = Future<void> Function({
-  required String name,
+  required String url,
   required String ticketPath,
   required String oceanPath,
   required GgLog ggLog,
@@ -34,26 +34,11 @@ class WorkspaceRepoHost extends RepoHost {
     AddToTicket? add,
   }) : _add = add ?? addWithAddCommand;
 
-  /// A host in a workspace below [root]; tests pass what they care about.
-  factory WorkspaceRepoHost.example({
-    required Directory root,
-    String? executionPath,
-    bool? addToTicket,
-    AddToTicket? add,
-  }) => WorkspaceRepoHost(
-    executionPath: executionPath ?? root.path,
-    oceanPath: p.join(root.path, ggMultiOceanFolder),
-    addToTicket: addToTicket ?? true,
-    add: add,
-  );
-
   // ...........................................................................
   @override
-  Future<List<String>> knownOrgs() async => {
-    ...OrganizationUtils.readOrganizations(oceanPath).map((o) => o.name),
-    ..._orgDirs().map((d) => p.basename(d.path)),
-  }.toList();
+  Future<List<String>> knownOrgs() async => _orgSpellings().values.toList();
 
+  // ...........................................................................
   @override
   List<DnaCandidate> dnaCandidates(RepoSpec spec) => [
     for (final repo in _oceanRepos())
@@ -62,67 +47,77 @@ class WorkspaceRepoHost extends RepoHost {
         ?_dnaCandidate(repo, spec.language),
   ];
 
+  // ...........................................................................
+  @override
+  Directory? layerDir(String layer) {
+    final isUrl = layer.contains('://') || layer.startsWith('git@');
+    bool matches(Directory repo) =>
+        isUrl ? _hasRemote(repo, layer) : _manifestNames(repo).contains(layer);
+    return _oceanRepos().where(matches).firstOrNull;
+  }
+
+  // ...........................................................................
   @override
   String? get presetOrg {
     final relative = p.relative(executionPath, from: oceanPath);
     if (relative == '.' || relative.startsWith('..')) return null;
-    return p.split(relative).first;
+    final org = p.split(relative).first;
+    final isRepo = RepoFolderResolver.isRepoDir(
+      Directory(p.join(oceanPath, org)),
+    );
+    return org.startsWith('.') || isRepo ? null : org;
   }
 
+  // ...........................................................................
   @override
   Directory targetDir(RepoSpec spec) =>
-      Directory(p.join(oceanPath, spec.org, spec.name));
+      Directory(p.join(oceanPath, _orgFolder(spec.org), spec.name));
 
+  // ...........................................................................
   @override
-  Future<List<String>> check(RepoSpec spec) async => [
-    if (_ggCommands.contains(spec.name))
-      '»${spec.name}« is a gg command: »gg do add ${spec.name}« would '
-          'not find the repository.',
-    for (final repo in _oceanRepos())
-      if (_manifestNames(repo).contains(spec.packageName) &&
-          !p.equals(repo.path, targetDir(spec).path))
-        'The ocean already has a package »${spec.packageName}« in '
-            '${repo.path}.',
-    if (_ticketPath != null &&
-        Directory(p.join(_ticketPath!, spec.name)).existsSync())
-      'The ticket already has a folder »${spec.name}«.',
-  ];
+  Future<List<String>> check(RepoSpec spec, {required bool resumes}) async {
+    final target = targetDir(spec);
+    return [
+      if (_ggCommands.contains(spec.name))
+        '»${spec.name}« is a gg command: »gg do add ${spec.name}« would '
+            'not find the repository.',
+      for (final repo in _oceanRepos())
+        if (!p.equals(repo.path, target.path)) ..._conflicts(repo, spec),
+      if (_ticketFolderTaken(spec, resumes: resumes))
+        'The ticket already has a folder »${spec.name}«.',
+    ];
+  }
 
+  // ...........................................................................
   @override
   String? afterCreateDescription(RepoSpec spec) => _addsToTicket
       ? 'add it to the ticket ${p.basename(_ticketPath!)}'
       : 'keep it in the ocean';
 
+  // ...........................................................................
   @override
   Future<void> afterCreate({
     required RepoSpec spec,
     required Directory directory,
     required GgLog ggLog,
   }) async {
-    OrganizationUtils.appendOrganization(oceanPath, '${spec.webUrl}.git');
+    _registerOrg(spec);
     if (!_addsToTicket) return;
     await _add(
-      name: spec.name,
+      url: '${spec.webUrl}.git',
       ticketPath: _ticketPath!,
       oceanPath: oceanPath,
       ggLog: ggLog,
     );
   }
 
-  /// The folder gg was started in.
-  final String executionPath;
-
-  /// The `.ocean` folder of the workspace.
-  final String oceanPath;
-
-  /// Whether a repository created inside a ticket is added to it.
-  final bool addToTicket;
-
   // ...........................................................................
-  /// Adds [name] the way `gg do add <name>` does.
+  /// Adds [url] the way `gg do add <url>` does; a repo already in the
+  /// ticket is not copied again. `--no-fetch`: dirty or feature-branch
+  /// dependencies in the ocean must not fail the run after the push.
   // coverage:ignore-start
   static Future<void> addWithAddCommand({
-    required String name,
+    required String url,
     required String ticketPath,
     required String oceanPath,
     required GgLog ggLog,
@@ -135,67 +130,164 @@ class WorkspaceRepoHost extends RepoHost {
           oceanWorkspacePath: oceanPath,
         ),
       );
-    await runner.run(['add', name]);
+    await runner.run(['add', '--no-fetch', url]);
   }
   // coverage:ignore-end
+
+  /// The folder gg was started in.
+  final String executionPath;
+
+  /// The `.ocean` folder of the workspace.
+  final String oceanPath;
+
+  /// Whether a repository created inside a ticket is added to it.
+  final bool addToTicket;
+
+  // ...........................................................................
+  /// A host in a workspace below [root]; tests pass what they care about.
+  factory WorkspaceRepoHost.example({
+    Directory? root,
+    String? executionPath,
+    bool? addToTicket,
+    AddToTicket? add,
+  }) {
+    final rootPath = (root ?? Directory.systemTemp).path;
+    return WorkspaceRepoHost(
+      executionPath: executionPath ?? rootPath,
+      oceanPath: p.join(rootPath, ggMultiOceanFolder),
+      addToTicket: addToTicket ?? true,
+      add: add,
+    );
+  }
 
   // ######################
   // Private
   // ######################
 
+  // ...........................................................................
+
   final AddToTicket _add;
 
+  // gg's top-level commands; gg depends on this package, so no import.
   static const _ggCommands = {
     'can', 'did', 'do', 'one', 'multi', 'dna', 'run', 'help', 'gg', //
   };
 
+  // ...........................................................................
   String? get _ticketPath => WorkspaceUtils.detectTicketPath(executionPath);
 
+  // ...........................................................................
   bool get _addsToTicket => addToTicket && _ticketPath != null;
 
   // ...........................................................................
-  Iterable<Directory> _orgDirs() {
-    final ocean = Directory(oceanPath);
-    if (!ocean.existsSync()) return const [];
-    return ocean.listSync().whereType<Directory>().where(
-      (d) => !p.basename(d.path).startsWith('.'),
+  /// The repositories of the ocean, in org folders or still flat.
+  Iterable<Directory> _oceanRepos() => RepoFolderResolver.repoDirs(oceanPath)
+      .where(
+        (d) =>
+            !p.basename(d.path).startsWith('.') &&
+            RepoFolderResolver.isRepoDir(d),
+      );
+
+  // ...........................................................................
+  /// The known orgs by their lower-cased name; an org folder's spelling wins.
+  Map<String, String> _orgSpellings() => {
+    for (final org in OrganizationUtils.readOrganizations(oceanPath))
+      org.name.toLowerCase(): org.name,
+    for (final repo in _oceanRepos())
+      if (!p.equals(repo.parent.path, oceanPath))
+        p.basename(repo.parent.path).toLowerCase(): p.basename(
+          repo.parent.path,
+        ),
+  };
+
+  // ...........................................................................
+  /// The ocean folder of [org]: an existing one in any case, else lower case.
+  String _orgFolder(String org) =>
+      _orgSpellings()[org.toLowerCase()] ?? org.toLowerCase();
+
+  // ...........................................................................
+  /// What speaks against [spec] because of the ocean repository [repo].
+  List<String> _conflicts(Directory repo, RepoSpec spec) => [
+    if (_manifestNames(repo).contains(spec.packageName))
+      'The ocean already has a package »${spec.packageName}« in '
+          '${repo.path}.',
+    if (p.basename(repo.path).toLowerCase() == spec.name.toLowerCase())
+      '»${spec.name}« exists in ${_location(repo)} too: '
+          '»gg do add ${spec.name}« would be ambiguous.',
+  ];
+
+  // ...........................................................................
+  String _location(Directory repo) => p.equals(repo.parent.path, oceanPath)
+      ? 'the ocean'
+      : 'org ${p.basename(repo.parent.path)}';
+
+  // ...........................................................................
+  /// Whether the ticket folder of [spec] holds something other than the
+  /// repository an earlier run of the same command created.
+  bool _ticketFolderTaken(RepoSpec spec, {required bool resumes}) {
+    if (!_addsToTicket) return false;
+    final folder = Directory(p.join(_ticketPath!, spec.name));
+    if (!folder.existsSync()) return false;
+    return !resumes || !_hasRemote(folder, spec.webUrl);
+  }
+
+  // ...........................................................................
+  /// Whether the git remote of [repo] is the repository [url] names.
+  bool _hasRemote(Directory repo, String url) {
+    final remote = RepoFolderResolver.remoteUrl(repo);
+    final wanted = RepoFolderResolver.urlIdentity(url);
+    return remote != null &&
+        wanted != null &&
+        RepoFolderResolver.urlIdentity(remote) == wanted;
+  }
+
+  // ...........................................................................
+  /// Records the org of [spec] in `.organizations` unless it is known.
+  void _registerOrg(RepoSpec spec) {
+    final org = spec.org.toLowerCase();
+    final known = OrganizationUtils.readOrganizations(oceanPath)
+        .any((o) => o.name.toLowerCase() == org);
+    if (known) return;
+    OrganizationUtils.appendOrganization(
+      oceanPath,
+      'https://github.com/$org/${spec.name}.git',
     );
   }
 
   // ...........................................................................
-  Iterable<Directory> _oceanRepos() => _orgDirs().expand(
-    (org) => org.listSync().whereType<Directory>().where(
-      (d) => !p.basename(d.path).startsWith('.'),
-    ),
-  );
-
-  // ...........................................................................
-  /// The layer by its registry name, for the language of the new repo.
+  /// The layer by its registry name, or by its git remote when unpublished.
   DnaCandidate? _dnaCandidate(Directory repo, RepoLanguage language) {
-    final file = language == RepoLanguage.dart
-        ? File(p.join(repo.path, 'pubspec.yaml'))
-        : File(p.join(repo.path, 'package.json'));
-    if (!file.existsSync()) return null;
-    final name = _nameIn(file);
-    return name == null ? null : DnaCandidate(label: name, ref: name);
+    final isDart = language == RepoLanguage.dart;
+    final file = File(
+      p.join(repo.path, isDart ? 'pubspec.yaml' : 'package.json'),
+    );
+    final manifest = _read(file);
+    final name = manifest?['name'];
+    if (name is! String) return null;
+    final unpublished = isDart
+        ? manifest!['publish_to'] == 'none'
+        : manifest!['private'] == true;
+    final remote = unpublished ? RepoFolderResolver.remoteUrl(repo) : null;
+    return DnaCandidate(label: name, ref: remote ?? name);
   }
 
   // ...........................................................................
   /// The package names of [repo]; a bridge has a Dart and an npm one.
   Set<String> _manifestNames(Directory repo) => {
     for (final name in ['pubspec.yaml', 'package.json'])
-      if (File(p.join(repo.path, name)).existsSync())
-        ?_nameIn(File(p.join(repo.path, name))),
+      if (_read(File(p.join(repo.path, name)))?['name'] case final String n) n,
   };
 
   // ...........................................................................
-  String? _nameIn(File file) {
+  /// The manifest [file] as a map, or null when it is missing or no map.
+  Map<dynamic, dynamic>? _read(File file) {
+    if (!file.existsSync()) return null;
     try {
       final content = file.readAsStringSync();
       final Object? data = file.path.endsWith('.json')
           ? jsonDecode(content)
           : loadYaml(content);
-      return data is Map ? data['name'] as String? : null;
+      return data is Map ? data : null;
     } on Object {
       return null;
     }

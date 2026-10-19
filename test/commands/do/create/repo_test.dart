@@ -12,32 +12,26 @@ import 'package:gg_create_repo/gg_create_repo.dart';
 import 'package:gg_multi_workspace/src/backend/workspace_repo_host.dart';
 import 'package:gg_multi_workspace/src/commands/do/create.dart';
 import 'package:gg_multi_workspace/src/commands/do/create/repo.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Returns a fixed spec without asking.
-class _Collector extends SpecCollector {
-  _Collector() : super(ggLog: (_) {});
-
-  @override
-  Future<RepoSpec> collect(RepoOptions options, RepoHost host) async =>
-      RepoSpec.example(name: 'gg_new');
-}
-
-/// Finds nothing.
-class _Preflight extends Preflight {
-  @override
-  Future<List<Finding>> run(RepoSpec spec, RepoHost host) async => [];
-}
-
 void main() {
   late Directory root;
+  late String inTicket;
+
+  setUpAll(() {
+    registerFallbackValue(const RepoOptions());
+    registerFallbackValue(RepoSpec.example());
+    registerFallbackValue(StandaloneHost(outputDir: Directory.systemTemp));
+  });
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('repo_command_');
+    inTicket = p.join(root.path, 'ticket');
     Directory(p.join(root.path, '.ocean', 'ggsuite'))
         .createSync(recursive: true);
-    File(p.join(root.path, 'ticket', 'ticket.json'))
+    File(p.join(inTicket, 'ticket.json'))
       ..parent.createSync(recursive: true)
       ..writeAsStringSync('{}');
   });
@@ -46,10 +40,11 @@ void main() {
 
   group('RepoCommand', () {
     test('is »gg do create repo« with an --add flag', () {
-      final command = RepoCommand(ggLog: (_) {});
+      final command = RepoCommand.example();
       expect(command.name, 'repo');
       expect(command.description, contains('ticket'));
       expect(command.argParser.options['add']!.defaultsTo, true);
+      command.ggLog('logs nowhere by default');
       expect(
         CreateCommand(ggLog: (_) {}).subcommands['repo'],
         isA<RepoCommand>(),
@@ -59,11 +54,24 @@ void main() {
     // #########################################################################
     test('plans with the host of the folder it runs in', () async {
       final messages = <String>[];
-      final command = RepoCommand(
+      final collector = MockSpecCollector();
+      final preflight = MockPreflight();
+      when(() => collector.collect(any<RepoOptions>(), any<RepoHost>()))
+          .thenAnswer(
+            (_) async => (spec: RepoSpec.example(name: 'gg_new'), asked: false),
+          );
+      when(
+        () => preflight.run(
+          any<RepoSpec>(),
+          any<RepoHost>(),
+          resumes: any(named: 'resumes'),
+        ),
+      ).thenAnswer((_) async => []);
+      final command = RepoCommand.example(
         ggLog: (m) => messages.add(rmConsoleColors(m)),
-        executionPath: p.join(root.path, 'ticket'),
-        collector: _Collector(),
-        preflight: _Preflight(),
+        executionPath: inTicket,
+        collector: collector,
+        preflight: preflight,
       );
 
       await (CommandRunner<dynamic>(
@@ -79,9 +87,7 @@ void main() {
     // #########################################################################
     group('hostFor()', () {
       test('is the workspace host inside a workspace', () {
-        final command = RepoCommand(ggLog: (_) {});
-        final args = command.argParser.parse(['--no-add']);
-        final inTicket = p.join(root.path, 'ticket');
+        final args = RepoCommand.example().argParser.parse(['--no-add']);
 
         final host = RepoCommand.hostFor(args, executionPath: inTicket);
 
@@ -92,11 +98,28 @@ void main() {
         expect(host.executionPath, inTicket);
       });
 
+      test('rejects --output inside a workspace', () {
+        final args = RepoCommand.example().argParser.parse(['-o', root.path]);
+
+        expect(
+          () => RepoCommand.hostFor(args, executionPath: inTicket),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmConsoleColors(e.toString()),
+              'message',
+              contains('--output is only for use outside of a workspace'),
+            ),
+          ),
+        );
+      });
+
       test('is the standalone host outside of a workspace', () {
         final outside = Directory.systemTemp.createTempSync('outside_');
         addTearDown(() => outside.deleteSync(recursive: true));
-        final command = RepoCommand(ggLog: (_) {});
-        final args = command.argParser.parse(['-o', outside.path]);
+        final args = RepoCommand.example().argParser.parse([
+          '-o',
+          outside.path,
+        ]);
 
         final host = RepoCommand.hostFor(args, executionPath: outside.path);
 
