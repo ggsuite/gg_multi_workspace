@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_create_repo/gg_create_repo.dart' show RunDna, helixDnaRunner;
 import 'package:gg_log/gg_log.dart';
 import 'package:path/path.dart' as path;
 

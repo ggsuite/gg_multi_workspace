@@ -7,6 +7,7 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:gg_create_repo/gg_create_repo.dart' show RunDna;
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 import 'package:gg_multi_workspace/src/commands/do/init/workspace.dart';

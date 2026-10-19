@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.14.0 - 2026-10-19
+
+### Added
+
+- Add gg do create repo
+
+### Changed
+
+- Harden gg do create repo in the workspace
+- Share the DNA runner and git URLs with gg_create_repo
+- Register a new org in the spelling of its folder
+
 ## 4.13.1 - 2026-10-16
 
 ## 4.13.0 - 2026-10-14
