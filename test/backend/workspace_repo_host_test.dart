@@ -198,6 +198,22 @@ void main() {
         );
       });
 
+      test('finds a layer by an ssh://, git:// or #ref url', () {
+        gitRemote(
+          '.ocean/tssuite/dna_ts_private',
+          'git@github.com:tssuite/dna_ts_private.git',
+        );
+        final dir = p.join(ocean, 'tssuite', 'dna_ts_private');
+        for (final url in [
+          'ssh://git@github.com/tssuite/dna_ts_private.git',
+          'git+ssh://git@github.com/tssuite/dna_ts_private.git',
+          'git://github.com/tssuite/dna_ts_private.git',
+          'git+https://github.com/tssuite/dna_ts_private.git#main',
+        ]) {
+          expect(dirOf(url), dir, reason: url);
+        }
+      });
+
       test('is null for a layer the ocean does not have', () {
         expect(dirOf('dna_unknown'), isNull);
         expect(dirOf('https://github.com/ggsuite/dna_unknown.git'), isNull);
@@ -398,7 +414,7 @@ void main() {
 
         const url = 'https://github.com/NewOrg/gg_new.git';
         expect(added, List.filled(2, '$url $inTicket $ocean'));
-        expect(registeredOrgs(), ['ggsuite', 'neworg']);
+        expect(registeredOrgs(), ['ggsuite', 'NewOrg']);
       });
 
       test('does not register an org twice in another case', () async {

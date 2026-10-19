@@ -238,8 +238,8 @@ class WorkspaceRepoHost extends RepoHost {
   }
 
   // ...........................................................................
-  /// Records the org of [spec] in `.organizations` unless it is known; in
-  /// lower case, as `.organizations` takes no other.
+  /// Records the org of [spec] in `.organizations` unless it is known, in
+  /// the spelling of its ocean folder.
   void _registerOrg(RepoSpec spec) {
     final org = spec.org.toLowerCase();
     final known = OrganizationUtils.readOrganizations(oceanPath)
@@ -247,7 +247,7 @@ class WorkspaceRepoHost extends RepoHost {
     if (known) return;
     OrganizationUtils.appendOrganization(
       oceanPath,
-      'https://github.com/$org/${spec.name}.git',
+      'https://github.com/${_orgFolder(spec.org)}/${spec.name}.git',
     );
   }
 
