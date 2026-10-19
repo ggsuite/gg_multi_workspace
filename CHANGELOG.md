@@ -9,6 +9,7 @@
 ### Changed
 
 - Harden gg do create repo in the workspace
+- Share the DNA runner and git URLs with gg_create_repo
 
 ## 4.13.1 - 2026-10-16
 

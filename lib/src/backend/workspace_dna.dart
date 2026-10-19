@@ -7,30 +7,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:args/command_runner.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_create_repo/gg_create_repo.dart' show RunDna;
 import 'package:gg_log/gg_log.dart';
-import 'package:gg_create_repo/gg_create_repo.dart' show GgDna;
 import 'package:gg_multi_core/gg_multi_core.dart' show copyDirectory;
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:yaml/yaml.dart';
 
-/// Runs one `gg dna` command — `init`, `add` or `build` — with [args].
-/// The seam that lets the tests skip the package managers and the network.
-typedef RunDna = Future<void> Function(List<String> args);
-
 /// The DNA layer every workspace and every ticket gets: the gg workflow
 /// guides, the skills and the managed `CLAUDE.md` block.
 const String workspaceDnaLayer = 'dna_gg';
-
-/// The `gg dna` runner used outside of tests: helix's own commands, with
-/// the prompts of the gg suite — what `gg dna` itself runs.
-RunDna helixDnaRunner(GgLog ggLog) {
-  final runner = CommandRunner<dynamic>('gg', 'gg')
-    ..addCommand(GgDna(ggLog: ggLog));
-  return (args) => runner.run(['dna', ...args]);
-}
 
 // .............................................................................
 /// Places [workspaceDnaLayer] into the workspace [root] — the folder

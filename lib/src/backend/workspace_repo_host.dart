@@ -50,9 +50,9 @@ class WorkspaceRepoHost extends RepoHost {
   // ...........................................................................
   @override
   Directory? layerDir(String layer) {
-    final isUrl = layer.contains('://') || layer.startsWith('git@');
-    bool matches(Directory repo) =>
-        isUrl ? _hasRemote(repo, layer) : _manifestNames(repo).contains(layer);
+    bool matches(Directory repo) => isGitUrl(layer)
+        ? _hasRemote(repo, gitReadableUrl(layer))
+        : _manifestNames(repo).contains(layer);
     return _oceanRepos().where(matches).firstOrNull;
   }
 
@@ -78,7 +78,7 @@ class WorkspaceRepoHost extends RepoHost {
   Future<List<String>> check(RepoSpec spec, {required bool resumes}) async {
     final target = targetDir(spec);
     return [
-      if (_ggCommands.contains(spec.name))
+      if (ggCommandNames.contains(spec.name))
         '»${spec.name}« is a gg command: »gg do add ${spec.name}« would '
             'not find the repository.',
       for (final repo in _oceanRepos())
@@ -115,7 +115,6 @@ class WorkspaceRepoHost extends RepoHost {
   /// Adds [url] the way `gg do add <url>` does; a repo already in the
   /// ticket is not copied again. `--no-fetch`: dirty or feature-branch
   /// dependencies in the ocean must not fail the run after the push.
-  // coverage:ignore-start
   static Future<void> addWithAddCommand({
     required String url,
     required String ticketPath,
@@ -132,7 +131,6 @@ class WorkspaceRepoHost extends RepoHost {
       );
     await runner.run(['add', '--no-fetch', url]);
   }
-  // coverage:ignore-end
 
   /// The folder gg was started in.
   final String executionPath;
@@ -142,6 +140,11 @@ class WorkspaceRepoHost extends RepoHost {
 
   /// Whether a repository created inside a ticket is added to it.
   final bool addToTicket;
+
+  /// gg's top-level commands; gg tests it, as gg depends on this package.
+  static const ggCommandNames = {
+    'can', 'did', 'do', 'one', 'multi', 'dna', 'run', 'help', 'gg', //
+  };
 
   // ...........................................................................
   /// A host in a workspace below [root]; tests pass what they care about.
@@ -164,14 +167,7 @@ class WorkspaceRepoHost extends RepoHost {
   // Private
   // ######################
 
-  // ...........................................................................
-
   final AddToTicket _add;
-
-  // gg's top-level commands; gg depends on this package, so no import.
-  static const _ggCommands = {
-    'can', 'did', 'do', 'one', 'multi', 'dna', 'run', 'help', 'gg', //
-  };
 
   // ...........................................................................
   String? get _ticketPath => WorkspaceUtils.detectTicketPath(executionPath);
@@ -201,9 +197,9 @@ class WorkspaceRepoHost extends RepoHost {
   };
 
   // ...........................................................................
-  /// The ocean folder of [org]: an existing one in any case, else lower case.
-  String _orgFolder(String org) =>
-      _orgSpellings()[org.toLowerCase()] ?? org.toLowerCase();
+  /// The ocean folder of [org]: an existing one in any case, else [org] as
+  /// typed — the folder `gg do add` takes from the URL.
+  String _orgFolder(String org) => _orgSpellings()[org.toLowerCase()] ?? org;
 
   // ...........................................................................
   /// What speaks against [spec] because of the ocean repository [repo].
@@ -242,7 +238,8 @@ class WorkspaceRepoHost extends RepoHost {
   }
 
   // ...........................................................................
-  /// Records the org of [spec] in `.organizations` unless it is known.
+  /// Records the org of [spec] in `.organizations` unless it is known; in
+  /// lower case, as `.organizations` takes no other.
   void _registerOrg(RepoSpec spec) {
     final org = spec.org.toLowerCase();
     final known = OrganizationUtils.readOrganizations(oceanPath)

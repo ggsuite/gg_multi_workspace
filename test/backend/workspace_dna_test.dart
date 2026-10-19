@@ -6,6 +6,7 @@
 
 import 'dart:io';
 
+import 'package:gg_create_repo/gg_create_repo.dart' show RunDna;
 import 'package:gg_multi_workspace/src/backend/workspace_dna.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:http/http.dart' as http;
@@ -620,14 +621,6 @@ void main() {
       expect(claudeMdBlock('before\n$_block\nafter'), _block);
       expect(claudeMdBlock('no block'), isNull);
       expect(claudeMdBlock(claudeMdStartMarker), isNull);
-    });
-  });
-
-  group('helix runner', () {
-    test('helixDnaRunner runs the helix commands under gg dna', () async {
-      // `--help` is the one call that touches neither the package managers
-      // nor the file system.
-      await expectLater(helixDnaRunner(ggLog)(['--help']), completes);
     });
   });
 }

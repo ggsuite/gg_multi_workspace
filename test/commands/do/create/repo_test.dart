@@ -12,6 +12,7 @@ import 'package:gg_create_repo/gg_create_repo.dart';
 import 'package:gg_multi_workspace/src/backend/workspace_repo_host.dart';
 import 'package:gg_multi_workspace/src/commands/do/create.dart';
 import 'package:gg_multi_workspace/src/commands/do/create/repo.dart';
+import 'package:gg_one/gg_one.dart' show GgPrompts;
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -56,10 +57,15 @@ void main() {
       final messages = <String>[];
       final collector = MockSpecCollector();
       final preflight = MockPreflight();
-      when(() => collector.collect(any<RepoOptions>(), any<RepoHost>()))
-          .thenAnswer(
-            (_) async => (spec: RepoSpec.example(name: 'gg_new'), asked: false),
-          );
+      when(
+        () => collector.collect(
+          any<RepoOptions>(),
+          any<RepoHost>(),
+          earlier: any(named: 'earlier'),
+        ),
+      ).thenAnswer(
+        (_) async => (spec: RepoSpec.example(name: 'gg_new'), asked: false),
+      );
       when(
         () => preflight.run(
           any<RepoSpec>(),
@@ -82,6 +88,45 @@ void main() {
       final log = messages.join('\n');
       expect(log, contains(p.join('.ocean', 'ggsuite', 'gg_new')));
       expect(log, contains('add it to the ticket ticket'));
+    });
+
+    // #########################################################################
+    test('asks with the prompts it is given before creating', () async {
+      final messages = <String>[];
+      final collector = MockSpecCollector();
+      final preflight = MockPreflight();
+      final prompts = _Prompts();
+      when(
+        () => collector.collect(
+          any<RepoOptions>(),
+          any<RepoHost>(),
+          earlier: any(named: 'earlier'),
+        ),
+      ).thenAnswer(
+        (_) async => (spec: RepoSpec.example(name: 'gg_new'), asked: true),
+      );
+      when(
+        () => preflight.run(
+          any<RepoSpec>(),
+          any<RepoHost>(),
+          resumes: any(named: 'resumes'),
+        ),
+      ).thenAnswer((_) async => []);
+      final command = RepoCommand.example(
+        ggLog: (m) => messages.add(rmConsoleColors(m)),
+        executionPath: inTicket,
+        collector: collector,
+        preflight: preflight,
+        prompts: prompts,
+      );
+
+      await (CommandRunner<dynamic>(
+        'gg',
+        'gg',
+      )..addCommand(command)).run(['repo']);
+
+      expect(prompts.asked, ['Create ggsuite/gg_new?']);
+      expect(messages.last, 'Nothing was created.');
     });
 
     // #########################################################################
@@ -131,4 +176,27 @@ void main() {
       });
     });
   });
+}
+
+/// Answers every question with no and records it; no terminal in tests.
+class _Prompts extends GgPrompts {
+  final asked = <String>[];
+
+  @override
+  Future<int> select({
+    required String prompt,
+    required List<String> options,
+    int initialIndex = 0,
+  }) async {
+    asked.add(prompt);
+    return options.length - 1;
+  }
+
+  @override
+  Future<String> input({
+    required String prompt,
+    String? defaultValue,
+    String? initialText,
+    bool asMessageEditor = false,
+  }) async => fail('asks no text');
 }

@@ -11,6 +11,7 @@ import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_create_repo/gg_create_repo.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_one/gg_one.dart' show GgPrompts;
 
 import '../../../backend/workspace_repo_host.dart';
 
@@ -83,6 +84,7 @@ class RepoCommand extends CreateRepo {
     SpecCollector? collector,
     Preflight? preflight,
     RepoCreator? creator,
+    GgPrompts? prompts,
   }) => RepoCommand(
     ggLog: ggLog ?? (_) {},
     executionPath: executionPath ?? Directory.systemTemp.path,
@@ -90,5 +92,6 @@ class RepoCommand extends CreateRepo {
     collector: collector,
     preflight: preflight,
     creator: creator,
+    prompts: prompts,
   );
 }

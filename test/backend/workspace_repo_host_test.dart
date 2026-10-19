@@ -187,6 +187,17 @@ void main() {
         expect(dirOf('git@github.com:audanika-private/dna_audanika'), dir);
       });
 
+      test('finds a layer by an npm git+https url', () {
+        gitRemote(
+          '.ocean/tssuite/dna_ts_private',
+          'https://github.com/tssuite/dna_ts_private.git',
+        );
+        expect(
+          dirOf('git+https://github.com/tssuite/dna_ts_private.git'),
+          p.join(ocean, 'tssuite', 'dna_ts_private'),
+        );
+      });
+
       test('is null for a layer the ocean does not have', () {
         expect(dirOf('dna_unknown'), isNull);
         expect(dirOf('https://github.com/ggsuite/dna_unknown.git'), isNull);
@@ -227,8 +238,15 @@ void main() {
         expect(target('GgSuite'), p.join(ocean, 'ggsuite', 'gg_new'));
       });
 
-      test('uses a lower-case folder for a new org', () {
-        expect(target('NewOrg'), p.join(ocean, 'neworg', 'gg_new'));
+      test('keeps the spelling of a new org, as gg do add does', () {
+        final spec = RepoSpec.example(org: 'NewOrg', name: 'gg_new');
+        final byAdd = RepoFolderResolver.destination(
+          workspacePath: ocean,
+          repoUrl: '${spec.webUrl}.git',
+          repoName: spec.name,
+        );
+        expect(target('NewOrg'), p.join(ocean, 'NewOrg', 'gg_new'));
+        expect(target('NewOrg'), byAdd);
       });
     });
 
@@ -249,8 +267,10 @@ void main() {
       });
 
       test('rejects the name of a gg command', () async {
-        final problems = await check(RepoSpec.example(name: 'can'));
-        expect(problems.single, contains('is a gg command'));
+        for (final name in WorkspaceRepoHost.ggCommandNames) {
+          final problems = await check(RepoSpec.example(name: name));
+          expect(problems.first, contains('is a gg command'), reason: name);
+        }
       });
 
       test('rejects a package name the ocean already has', () async {
@@ -398,5 +418,69 @@ void main() {
         ).afterCreate(spec: RepoSpec.example(), directory: root, ggLog: (_) {});
       });
     });
+
+    // #########################################################################
+    group('addWithAddCommand()', () {
+      const url = 'https://github.com/ggsuite/gg_new.git';
+
+      /// A workspace whose ocean has the new repo, as the creator left it.
+      ({String ocean, String ticket}) workspace() {
+        final ocean = p.join(root.path, 'add', ggMultiOceanFolder);
+        final repo = p.join(ocean, 'ggsuite', 'gg_new');
+        final ticket = p.join(root.path, 'add', 'ticket');
+        File(p.join(repo, 'pubspec.yaml'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(
+            'name: gg_new\nversion: 0.0.1\n'
+            'environment:\n  sdk: ^3.0.0\n',
+          );
+        File(p.join(ticket, 'ticket.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('{}');
+        for (final args in [
+          ['init', '-q', '--initial-branch=main'],
+          ['add', '--all'],
+          ['commit', '-qm', 'Initial version'],
+          ['remote', 'add', 'origin', url],
+        ]) {
+          final result = Process.runSync(
+            'git',
+            args,
+            workingDirectory: repo,
+            environment: _gitIdentity,
+          );
+          expect(result.exitCode, 0, reason: '${result.stderr}');
+        }
+        return (ocean: ocean, ticket: ticket);
+      }
+
+      test('copies the ocean repo into the ticket, once', () async {
+        final w = workspace();
+        Future<void> add() => WorkspaceRepoHost.addWithAddCommand(
+          url: url,
+          ticketPath: w.ticket,
+          oceanPath: w.ocean,
+          ggLog: (_) {},
+        );
+
+        await add();
+        await add();
+
+        final copy = p.join(w.ticket, 'gg_new');
+        expect(File(p.join(copy, 'pubspec.yaml')).existsSync(), isTrue);
+        expect(RepoFolderResolver.remoteUrl(Directory(copy)), url);
+        expect(RepoFolderResolver.repoDirs(w.ticket).map((d) => d.path), [
+          copy,
+        ]);
+      }, timeout: const Timeout(Duration(minutes: 3)));
+    });
   });
 }
+
+/// The identity of the commits the tests make; CI has none of its own.
+const _gitIdentity = {
+  'GIT_AUTHOR_NAME': 'Test',
+  'GIT_AUTHOR_EMAIL': 'test@example.com',
+  'GIT_COMMITTER_NAME': 'Test',
+  'GIT_COMMITTER_EMAIL': 'test@example.com',
+};
