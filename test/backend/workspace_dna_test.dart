@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:gg_create_repo/gg_create_repo.dart' show RunDna;
@@ -12,6 +13,30 @@ import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
+
+const _dnaSettings = '''
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \\"\$CLAUDE_PROJECT_DIR/.claude/hooks/pm-prompts.mjs\\" prompt"
+          }
+        ]
+      }
+    ]
+  }
+}
+''';
+
+/// A hook group running [command].
+Map<String, dynamic> _group(String command) => {
+  'hooks': [
+    {'type': 'command', 'command': command},
+  ],
+};
 
 const _block =
     '$claudeMdStartMarker\n\n# gg workflow\n\nUse the skills.\n\n'
@@ -75,7 +100,87 @@ void main() {
   List<String> rootEntries() =>
       tempDir.listSync().map((e) => path.basename(e.path)).toList()..sort();
 
+  /// [fakeDna] plus the hook settings and script `dna_gg` ships.
+  RunDna fakeDnaWithHooks() {
+    final inner = fakeDna();
+    return (args) async {
+      await inner(args);
+      if (args.first != 'build') return;
+      final target = args[args.indexOf('--target') + 1];
+      File(path.join(target, '.claude', 'settings.json'))
+          .writeAsStringSync(_dnaSettings);
+      File(path.join(target, '.claude', 'hooks', 'pm-prompts.mjs'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// hook\n');
+      File(path.join(target, '.claude', 'notes.md')).writeAsStringSync('new');
+      Link(path.join(target, '.claude', 'shared')).createSync('../shared');
+    };
+  }
+
   group('instantiateWorkspaceDna', () {
+    test('merges the hooks into the settings of the root', () async {
+      file(path.join('.claude', 'settings.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'permissions': {
+              'allow': ['Bash(ls)'],
+            },
+            'hooks': {
+              'SessionStart': [_group('echo mine')],
+              'UserPromptSubmit': [
+                _group('node .claude/hooks/pm-prompts.mjs old'),
+                _group('echo also mine'),
+              ],
+            },
+          }),
+        );
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDnaWithHooks(),
+        ggLog: ggLog,
+      );
+
+      final settings = jsonDecode(
+        file(path.join('.claude', 'settings.json')).readAsStringSync(),
+      ) as Map<String, dynamic>;
+      expect(settings['permissions'], {
+        'allow': ['Bash(ls)'],
+      });
+      final hooks = settings['hooks'] as Map<String, dynamic>;
+      expect(hooks['SessionStart'], [_group('echo mine')]);
+      final prompt = jsonEncode(hooks['UserPromptSubmit']);
+      expect(prompt, contains('echo also mine'));
+      expect(prompt, isNot(contains(' old')));
+      expect(prompt, contains(r'pm-prompts.mjs\" prompt'));
+      expect(
+        file(path.join('.claude', 'hooks', 'pm-prompts.mjs')).existsSync(),
+        isTrue,
+      );
+      expect(file(path.join('.claude', 'notes.md')).readAsStringSync(), 'new');
+      expect(
+        Link(path.join(tempDir.path, '.claude', 'shared')).targetSync(),
+        '../shared',
+      );
+    });
+
+    test('replaces a link of the same name', () async {
+      Link(path.join(tempDir.path, '.claude', 'shared'))
+          .createSync('../old', recursive: true);
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDnaWithHooks(),
+        ggLog: ggLog,
+      );
+
+      expect(
+        Link(path.join(tempDir.path, '.claude', 'shared')).targetSync(),
+        '../shared',
+      );
+    });
+
     test('runs init, add, build in a temporary folder and copies only '
         '.claude and CLAUDE.md into the root', () async {
       await instantiateWorkspaceDna(
@@ -553,6 +658,30 @@ void main() {
       expect(inTicket(dnaVersionStampPath).existsSync(), isFalse);
     });
 
+    test('copies the hooks and the settings that run them', () async {
+      file('CLAUDE.md').writeAsStringSync('$_block\n');
+      file('.claude/settings.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(_dnaSettings);
+      file('.claude/hooks/pm-prompts.mjs')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// hook');
+      file('.claude/settings.local.json').writeAsStringSync('{}');
+
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+
+      expect(
+        jsonDecode(inTicket('.claude/settings.json').readAsStringSync()),
+        jsonDecode(_dnaSettings),
+      );
+      expect(
+        inTicket('.claude/hooks/pm-prompts.mjs').readAsStringSync(),
+        '// hook',
+      );
+      // Personal settings stay in the root.
+      expect(inTicket('.claude/settings.local.json').existsSync(), isFalse);
+    });
+
     test('leaves the ticket alone when the root has no DNA', () async {
       await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
       expect(inTicket('CLAUDE.md').existsSync(), isFalse);
@@ -580,6 +709,82 @@ void main() {
         Link(inTicket('.claude/skills/shared').path).targetSync(),
         '../shared',
       );
+    });
+  });
+
+  group('mergeClaudeSettings', () {
+    String merge(String? existing) => mergeClaudeSettings(
+      existing: existing,
+      dna: _dnaSettings,
+      dnaHookScripts: {'pm-prompts.mjs'},
+    );
+
+    test('is the DNA settings without own ones', () {
+      expect(merge(null), _dnaSettings);
+    });
+
+    test('leaves settings alone that are no JSON object', () {
+      expect(merge('not json'), 'not json');
+      expect(merge('[1]'), '[1]');
+    });
+
+    test('keeps own keys and adds the ones only the DNA has', () {
+      final merged = jsonDecode(
+        mergeClaudeSettings(
+          existing: '{"model": "mine"}',
+          dna: '{"model": "dna", "env": {"A": "1"}}',
+          dnaHookScripts: const {},
+        ),
+      );
+      expect(merged, {
+        'model': 'mine',
+        'env': {'A': '1'},
+      });
+    });
+
+    test('keeps own hook entries it cannot read', () {
+      final merged = jsonDecode(
+        mergeClaudeSettings(
+          existing: '{"hooks": {"Odd": "x", "Stop": [1, {"hooks": 2}]}}',
+          dna: '{}',
+          dnaHookScripts: {'old.mjs'},
+        ),
+      );
+      expect(merged, {
+        'hooks': {
+          'Odd': 'x',
+          'Stop': [
+            1,
+            {'hooks': 2},
+          ],
+        },
+      });
+    });
+
+    test('drops events that end up without hooks', () {
+      final merged = jsonDecode(
+        mergeClaudeSettings(
+          existing: jsonEncode({
+            'hooks': {
+              'SessionEnd': [_group('node .claude/hooks/old.mjs')],
+            },
+          }),
+          dna: '{}',
+          dnaHookScripts: {'old.mjs'},
+        ),
+      );
+      expect(merged, <String, dynamic>{});
+    });
+
+    test('is stable when merged twice', () {
+      final once = merge(
+        jsonEncode({
+          'hooks': {
+            'Stop': [_group('echo')],
+          },
+        }),
+      );
+      expect(merge(once), once);
     });
   });
 
