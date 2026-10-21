@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Copy the Claude Code hooks and their settings into tickets, merge the settings of the workspace
+
 ## 4.14.0 - 2026-10-19
 
 ### Added
