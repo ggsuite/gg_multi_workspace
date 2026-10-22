@@ -14,6 +14,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
 
+import '../symlinks.dart';
+
 const _dnaSettings = '''
 {
   "hooks": {
@@ -113,7 +115,10 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync('// hook\n');
       File(path.join(target, '.claude', 'notes.md')).writeAsStringSync('new');
-      Link(path.join(target, '.claude', 'shared')).createSync('../shared');
+      // A link comes along where the machine can create one.
+      if (canCreateSymlinks) {
+        Link(path.join(target, '.claude', 'shared')).createSync('../shared');
+      }
     };
   }
 
@@ -159,10 +164,12 @@ void main() {
         isTrue,
       );
       expect(file(path.join('.claude', 'notes.md')).readAsStringSync(), 'new');
-      expect(
-        Link(path.join(tempDir.path, '.claude', 'shared')).targetSync(),
-        '../shared',
-      );
+      if (canCreateSymlinks) {
+        expect(
+          Link(path.join(tempDir.path, '.claude', 'shared')).targetSync(),
+          '../shared',
+        );
+      }
     });
 
     test('replaces a link of the same name', () async {
@@ -179,7 +186,7 @@ void main() {
         Link(path.join(tempDir.path, '.claude', 'shared')).targetSync(),
         '../shared',
       );
-    });
+    }, skip: skipWithoutSymlinks);
 
     test('runs init, add, build in a temporary folder and copies only '
         '.claude and CLAUDE.md into the root', () async {
@@ -709,7 +716,7 @@ void main() {
         Link(inTicket('.claude/skills/shared').path).targetSync(),
         '../shared',
       );
-    });
+    }, skip: skipWithoutSymlinks);
   });
 
   group('mergeClaudeSettings', () {

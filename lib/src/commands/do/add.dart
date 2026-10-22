@@ -478,6 +478,7 @@ class AddCommand extends Command<dynamic> {
       ticketPath: ticketPath,
       repoNames: finalToCopy,
       repoUrls: requestedRepoUrls,
+      fetch: fetch,
       ggLog: taskLog,
       reportLog: ggLog,
     );
@@ -995,11 +996,13 @@ class AddCommand extends Command<dynamic> {
 
   /// Copies all [repoNames] from ocean into the ticket at [ticketPath] and
   /// returns the paths of the repos copied now. Up to [maxParallel] in
-  /// parallel; status via [reportLog], verbose via [ggLog].
+  /// parallel; status via [reportLog], verbose via [ggLog]. Without [fetch]
+  /// the ocean repos are copied as they are.
   Future<Set<String>> _copyReposToTicket({
     required String ticketPath,
     required Set<String> repoNames,
     required Map<String, String> repoUrls,
+    required bool fetch,
     required GgLog ggLog,
     required GgLog reportLog,
     int maxParallel = 4,
@@ -1020,6 +1023,7 @@ class AddCommand extends Command<dynamic> {
           repoName: repoName,
           repoUrl: repoUrls[repoName],
           ticketPath: ticketPath,
+          fetch: fetch,
           ggLog: ggLog,
         );
         if (copiedDir != null) {
@@ -1048,11 +1052,14 @@ class AddCommand extends Command<dynamic> {
   /// does not trigger a ticket-wide relocalization.
   ///
   /// `found` is false when the repository is not in the ocean at all;
-  /// `copiedDir` is its ticket folder when it was copied now.
+  /// `copiedDir` is its ticket folder when it was copied now. With [fetch]
+  /// the ocean repo is first brought to `origin/<default branch>`; without, as
+  /// `--no-fetch` asks, it is copied as it is.
   Future<({bool found, Directory? copiedDir})> _copyRepoToTicket({
     required String repoName,
     required String? repoUrl,
     required String ticketPath,
+    required bool fetch,
     required GgLog ggLog,
   }) async {
     // A repo the user addressed by url is looked up by that url: two
@@ -1091,11 +1098,13 @@ class AddCommand extends Command<dynamic> {
       return (found: true, copiedDir: null);
     }
 
-    await _prepareOceanRepositoryForCopy(
-      repoDir: srcDir,
-      repoName: repoName,
-      ggLog: ggLog,
-    );
+    if (fetch) {
+      await _prepareOceanRepositoryForCopy(
+        repoDir: srcDir,
+        repoName: repoName,
+        ggLog: ggLog,
+      );
+    }
 
     // Copy from ocean into ticket -------------------------------------------
     await copyDirectory(srcDir, destDir);
