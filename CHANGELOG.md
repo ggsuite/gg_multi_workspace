@@ -5,6 +5,7 @@
 ### Changed
 
 - Copy the ocean repo as it is with --no-fetch
+- Document the Windows support of ticket gg-1
 
 ## 4.15.0 - 2026-10-21
 
