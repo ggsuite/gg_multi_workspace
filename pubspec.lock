@@ -404,10 +404,9 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: c0562187add104e4c7f945b011e99f956f74fbfa3ba0ea1bae21e092f4d5ed2d
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.11.1"
   gg_one:
     dependency: "direct main"
