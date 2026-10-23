@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add ssh://, git:// and git+ URLs and org/repo.git with gg do add
+
 ## 4.15.0 - 2026-10-21
 
 ### Changed

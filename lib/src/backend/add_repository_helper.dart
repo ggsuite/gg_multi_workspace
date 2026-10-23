@@ -348,8 +348,11 @@ Future<void> addRepositoryHelper({
   // ---------------------------------------------------------------------------
   // Normalize URL: remove trailing "#" and "/" so that
   // "https://github.com/ggsuite/" and "https://github.com/ggsuite" behave the
-  // same. This must happen before any URI parsing logic.
-  var cleanedUrl = targetArg;
+  // same. This must happen before any URI parsing logic. The `git+` npm puts
+  // in front of a repository url is no part of what git clones.
+  var cleanedUrl = targetArg.startsWith('git+')
+      ? targetArg.substring('git+'.length)
+      : targetArg;
   while (cleanedUrl.endsWith('#') || cleanedUrl.endsWith('/')) {
     cleanedUrl = cleanedUrl.substring(0, cleanedUrl.length - 1);
   }
@@ -459,6 +462,13 @@ Future<void> addRepositoryHelper({
       final String repoName = extractRepoName(repoUrl) ?? 'unknown_repo';
       await attemptClone(repoUrl, repoName);
     }
+  } else if (parsedUri != null &&
+      (parsedUri.scheme == 'ssh' || parsedUri.scheme == 'git') &&
+      parsedUri.host.isNotEmpty) {
+    // ssh:// and git:// URL ---------------------------------------------------
+    // git clones these as they are; only the name has to be read from them.
+    final String repoName = extractRepoName(cleanedUrl) ?? 'unknown_repo';
+    await attemptClone(cleanedUrl, repoName);
   } else if (targetArg.startsWith('git@ssh.dev.azure.com:')) {
     // Azure DevOps SSH --------------------------------------------------------
     final String repoName = extractRepoName(targetArg) ?? 'unknown_repo';
@@ -469,7 +479,9 @@ Future<void> addRepositoryHelper({
     await attemptClone(targetArg, repoName);
   } else if (targetArg.contains('/')) {
     // username/repo -----------------------------------------------------------
-    final String repoUrl = 'https://github.com/$targetArg.git';
+    final String repoUrl = targetArg.endsWith('.git')
+        ? 'https://github.com/$targetArg'
+        : 'https://github.com/$targetArg.git';
     final String repoName = extractRepoName(repoUrl) ?? 'unknown_repo';
     await attemptClone(repoUrl, repoName);
   } else {
