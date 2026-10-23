@@ -22,7 +22,7 @@ dependencies:
   helix: ^1.13.0
   http: ^1.6.0
   path: ^1.9.1
-  pubspec_parse: ^1.6.0
+  pubspec_parse: ^1.7.0
   yaml: ^3.1.4
   yaml_edit: ^2.2.4
 
