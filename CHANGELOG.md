@@ -6,6 +6,8 @@
 
 - Copy the ocean repo as it is with --no-fetch
 - Document the Windows support of ticket gg-1
+- Upgrade the dependencies
+
 ## 4.16.0 - 2026-10-23
 
 ### Added
