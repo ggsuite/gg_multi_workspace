@@ -1417,6 +1417,50 @@ version: 1.0.0
       );
     });
 
+    test('copies the ocean repo as it is with --no-fetch', () async {
+      const repoName = 'asIsRepo';
+      final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
+        ..createSync(recursive: true);
+      File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
+
+      final ticketDir = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_AS_IS'),
+      )..createSync(recursive: true);
+
+      final mockProc = MockProcessRunner();
+      when(
+        () => mockProc(
+          any(),
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+          runInShell: any(named: 'runInShell'),
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+
+      createRunner(executionPath: ticketDir.path, processRunner: mockProc.call);
+
+      await runner.run(['add', '--no-fetch', repoName]);
+
+      // Neither fetched nor reset: the ocean repo is copied as it is.
+      for (final arguments in [
+        ['fetch'],
+        ['reset', '--hard', 'origin/main'],
+      ]) {
+        verifyNever(
+          () => mockProc(
+            'git',
+            arguments,
+            workingDirectory: oceanRepoDir.path,
+            runInShell: true,
+          ),
+        );
+      }
+      expect(
+        File(path.join(ticketDir.path, repoName, 'file.txt')).existsSync(),
+        isTrue,
+      );
+    });
+
     test('logs when git status fails and continues', () async {
       const repoName = 'statusFailRepo';
       final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
