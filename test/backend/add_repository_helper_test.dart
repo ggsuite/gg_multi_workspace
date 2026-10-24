@@ -714,6 +714,59 @@ void main() {
             .called(1);
         expect(logs, anyElement(contains('repo from $targetArg')));
       });
+
+      test('Keeps a .git inside the repository name', () async {
+        const targetArg = 'git@github.com:user/user.github.io.git';
+        final mockGitCloner = MockGitCloner();
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
+
+        await addRepositoryHelper(
+          targetArg: targetArg,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+          force: false,
+        );
+
+        final expectedDestination = path.join(
+          workspacePath,
+          'user',
+          'user.github.io',
+        );
+        verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
+            .called(1);
+      });
+
+      test('Clones ssh://, git:// and git+ URLs as git reads them', () async {
+        const targets = {
+          'ssh://git@github.com/user/repo.git':
+              'ssh://git@github.com/user/repo.git',
+          'git+ssh://git@github.com/user/repo.git':
+              'ssh://git@github.com/user/repo.git',
+          'git://github.com/user/repo.git': 'git://github.com/user/repo.git',
+          'git+https://github.com/user/repo.git':
+              'https://github.com/user/repo.git',
+        };
+        for (final MapEntry(key: targetArg, value: cloneUrl)
+            in targets.entries) {
+          final mockGitCloner = MockGitCloner();
+          when(() => mockGitCloner.cloneRepo(any(), any()))
+              .thenAnswer((_) async {});
+
+          await addRepositoryHelper(
+            targetArg: targetArg,
+            ggLog: ggLog,
+            gitCloner: mockGitCloner,
+            workspacePath: workspacePath,
+            force: false,
+          );
+
+          final expectedDestination = path.join(workspacePath, 'user', 'repo');
+          verify(() => mockGitCloner.cloneRepo(cloneUrl, expectedDestination))
+              .called(1);
+        }
+      });
     });
 
     test('Processes Azure SSH URL correctly', () async {
@@ -763,6 +816,27 @@ void main() {
           () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
         ).called(1);
         expect(logs, anyElement(contains('repo from $expectedRepoUrl')));
+      });
+
+      test('Appends no second .git to user/repo.git', () async {
+        const targetArg = 'user/repo.git';
+        final mockGitCloner = MockGitCloner();
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((_) async {});
+
+        await addRepositoryHelper(
+          targetArg: targetArg,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+          force: false,
+        );
+
+        const expectedRepoUrl = 'https://github.com/user/repo.git';
+        final expectedDestination = path.join(workspacePath, 'user', 'repo');
+        verify(
+          () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
+        ).called(1);
       });
     });
 
