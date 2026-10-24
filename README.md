@@ -45,8 +45,11 @@ it asks you to run `gg do add <repo>`.
 between the ticket repos are found in the dependency graph in which the
 ticket repos replace their ocean copies, and a dependency only a ticket
 repo declares is cloned into the ocean as well. Without `--no-fetch`, every
-ocean repo is brought to `origin/<default branch>` before it is copied; with
-it, the ocean repos are copied as they are and nothing is fetched.
+ocean repo is brought to `origin/<default branch>` before it is copied, and
+an ocean repo with uncommitted changes stops the add. With it, the ocean
+repos are copied as they are, uncommitted changes included, and none of
+them is fetched. A dependency the ocean does not hold yet is still cloned,
+and pub.dev is still asked where a published package lives.
 
 ### Debugging across the repos of a ticket
 

@@ -8,6 +8,13 @@
 - Document the Windows support of ticket gg-1
 - Upgrade the dependencies
 
+### Removed
+
+- Rewrite the blog post of ticket gg-1 in doc/blog
+
+Remove the older post from the misplaced blog folder
+Say in the README what --no-fetch skips and what it still does
+
 ## 4.16.0 - 2026-10-23
 
 ### Added
