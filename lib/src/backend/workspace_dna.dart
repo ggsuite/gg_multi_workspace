@@ -199,9 +199,12 @@ Future<void> _copyClaudeFolder(Directory source, Directory destination) async {
     } else if (name == claudeSettingsFile && entity is File) {
       _mergeSettingsInto(entity, File(target), source);
     } else if (entity is Link) {
+      // Windows tests reach it in Developer Mode only.
+      // coverage:ignore-start
       final link = Link(target);
       if (link.existsSync()) link.deleteSync();
       link.createSync(entity.targetSync());
+      // coverage:ignore-end
     } else if (entity is File) {
       entity.copySync(target);
     }
