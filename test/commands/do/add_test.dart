@@ -2398,7 +2398,7 @@ version: 1.0.0
           'git',
           any(),
           workingDirectory: any(named: 'workingDirectory'),
-          runInShell: true,
+          runInShell: any(named: 'runInShell'),
         ),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
       when(
