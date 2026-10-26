@@ -1,0 +1,45 @@
+// @license
+// Copyright (c) ggsuite
+//
+// Use of this source code is governed by terms that can be
+// found in the LICENSE file in the root of this package.
+
+{
+  // The package name, as declared in pubspec.yaml / package.json.
+  "name": "gg_multi_workspace",
+
+  // 1-2 sentence summary about this repo.
+  "summary": "Workspace commands of gg: init the ocean, add repos, create, import and remove tickets, sync with the git platforms, list the workspace, and keep the gg DNA of the workspace root and its tickets current.",
+
+  // 1-3 bullet points: the problem space.
+  "domain": [
+    "workspace and ticket lifecycle: do init, add, create, import, rm, ls",
+    "ocean sync with GitHub and Azure DevOps: do upgrade ocean",
+    "gg DNA in the workspace root and in every new ticket",
+  ],
+
+  // The repos this one depends on and the repos depending on it.
+  // Keep the reason or the API behind each entry, not just the name.
+  "interfaces": {
+    // "<repo-a>": "why / API"
+    "uses": {
+      "gg_multi_core": "workspace model: layout, org folders, ticket.json",
+      "gg_one": "single-repo commands run per ticket repo",
+      "gg_git": "git calls: clone, fetch, branches",
+      "gg_localize_refs": "localizes the references between ticket repos",
+      "gg_local_package_dependencies": "dependency graph of the repos",
+      "gg_create_repo": "RunDna, creates new repositories",
+      "gg_args": "DirCommand base of all commands",
+      "gg_status_printer": "progress output",
+      "gg_console_colors": "colored output",
+      "gg_log": "GgLog",
+      "gg_process": "process runner",
+      "helix": "builds the DNA of the workspace root with --workspace",
+    },
+
+    // "<repo-b>": "why / API"
+    "usedBy": {
+      "gg_multi": "registers the workspace commands under gg do",
+    },
+  },
+}
