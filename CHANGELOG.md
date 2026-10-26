@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Copy the .claude/CLAUDE_<layer>.md files the managed block imports into new tickets
+
 ## 4.16.0 - 2026-10-23
 
 ### Added
