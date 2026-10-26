@@ -212,6 +212,31 @@ void main() {
       expect(messages.last, '✓ dna_gg instantiated in the workspace');
     });
 
+    test('replaces the CLAUDE_<layer>.md files of the root', () async {
+      File at(String rel) => file(path.join('.claude', rel));
+      at('CLAUDE_dna_gg.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('old\n');
+      at('CLAUDE_dna_gone.md').writeAsStringSync('gone\n');
+      final inner = fakeDna();
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: (args) async {
+          await inner(args);
+          if (args.first != 'build') return;
+          final target = args[args.indexOf('--target') + 1];
+          File(path.join(target, '.claude', 'CLAUDE_dna_gg.md'))
+              .writeAsStringSync('new\n');
+        },
+        ggLog: ggLog,
+      );
+      expect(at('CLAUDE_dna_gg.md').readAsStringSync(), 'new\n');
+      expect(at('CLAUDE_dna_gone.md').existsSync(), isFalse);
+      expect(claudeLayerFilesIn(tempDir.path).map(path.basename), [
+        'CLAUDE_dna_gg.md',
+      ]);
+    });
+
     test(
       'keeps the own text of CLAUDE.md and the own files of .claude',
       () async {
@@ -656,6 +681,31 @@ void main() {
       );
       // The stamp belongs to the root only.
       expect(inTicket(dnaVersionStampPath).existsSync(), isFalse);
+    });
+
+    test('copies the CLAUDE_<layer>.md files the block imports', () async {
+      file('CLAUDE.md').writeAsStringSync('$_block\n');
+      file('.claude/CLAUDE_dna_gg.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# gg workflow\n');
+      file('.claude/notes.md').writeAsStringSync('mine');
+
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+
+      expect(
+        inTicket('.claude/CLAUDE_dna_gg.md').readAsStringSync(),
+        '# gg workflow\n',
+      );
+      // Only the layer files, not the user's own notes.
+      expect(inTicket('.claude/notes.md').existsSync(), isFalse);
+    });
+
+    test('copies no CLAUDE_<layer>.md without the block', () async {
+      file('.claude/CLAUDE_dna_gg.md')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# gg workflow\n');
+      await copyWorkspaceDna(root: tempDir.path, ticketDir: ticket.path);
+      expect(inTicket('.claude/CLAUDE_dna_gg.md').existsSync(), isFalse);
     });
 
     test('copies the hooks and the settings that run them', () async {

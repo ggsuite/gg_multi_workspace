@@ -171,6 +171,12 @@ Future<void> _takeOver({required String build, required String root}) async {
   final stamp = File(path.join(root, dnaVersionStampPath));
   if (stamp.existsSync()) stamp.deleteSync();
 
+  // A layer the new build no longer ships takes its file along.
+  final built = claudeLayerFilesIn(build).map(path.basename).toSet();
+  for (final stale in claudeLayerFilesIn(root)) {
+    if (!built.contains(path.basename(stale))) File(stale).deleteSync();
+  }
+
   final claude = Directory(path.join(build, '.claude'));
   if (claude.existsSync()) {
     await _copyClaudeFolder(claude, Directory(path.join(root, '.claude')));
@@ -181,6 +187,23 @@ Future<void> _takeOver({required String build, required String root}) async {
 
 /// The Claude Code settings file below `.claude/`.
 const String claudeSettingsFile = 'settings.json';
+
+/// The `.claude/CLAUDE_<layer>.md` files in [dir], sorted — one per DNA
+/// layer that ships a `CLAUDE.md`, imported by the managed block.
+List<String> claudeLayerFilesIn(String dir) {
+  final claude = Directory(path.join(dir, '.claude'));
+  if (!claude.existsSync()) return const [];
+  return claude
+      .listSync(followLinks: false)
+      .whereType<File>()
+      .map((f) => f.path)
+      .where((p) {
+        final name = path.basename(p);
+        return name.startsWith('CLAUDE_') && name.endsWith('.md');
+      })
+      .toList()
+    ..sort();
+}
 
 /// The folder below `.claude/` holding the scripts the hooks run.
 const String claudeHooksFolder = 'hooks';
@@ -457,7 +480,8 @@ Future<void> refreshWorkspaceDna({
 // .............................................................................
 /// Copies the gg DNA of the workspace [root] into [ticketDir]: the managed
 /// block of its `CLAUDE.md` — only the block, the user's own text around
-/// it stays in the root — and everything in its `.claude/skills/`, the
+/// it stays in the root — together with the `.claude/CLAUDE_<layer>.md`
+/// files it imports, and everything in its `.claude/skills/`, the
 /// user's own skills included: which ones the DNA placed is not recorded.
 /// The same holds for the scripts in `.claude/hooks/` and the
 /// `.claude/settings.json` that runs them: Claude Code reads the settings
@@ -470,6 +494,13 @@ Future<void> copyWorkspaceDna({
   final block = claudeMdBlockIn(root);
   if (block != null) {
     File(path.join(ticketDir, 'CLAUDE.md')).writeAsStringSync('$block\n');
+    for (final layerFile in claudeLayerFilesIn(root)) {
+      final target = File(
+        path.join(ticketDir, '.claude', path.basename(layerFile)),
+      );
+      target.parent.createSync(recursive: true);
+      File(layerFile).copySync(target.path);
+    }
   }
 
   for (final folder in const ['skills', claudeHooksFolder]) {
