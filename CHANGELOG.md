@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Make sure the organization repos a ticket depends on are in the ocean
+
 ## 4.17.0 - 2026-10-26
 
 ### Changed

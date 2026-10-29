@@ -17,6 +17,8 @@ import 'package:args/command_runner.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_localize_refs/gg_localize_refs.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart'
+    show SelectOrganization;
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/commands/do/add.dart';
 import 'package:gg_one/gg_one.dart' as gg;
@@ -137,13 +139,21 @@ void main() {
       FetchRepoUrl? fetchRepoUrl,
       DefaultBranch? defaultBranch,
       GitRetry gitRetry = const GitRetry(),
+      GitHubPlatform? gitHubPlatform,
+      SelectOrganization? selectOrganization,
     }) {
       final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
+      // No test may list a real organization: by default none offers a repo.
+      final noRepos = MockGitHubPlatform();
+      when(() => noRepos.fetchOrgRepos(any(), client: any(named: 'client')))
+          .thenAnswer((_) async => const <Repository>[]);
       runner = CommandRunner<void>('test', 'Test for AddCommand');
       runner.addCommand(
         AddCommand(
           ggLog: ggLog,
           gitCloner: mockGitCloner,
+          gitHubPlatform: gitHubPlatform ?? noRepos,
+          selectOrganization: selectOrganization,
           processRunner: processRunner,
           oceanWorkspacePath: oceanWorkspacePath,
           executionPath: executionPath ?? execPath,
@@ -1219,6 +1229,249 @@ dev_dependencies:
         () =>
             mockGitCloner.cloneRepo(any(that: contains(hostedDepName)), any()),
       );
+    });
+
+    group('clones the organization repos the ocean lacks', () {
+      late MockProcessRunner mockProc;
+      late Directory ticketDir;
+
+      /// An ocean repo [name] depending on [deps], hosted.
+      void oceanDartRepo(String name, List<String> deps) {
+        final dir = Directory(path.join(oceanWorkspacePath, 'myorg', name))
+          ..createSync(recursive: true);
+        File(path.join(dir.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: $name\n'
+          'version: 1.0.0\n'
+          'dependencies:\n'
+          '${deps.map((d) => '  $d: ^1.0.0\n').join()}',
+        );
+      }
+
+      /// A platform listing [repos] for every organization.
+      MockGitHubPlatform offering(List<String> repos) {
+        final platform = MockGitHubPlatform();
+        when(() => platform.fetchOrgRepos(any(), client: any(named: 'client')))
+            .thenAnswer(
+              (_) async => [
+                for (final name in repos)
+                  Repository(
+                    name: name,
+                    httpsUrl: 'https://github.com/myorg/$name',
+                    sshUrl: 'git@github.com:myorg/$name.git',
+                  ),
+              ],
+            );
+        return platform;
+      }
+
+      setUp(() {
+        OrganizationUtils.clearCache();
+        File(path.join(oceanWorkspacePath, '.organizations')).writeAsStringSync(
+          jsonEncode(<Map<String, dynamic>>[
+            Organization(
+              name: 'myorg',
+              url: 'https://github.com/myorg/',
+            ).toMap(),
+          ]),
+        );
+        ticketDir = Directory(path.join(tempDir.path, 'ORG_TICKET'))
+          ..createSync(recursive: true);
+        File(path.join(ticketDir.path, 'ticket.json')).writeAsStringSync('{}');
+        mockProc = MockProcessRunner();
+        when(
+          () => mockProc(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: any(named: 'runInShell'),
+          ),
+        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      });
+
+      tearDown(OrganizationUtils.clearCache);
+
+      test('that no registry attributes to the organization', () async {
+        // pub.dev knows nothing of org_dep: it is not published yet.
+        oceanDartRepo('requested', ['org_dep', 'path']);
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: offering(['requested', 'org_dep']),
+        );
+
+        await runner.run(['add', 'requested', '--no-localize']);
+
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'git@github.com:myorg/org_dep.git',
+            any(),
+          ),
+        ).called(1);
+        verifyNever(
+          () => mockGitCloner.cloneRepo(any(that: contains('path')), any()),
+        );
+      });
+
+      test('that an ocean repo the ticket reaches depends on', () async {
+        // ticket repo t -> ocean repo m -> x: the transitive scan above
+        // only follows the requested repos, x is found anyway.
+        oceanDartRepo('m', ['x']);
+        oceanDartRepo('other', []);
+        final t = Directory(path.join(ticketDir.path, 't'))..createSync();
+        File(path.join(t.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: t\nversion: 1.0.0\ndependencies:\n  m: ^1.0.0\n',
+        );
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: offering(['m', 'other', 'x']),
+          defaultBranch: fakeDefaultBranch(),
+        );
+
+        await runner.run(['add', 'other', '--no-localize', '--no-fetch']);
+
+        verify(
+          () => mockGitCloner.cloneRepo('git@github.com:myorg/x.git', any()),
+        ).called(1);
+      });
+
+      test(
+        'letting the user pick when several organizations offer it',
+        () async {
+          File(path.join(oceanWorkspacePath, '.organizations'))
+              .writeAsStringSync(
+                jsonEncode(<Map<String, dynamic>>[
+                  for (final org in ['myorg', 'otherorg'])
+                    Organization(
+                      name: org,
+                      url: 'https://github.com/$org/',
+                    ).toMap(),
+                ]),
+              );
+          OrganizationUtils.clearCache();
+          oceanDartRepo('requested', ['org_dep']);
+          final offered = <String>[];
+          createRunner(
+            executionPath: ticketDir.path,
+            processRunner: mockProc.call,
+            fetchRepoUrl: (_) async => null,
+            gitHubPlatform: offering(['requested', 'org_dep']),
+            selectOrganization: (repoName, owners) async {
+              offered.addAll([repoName, ...owners.map((o) => o.name)]);
+              return owners.last;
+            },
+          );
+
+          await runner.run(['add', 'requested', '--no-localize']);
+
+          expect(offered, ['org_dep', 'myorg', 'otherorg']);
+          verify(
+            () => mockGitCloner.cloneRepo(
+              'https://github.com/otherorg/org_dep.git',
+              any(),
+            ),
+          ).called(1);
+        },
+      );
+
+      test('and scans what it cloned with the registry pass again', () async {
+        // requested -> c (only the org list knows it) -> foo, published from
+        // the repository bar: only the registry pass can find bar.
+        oceanDartRepo('requested', ['c']);
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((invocation) async {
+              final url = invocation.positionalArguments[0] as String;
+              final destination = invocation.positionalArguments[1] as String;
+              final deps = url.endsWith('/c.git') ? '  foo: ^1.0.0\n' : '';
+              Directory(destination).createSync(recursive: true);
+              File(path.join(destination, 'pubspec.yaml')).writeAsStringSync(
+                'name: ${path.basename(destination)}\nversion: 1.0.0\n'
+                'dependencies:\n$deps',
+              );
+            });
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (pkg) async =>
+              pkg == 'foo' ? 'https://github.com/myorg/bar' : null,
+          gitHubPlatform: offering(['requested', 'c', 'bar']),
+        );
+
+        await runner.run(['add', 'requested', '--no-localize', '--no-fetch']);
+
+        verify(
+          () => mockGitCloner.cloneRepo('git@github.com:myorg/c.git', any()),
+        ).called(1);
+        verify(
+          () =>
+              mockGitCloner.cloneRepo(any(that: contains('myorg/bar')), any()),
+        ).called(1);
+      });
+
+      test('and reports a repo it cannot clone', () async {
+        oceanDartRepo('requested', ['org_dep']);
+        when(
+          () => mockGitCloner.cloneRepo(
+            'git@github.com:myorg/org_dep.git',
+            any(),
+          ),
+        ).thenThrow(Exception('permission denied'));
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: offering(['requested', 'org_dep']),
+        );
+
+        await runner.run(['add', 'requested', '--no-localize']);
+
+        // Tried once — the fixpoint loop does not retry it forever.
+        verify(
+          () => mockGitCloner.cloneRepo(
+            'git@github.com:myorg/org_dep.git',
+            any(),
+          ),
+        ).called(1);
+        final manifest = path.join(
+          oceanWorkspacePath,
+          'myorg',
+          'requested',
+          'pubspec.yaml',
+        );
+        expect(
+          logMessages,
+          contains(
+            startsWith(
+              'Failed to clone org_dep, which org_dep in $manifest needs:',
+            ),
+          ),
+        );
+      });
+
+      test('and warns about organizations it cannot list', () async {
+        oceanDartRepo('requested', ['org_dep']);
+        final broken = MockGitHubPlatform();
+        when(() => broken.fetchOrgRepos(any(), client: any(named: 'client')))
+            .thenThrow(Exception('gh not authenticated'));
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: broken,
+        );
+
+        await runner.run(['add', 'requested', '--no-localize']);
+
+        expect(
+          logMessages,
+          contains(
+            'Could not list the repositories of myorg: the ticket may '
+            'depend on one of them the ocean lacks.',
+          ),
+        );
+      });
     });
 
     test('creates .code-workspace for ticket with one repo', () async {

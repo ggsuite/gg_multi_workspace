@@ -44,7 +44,10 @@ it asks you to run `gg do add <repo>`.
 `do add` also takes the ticket's own state into account: the repos lying
 between the ticket repos are found in the dependency graph in which the
 ticket repos replace their ocean copies, and a dependency only a ticket
-repo declares is cloned into the ocean as well.
+repo declares is cloned into the ocean as well. Every repository of a
+registered organization the ticket depends on — directly or through other
+ocean repos — is cloned into the ocean, even when it is not published
+yet, so no repo between the ticket repos can hide behind a missing one.
 
 ### Debugging across the repos of a ticket
 

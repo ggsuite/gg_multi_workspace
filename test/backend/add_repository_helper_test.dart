@@ -10,7 +10,6 @@ import 'dart:io';
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_multi_workspace/src/backend/add_repository_helper.dart';
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
-import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:http/http.dart' as http;
