@@ -125,9 +125,7 @@ void main() {
 
       expect(messages, [
         '✓ Localized the references of a',
-        '\n⚠️ Repos between the ticket repos, but not in it:',
-        '  - c',
-        'Run gg do add c to add them.\n',
+        for (final line in missingBetweenReport(['c'])) rmControls(line),
       ]);
       expect(
         File(path.join(a.path, 'pubspec_overrides.yaml')).readAsStringSync(),

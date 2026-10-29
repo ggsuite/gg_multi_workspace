@@ -116,6 +116,7 @@ class AddCommand extends Command<dynamic> {
     TicketLocalizer? ticketLocalizer,
     Graph? graph,
     FetchRepoUrl? fetchRepoUrl,
+    this._pubDevPackageExists,
     SelectOrganization? selectOrganization,
     RepoFreshness? repoFreshness,
     DuplicateRepoCleanup? duplicateRepoCleanup,
@@ -251,6 +252,9 @@ class AddCommand extends Command<dynamic> {
 
   /// Resolves a hosted-dep repo URL; tests inject stubs (incl. throwing).
   final FetchRepoUrl _fetchRepoUrl;
+
+  /// Asks pub.dev about a dependency no lock file knows; tests inject stubs.
+  final PubDevPackageExists? _pubDevPackageExists;
 
   /// Asks which organization a plain repo name refers to when several own it.
   final SelectOrganization _selectOrganization;
@@ -411,6 +415,11 @@ class AddCommand extends Command<dynamic> {
       final clonedOrgRepos = <String>{};
       final attemptedOrgRepos = <String>{};
       final updated = <String>{};
+      final missingOceanRepos = MissingOceanRepos(
+        repoLists: _repoLists,
+        pubDevPackageExists: _pubDevPackageExists,
+      );
+      MissingOceanReposReport? lastReport;
       while (true) {
         await _cloneMissingTransitiveDeps(
           ggLog: ggLog,
@@ -421,17 +430,22 @@ class AddCommand extends Command<dynamic> {
           updated: updated,
         );
 
-        final cloned = await _cloneMissingOrgRepos(
+        final (:cloned, :report) = await _cloneMissingOrgRepos(
           ggLog: ggLog,
           requestedRepoNames: requestedRepoNames,
           ticketPath: ticketPath,
           attempted: attemptedOrgRepos,
+          missingOceanRepos: missingOceanRepos,
         );
+        lastReport = report;
         if (cloned.isEmpty) {
           break;
         }
         clonedOrgRepos.addAll(cloned);
       }
+
+      // What the search could not decide, once, after the last round.
+      _reportIncompleteSearch(lastReport, ggLog);
 
       // Ticket-shadowed: an edge only the ticket has pulls its repos in too.
       Map<String, Node> allNodes = const {};
@@ -818,15 +832,17 @@ class AddCommand extends Command<dynamic> {
   /// Clones every repository a known organization offers that the regular
   /// dependencies of the ticket repos and of [requestedRepoNames] reach but
   /// the ocean lacks — through the ocean, to a fixpoint — and returns the
-  /// names of those now in the ocean. A repo in [attempted] (lower case) is
-  /// not tried again. See CLAUDE.md, »Cloning missing organization repos«.
-  Future<Set<String>> _cloneMissingOrgRepos({
+  /// names of those now in the ocean with the last search report. A repo in
+  /// [attempted] (lower case) is not tried again. See CLAUDE.md, »Cloning
+  /// missing organization repos«.
+  Future<({Set<String> cloned, MissingOceanReposReport report})>
+  _cloneMissingOrgRepos({
     required GgLog ggLog,
     required Set<String> requestedRepoNames,
     required String ticketPath,
     required Set<String> attempted,
+    required MissingOceanRepos missingOceanRepos,
   }) async {
-    final missingOceanRepos = MissingOceanRepos(repoLists: _repoLists);
     final cloned = <String>{};
 
     while (true) {
@@ -847,15 +863,7 @@ class AddCommand extends Command<dynamic> {
           .toList();
 
       if (pending.isEmpty) {
-        for (final org in report.unchecked) {
-          ggLog(
-            cWarn(
-              'Could not list the repositories of ${org.name}: the ticket '
-              'may depend on one of them the ocean lacks.',
-            ),
-          );
-        }
-        return cloned;
+        return (cloned: cloned, report: report);
       }
 
       for (final repo in pending) {
@@ -877,12 +885,13 @@ class AddCommand extends Command<dynamic> {
             selectOrganization: _selectOrganization,
           );
         } catch (e) {
-          ggLog(
-            cError(
-              'Failed to clone ${repo.repoName}, which ${repo.dependency} '
-              'in ${repo.manifestPath} needs: $e',
-            ),
-          );
+          cloneFailedReport(
+            repoName: repo.repoName,
+            url: repo.owners.first.repo.cloneUrl,
+            dependency: repo.dependency,
+            manifestPath: repo.manifestPath,
+            error: plainError(e),
+          ).forEach(ggLog);
         }
         if (RepoFolderResolver.resolve(
               workspacePath: oceanWorkspacePath,
@@ -892,6 +901,25 @@ class AddCommand extends Command<dynamic> {
           cloned.add(repo.repoName);
         }
       }
+    }
+  }
+
+  // ...........................................................................
+  /// Reports what keeps [report] from being complete — organizations that
+  /// could not be listed, dependencies gg cannot see — with their probable
+  /// causes and what to do.
+  static void _reportIncompleteSearch(
+    MissingOceanReposReport? report,
+    GgLog ggLog,
+  ) {
+    if (report == null) {
+      return;
+    }
+    for (final org in report.unchecked) {
+      uncheckedOrganizationReport(org, report.failureOf(org)).forEach(ggLog);
+    }
+    for (final dependency in report.inaccessible) {
+      inaccessibleDependencyReport(dependency).forEach(ggLog);
     }
   }
 
