@@ -14,7 +14,6 @@ import 'package:path/path.dart' as path;
 import 'package:pubspec_parse/pubspec_parse.dart';
 
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
-import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 
 /// Lets the user pick the organization a repository named [repoName] should
 /// be taken from. Returns null when the selection was cancelled.

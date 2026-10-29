@@ -28,7 +28,6 @@ import 'package:gg_multi_workspace/src/backend/git_attributes.dart';
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_multi_workspace/src/backend/gitignore_lock_files.dart';
 import 'package:gg_multi_workspace/src/backend/legacy_git_hooks.dart';
-import 'package:gg_multi_workspace/src/backend/organization_repo_lists.dart';
 import 'package:gg_multi_workspace/src/backend/repo_setup.dart';
 
 /// Resolves the repository URL of a hosted dependency.
@@ -406,12 +405,33 @@ class AddCommand extends Command<dynamic> {
 
     if (transitiveRepos) {
       // Clone missing transitive deps so the graph can resolve between-nodes.
-      await _cloneMissingTransitiveDeps(
-        ggLog: ggLog,
-        requestedRepoNames: requestedRepoNames,
-        ticketPath: ticketPath,
-        fetch: fetch,
-      );
+      // What the registries could not attribute, the organizations' own
+      // repository lists still can — and a repo cloned that way is scanned
+      // by the registry pass again, until neither finds anything new.
+      final clonedOrgRepos = <String>{};
+      final attemptedOrgRepos = <String>{};
+      final updated = <String>{};
+      while (true) {
+        await _cloneMissingTransitiveDeps(
+          ggLog: ggLog,
+          requestedRepoNames: requestedRepoNames,
+          extraSeeds: clonedOrgRepos,
+          ticketPath: ticketPath,
+          fetch: fetch,
+          updated: updated,
+        );
+
+        final cloned = await _cloneMissingOrgRepos(
+          ggLog: ggLog,
+          requestedRepoNames: requestedRepoNames,
+          ticketPath: ticketPath,
+          attempted: attemptedOrgRepos,
+        );
+        if (cloned.isEmpty) {
+          break;
+        }
+        clonedOrgRepos.addAll(cloned);
+      }
 
       // Ticket-shadowed: an edge only the ticket has pulls its repos in too.
       Map<String, Node> allNodes = const {};
@@ -605,14 +625,18 @@ class AddCommand extends Command<dynamic> {
 
   // Ticket support helpers
   // ...........................................................................
-  /// Clones the missing dependencies of [requestedRepoNames], of what they
-  /// reach and of the repos in [ticketPath] (scanned, never fetched); loops to
-  /// a fixpoint. See CLAUDE.md, »Cloning missing dependencies«.
+  /// Clones the missing dependencies of [requestedRepoNames] and
+  /// [extraSeeds], of what they reach and of the repos in [ticketPath]
+  /// (scanned, never fetched); loops to a fixpoint. [updated] holds the repos
+  /// already brought to their remote state, across calls. See CLAUDE.md,
+  /// »Cloning missing dependencies«.
   Future<void> _cloneMissingTransitiveDeps({
     required GgLog ggLog,
     required Set<String> requestedRepoNames,
     required String ticketPath,
     required bool fetch,
+    required Set<String> updated,
+    Set<String> extraSeeds = const <String>{},
   }) async {
     final oceanDir = Directory(oceanWorkspacePath);
     if (!oceanDir.existsSync()) {
@@ -632,13 +656,9 @@ class AddCommand extends Command<dynamic> {
     // Cache pub.dev lookups across the fixpoint loop.
     final hostedLookupCache = <String, String?>{};
 
-    // Repositories already brought to their remote state — a clone made
-    // during this run is on it by construction, so nothing is fetched twice.
-    final updated = <String>{};
-
     final ticketDirs = RepoFolderResolver.repoDirs(ticketPath);
     // A repo cloned for a ticket repo joins the closure: its deps count too.
-    final seeds = <String>{...requestedRepoNames};
+    final seeds = <String>{...requestedRepoNames, ...extraSeeds};
 
     while (true) {
       final existingDirs = RepoFolderResolver.repoDirs(oceanWorkspacePath);
@@ -790,6 +810,87 @@ class AddCommand extends Command<dynamic> {
       // No progress -> stop (e.g. remaining deps are unreachable).
       if (!addedAny) {
         return;
+      }
+    }
+  }
+
+  // ...........................................................................
+  /// Clones every repository a known organization offers that the regular
+  /// dependencies of the ticket repos and of [requestedRepoNames] reach but
+  /// the ocean lacks — through the ocean, to a fixpoint — and returns the
+  /// names of those now in the ocean. A repo in [attempted] (lower case) is
+  /// not tried again. See CLAUDE.md, »Cloning missing organization repos«.
+  Future<Set<String>> _cloneMissingOrgRepos({
+    required GgLog ggLog,
+    required Set<String> requestedRepoNames,
+    required String ticketPath,
+    required Set<String> attempted,
+  }) async {
+    final missingOceanRepos = MissingOceanRepos(repoLists: _repoLists);
+    final cloned = <String>{};
+
+    while (true) {
+      final roots = <Directory>[
+        for (final name in requestedRepoNames)
+          ?RepoFolderResolver.resolve(
+            workspacePath: oceanWorkspacePath,
+            repoName: name,
+          ),
+      ];
+      final report = await missingOceanRepos.find(
+        oceanPath: oceanWorkspacePath,
+        ticketPath: ticketPath,
+        roots: roots,
+      );
+      final pending = report.missing
+          .where((repo) => attempted.add(repo.repoName.toLowerCase()))
+          .toList();
+
+      if (pending.isEmpty) {
+        for (final org in report.unchecked) {
+          ggLog(
+            cWarn(
+              'Could not list the repositories of ${org.name}: the ticket '
+              'may depend on one of them the ocean lacks.',
+            ),
+          );
+        }
+        return cloned;
+      }
+
+      for (final repo in pending) {
+        // One owner: its url leaves no question. Several: the plain name
+        // lets addRepositoryHelper ask which organization is meant.
+        final targetArg = repo.owners.length == 1
+            ? repo.owners.single.repo.cloneUrl
+            : repo.repoName;
+        try {
+          await addRepositoryHelper(
+            targetArg: targetArg,
+            ggLog: ggLog,
+            gitCloner: gitCloner,
+            gitHubPlatform: gitHubPlatform,
+            azureDevOpsPlatform: azureDevOpsPlatform,
+            repoLists: _repoLists,
+            workspacePath: oceanWorkspacePath,
+            logIfAlreadyAdded: false,
+            selectOrganization: _selectOrganization,
+          );
+        } catch (e) {
+          ggLog(
+            cError(
+              'Failed to clone ${repo.repoName}, which ${repo.dependency} '
+              'in ${repo.manifestPath} needs: $e',
+            ),
+          );
+        }
+        if (RepoFolderResolver.resolve(
+              workspacePath: oceanWorkspacePath,
+              repoName: repo.repoName,
+            ) !=
+            null) {
+          cloned.add(repo.repoName);
+        }
       }
     }
   }
