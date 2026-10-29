@@ -133,10 +133,10 @@ packages:
     dependency: transitive
     description:
       name: crypto
-      sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
+      sha256: e3626ae6270383c9e3a549f34c9e4cd26c09ae6a9adaab2bf4737a00340efdc4
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.7"
+    version: "3.0.8"
   dart_console:
     dependency: transitive
     description:
@@ -277,10 +277,10 @@ packages:
     dependency: "direct dev"
     description:
       name: gg_capture_print
-      sha256: fd793824121435fe128619c99bcf4a6fac9398188dcc7dd3def6cfe02d2327f9
+      sha256: "3c35399877ccc15f8ea2e768064b1db847a4f71c303708ea1cd52d8934bc0417"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   gg_changelog:
     dependency: transitive
     description:
@@ -404,10 +404,9 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: c0562187add104e4c7f945b011e99f956f74fbfa3ba0ea1bae21e092f4d5ed2d
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.11.1"
   gg_one:
     dependency: "direct main"
@@ -421,10 +420,10 @@ packages:
     dependency: transitive
     description:
       name: gg_one_commit
-      sha256: "8d1f82a1472d688f132b6a3e3ff887656aed1993d83a2364e747a4d1d4382d48"
+      sha256: "124a3a42bf8e814436bc080d20add498d728ad60db091ca68e8a02b2b467766f"
       url: "https://pub.dev"
     source: hosted
-    version: "2.8.6"
+    version: "2.8.7"
   gg_one_core:
     dependency: transitive
     description:
