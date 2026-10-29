@@ -48,6 +48,9 @@ repo declares is cloned into the ocean as well. Every repository of a
 registered organization the ticket depends on — directly or through other
 ocean repos — is cloned into the ocean, even when it is not published
 yet, so no repo between the ticket repos can hide behind a missing one.
+When gg cannot see a dependency — most likely a private repository you
+have no access to — or cannot list an organization, it says so, with the
+probable cause and what to try (`gh auth status`, `gh repo view …`).
 
 ### Debugging across the repos of a ticket
 

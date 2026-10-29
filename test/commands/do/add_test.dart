@@ -141,6 +141,7 @@ void main() {
       GitRetry gitRetry = const GitRetry(),
       GitHubPlatform? gitHubPlatform,
       SelectOrganization? selectOrganization,
+      PubDevPackageExists? pubDevPackageExists,
     }) {
       final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
       // No test may list a real organization: by default none offers a repo.
@@ -154,6 +155,8 @@ void main() {
           gitCloner: mockGitCloner,
           gitHubPlatform: gitHubPlatform ?? noRepos,
           selectOrganization: selectOrganization,
+          // No test may ask pub.dev: by default every package exists there.
+          pubDevPackageExists: pubDevPackageExists ?? (_) async => true,
           processRunner: processRunner,
           oceanWorkspacePath: oceanWorkspacePath,
           executionPath: executionPath ?? execPath,
@@ -1448,6 +1451,10 @@ dev_dependencies:
             ),
           ),
         );
+        expect(
+          logMessages,
+          contains(contains('git ls-remote git@github.com:myorg/org_dep.git')),
+        );
       });
 
       test('and warns about organizations it cannot list', () async {
@@ -1464,12 +1471,48 @@ dev_dependencies:
 
         await runner.run(['add', 'requested', '--no-localize']);
 
+        // Once, after the last round, with the reason and what to try.
+        expect(
+          logMessages.where(
+            (m) => m.startsWith(
+              '\n⚠️ Could not list the repositories of myorg: '
+              'gh not authenticated',
+            ),
+          ),
+          hasLength(1),
+        );
+        expect(logMessages, contains(contains('gh auth status')));
+      });
+
+      test('and reports a dependency it cannot see', () async {
+        // Neither on pub.dev nor in the list of myorg: probably private.
+        oceanDartRepo('requested', ['hidden_dep']);
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: offering(['requested']),
+          pubDevPackageExists: (package) async => package != 'hidden_dep',
+        );
+
+        await runner.run(['add', 'requested', '--no-localize']);
+
+        final manifest = path.join(
+          oceanWorkspacePath,
+          'myorg',
+          'requested',
+          'pubspec.yaml',
+        );
         expect(
           logMessages,
           contains(
-            'Could not list the repositories of myorg: the ticket may '
-            'depend on one of them the ocean lacks.',
+            '\n⚠️ hidden_dep (in $manifest) is not in the ocean: pub.dev '
+            'does not know it, and no repository list of myorg names it.',
           ),
+        );
+        expect(
+          logMessages,
+          contains(contains('gh repo view myorg/hidden_dep')),
         );
       });
     });
