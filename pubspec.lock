@@ -300,10 +300,9 @@ packages:
   gg_create_repo:
     dependency: "direct main"
     description:
-      name: gg_create_repo
-      sha256: a3750415ce7bd103ab205b14ce1f3f1419956c4ebc63ecb5c93039b18fc53420
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_create_repo"
+      relative: true
+    source: path
     version: "0.0.3"
   gg_direct_json:
     dependency: transitive
@@ -404,10 +403,9 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: "94b5007de910f0b8d93b456c9f0d3f7128b21e29c9ba8a55f16adb14bb235dc0"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.13.0"
   gg_one:
     dependency: "direct main"
