@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 4.22.0 - 2026-10-30
 
 ### Changed
 
 - Preset --transitive from ~/.gg_rc and add gg do add transitive for <repo>
+
 ## 4.21.0 - 2026-10-30
 
 ### Changed
