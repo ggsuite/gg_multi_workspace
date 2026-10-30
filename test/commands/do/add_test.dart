@@ -142,6 +142,8 @@ void main() {
       GitHubPlatform? gitHubPlatform,
       SelectOrganization? selectOrganization,
       PubDevPackageExists? pubDevPackageExists,
+      GgRc? ggRc,
+      ReposBetween? reposBetween,
     }) {
       final execPath = Directory.systemTemp.createTempSync('exec_path_').path;
       // No test may list a real organization: by default none offers a repo.
@@ -152,6 +154,8 @@ void main() {
       runner.addCommand(
         AddCommand(
           ggLog: ggLog,
+          readSettings: ggRc == null ? null : ({required ggLog}) => ggRc,
+          reposBetween: reposBetween,
           gitCloner: mockGitCloner,
           gitHubPlatform: gitHubPlatform ?? noRepos,
           selectOrganization: selectOrganization,
@@ -3306,6 +3310,331 @@ version: 1.0.0
         expect(folderPaths, equals(<String>{'a', 'c'}));
       },
     );
+
+    group('~/.gg_rc and gg do add transitive', () {
+      late Directory ticketDir;
+
+      /// An ocean a -> b -> c and an empty ticket TXYZ.
+      setUp(() {
+        for (final (name, dep) in [('a', 'b'), ('b', 'c'), ('c', null)]) {
+          File(path.join(oceanWorkspacePath, name, 'pubspec.yaml'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync(
+              [
+                'name: $name',
+                'version: 1.0.0',
+                if (dep != null) ...['dependencies:', '  $dep: ^1.0.0'],
+                '',
+              ].join('\n'),
+            );
+        }
+        ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TXYZ'),
+        )..createSync(recursive: true);
+      });
+
+      /// A runner adding to the ticket, git and pub stubbed.
+      void ticketRunner({GgRc? ggRc, ReposBetween? reposBetween}) {
+        final mockRunner = MockProcessRunner();
+        when(
+          () => mockRunner(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: any(named: 'runInShell'),
+            environment: any(named: 'environment'),
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
+        final mockDoCommit = MockGgSystemCommit();
+        when(
+          () => mockDoCommit.commit(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            paths: any(named: 'paths'),
+            includeUntracked: any(named: 'includeUntracked'),
+            ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
+            keepForeignChanges: any(named: 'keepForeignChanges'),
+          ),
+        ).thenAnswer(
+          (_) async => const gg.GgSystemCommitResult(
+            userCommitCreated: false,
+            systemCommitCreated: true,
+            ggOwnedPaths: [],
+            foreignPaths: [],
+          ),
+        );
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockRunner.call,
+          systemCommit: mockDoCommit,
+          ggRc: ggRc,
+          reposBetween: reposBetween,
+        );
+      }
+
+      bool inTicket(String name) =>
+          Directory(path.join(ticketDir.path, name)).existsSync();
+
+      final rcFile = File(path.join('home', '.gg_rc'));
+      final lean = GgRc(
+        values: const {
+          'do': {
+            'add': {'transitive': false},
+          },
+        },
+        file: rcFile,
+      );
+
+      test('~/.gg_rc leaves the repos between out, and says so', () async {
+        ticketRunner(ggRc: lean);
+
+        await runner.run(['add', 'a', 'c']);
+
+        expect(
+          [inTicket('a'), inTicket('b'), inTicket('c')],
+          [true, false, true],
+        );
+        expect(
+          logMessages,
+          contains(
+            'Skip adding transitive repos (${rcFile.path}: '
+            'do.add.transitive = false). A breaking release adds them later: '
+            'gg do add transitive for <repo>.',
+          ),
+        );
+      });
+
+      test('names .gg_rc when the settings have no file', () async {
+        ticketRunner(
+          ggRc: const GgRc(
+            values: {
+              'do': {
+                'add': {'transitive': false},
+              },
+            },
+          ),
+        );
+
+        await runner.run(['add', 'a', 'c']);
+
+        expect(
+          logMessages,
+          contains(startsWith('Skip adding transitive repos (.gg_rc: ')),
+        );
+      });
+
+      test('--transitive beats ~/.gg_rc', () async {
+        ticketRunner(ggRc: lean);
+
+        await runner.run(['add', '--transitive', 'a', 'c']);
+
+        expect(inTicket('b'), isTrue);
+      });
+
+      test('transitive for <repo> adds the repos between it and the ticket '
+          'repos depending on it', () async {
+        ticketRunner(ggRc: lean);
+        await runner.run(['add', 'a', 'c']);
+        logMessages.clear();
+
+        await runner.run(['add', 'transitive', 'for', 'c']);
+
+        expect(inTicket('b'), isTrue);
+        expect(
+          logMessages,
+          contains(
+            '\n✓ Adding the repos between the '
+            'ticket and c',
+          ),
+        );
+        expect(logMessages, contains('  ✓ b'));
+        expect(logMessages.last, '✔ Successfully added b');
+      });
+
+      test('transitive for a repo nothing in the ticket depends on through '
+          'the ocean adds nothing', () async {
+        ticketRunner(ggRc: lean);
+        await runner.run(['add', 'a', 'c']);
+        logMessages.clear();
+
+        await runner.run(['add', 'transitive', 'for', 'a']);
+
+        expect(inTicket('b'), isFalse);
+        expect(logMessages.last, '✔ No repos missing between them');
+      });
+
+      test('transitive without for asks about every ticket repo', () async {
+        ticketRunner(ggRc: lean);
+        await runner.run(['add', 'a', 'c']);
+
+        await runner.run(['add', 'transitive']);
+
+        expect(inTicket('b'), isTrue);
+        expect(
+          logMessages,
+          contains(
+            '\n✓ Adding the repos between the ticket and the ticket '
+            'repos',
+          ),
+        );
+      });
+
+      test('transitive for without a repo is a usage error', () async {
+        ticketRunner();
+
+        for (final args in [
+          ['add', 'transitive', 'for'],
+          ['add', 'transitive', 'c'],
+        ]) {
+          await expectLater(
+            runner.run(args),
+            throwsA(
+              isA<UsageException>().having(
+                (e) => e.message,
+                'message',
+                contains('gg do add transitive for <repo> [<repo>…]'),
+              ),
+            ),
+          );
+        }
+      });
+
+      test(
+        'transitive for a repo outside the ticket says how to add it',
+        () async {
+          ticketRunner(ggRc: lean);
+          await runner.run(['add', 'a']);
+
+          await expectLater(
+            runner.run(['add', 'transitive', 'for', 'x', 'c']),
+            throwsA(
+              isA<Exception>().having(
+                (e) => rmControls('$e'),
+                'message',
+                'Exception: c x are not in the ticket. '
+                    'Add them first with gg do add c x.',
+              ),
+            ),
+          );
+          await expectLater(
+            runner.run(['add', 'transitive', 'for', 'c']),
+            throwsA(
+              isA<Exception>().having(
+                (e) => rmControls('$e'),
+                'message',
+                'Exception: c is not in the ticket. '
+                    'Add it first with gg do add c.',
+              ),
+            ),
+          );
+        },
+      );
+
+      test('transitive needs a ticket', () async {
+        createRunner(executionPath: tempDir.path);
+
+        await expectLater(
+          runner.run(['add', 'transitive', 'for', 'c']),
+          throwsA(
+            isA<UsageException>().having(
+              (e) => e.message,
+              'message',
+              contains('only be used from inside a ticket workspace'),
+            ),
+          ),
+        );
+      });
+
+      test('a broken ~/.gg_rc stops only a run that reads it', () async {
+        final broken = File(path.join(tempDir.path, 'broken_rc'))
+          ..writeAsStringSync('{');
+        ticketRunner(
+          ggRc: GgRc.load(ggLog: ggLog, file: broken),
+        );
+
+        await runner.run(['add', '--no-transitive', 'a', 'c']);
+        expect(inTicket('b'), isFalse);
+
+        await expectLater(
+          runner.run(['add', 'a']),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls('$e'),
+              'message',
+              contains('is no valid JSON'),
+            ),
+          ),
+        );
+      });
+
+      test('selects the releases by pattern', () async {
+        ticketRunner(ggRc: lean);
+        await runner.run(['add', 'a', 'c']);
+
+        await runner.run(['add', 'transitive', 'for', '[c]']);
+
+        expect(inTicket('b'), isTrue);
+        expect(
+          logMessages,
+          contains('\n✓ Adding the repos between the ticket and c'),
+        );
+      });
+
+      test('fails for an ocean graph that does not build', () async {
+        final reposBetween = MockReposBetween();
+        when(
+          () => reposBetween.find(
+            ticketPath: any(named: 'ticketPath'),
+            oceanPath: any(named: 'oceanPath'),
+            from: any(named: 'from'),
+          ),
+        ).thenAnswer((_) async => (names: <String>[], error: 'a cycle'));
+        ticketRunner(ggRc: lean, reposBetween: reposBetween);
+        await runner.run(['add', 'c']);
+
+        await expectLater(
+          runner.run(['add', 'transitive', 'for', 'c']),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls('$e'),
+              'message',
+              contains('Could not find the repos between: a cycle'),
+            ),
+          ),
+        );
+
+        expect(
+          logMessages,
+          contains(
+            contains(
+              'The dependency graph of the ocean does not '
+              'build: a cycle',
+            ),
+          ),
+        );
+      });
+
+      test('addReposBetweenWithAddCommand adds what gg do add transitive '
+          'for adds', () async {
+        await expectLater(
+          addReposBetweenWithAddCommand(
+            ticketDir: ticketDir,
+            releases: {'x'},
+            ggLog: ggLog,
+          ),
+          throwsA(
+            isA<Exception>().having(
+              (e) => rmControls('$e'),
+              'message',
+              contains('x is not in the ticket'),
+            ),
+          ),
+        );
+      });
+    });
 
     test(
       'adds between nodes using existing ticket repos as endpoints',

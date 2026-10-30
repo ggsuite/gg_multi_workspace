@@ -405,10 +405,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_multi_core
-      sha256: "4203bcc6e29c09fce7281ce6c5af42d6546723922ad9c61fbf766039c88b591e"
+      sha256: "29b5bdfb4b0e25c17f918ea372b4abaf917233eebb69a65d2c517f8f2a3c4398"
       url: "https://pub.dev"
     source: hosted
-    version: "4.14.1"
+    version: "4.15.0"
   gg_one:
     dependency: "direct main"
     description:

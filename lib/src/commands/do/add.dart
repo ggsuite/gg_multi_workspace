@@ -87,6 +87,31 @@ List<String> matchOceanRepoNames(
 }
 
 // #############################################################################
+/// Reads the user's settings — [GgRc.load] fits.
+typedef ReadSettings = GgRc Function({required GgLog ggLog});
+
+// #############################################################################
+/// The [AddReposBetween] `gg do review` is handed: adds the repos between
+/// [releases] and the ticket in [ticketDir] the way
+/// `gg do add transitive for <releases>` does — `--no-fetch`, like
+/// [WorkspaceRepoHost.addWithAddCommand]: an ocean repo on a feature branch,
+/// or a network hiccup, must not fail a review that has pushed already.
+Future<List<String>> addReposBetweenWithAddCommand({
+  required Directory ticketDir,
+  required Set<String> releases,
+  required GgLog ggLog,
+}) {
+  final ticketPath = path.absolute(ticketDir.path);
+  return AddCommand(
+    ggLog: ggLog,
+    executionPath: ticketPath,
+    oceanWorkspacePath: WorkspaceUtils.defaultOceanWorkspacePath(
+      workingDir: ticketPath,
+    ),
+  ).addReposBetween(ticketPath: ticketPath, releases: releases, fetch: false);
+}
+
+// #############################################################################
 /// Command to add a repo or all repos of an organization to ocean+ticket.
 /// In ticket mode it also auto-clones transitive deps and re-localizes refs.
 /// Use `--force` to overwrite an existing repo in the ocean.
@@ -94,7 +119,12 @@ List<String> matchOceanRepoNames(
 /// organization folders of the ocean at once. `--no-localize`
 /// copies the repos without rewriting their references to local paths.
 /// `--no-transitive` copies only the requested repos and leaves the
-/// repos between them in the dependency graph out of the ticket.
+/// repos between them in the dependency graph out of the ticket; `~/.gg_rc`
+/// (`{"do": {"add": {"transitive": false}}}`, see [GgRc]) makes that the
+/// default. `gg do add transitive for <repo>…` adds them afterwards — only
+/// the repos above `<repo>`, which its breaking release strands (see
+/// [ReposBetween]); `gg do add transitive` without `for` asks about every
+/// ticket repo.
 class AddCommand extends Command<dynamic> {
   /// Constructor. [localizeRefs], [backupPublishTo], [systemCommit] and
   /// [processRunner] reach the localization only when [ticketLocalizer] is
@@ -122,8 +152,12 @@ class AddCommand extends Command<dynamic> {
     DuplicateRepoCleanup? duplicateRepoCleanup,
     DefaultBranch? defaultBranch,
     GitRetry gitRetry = const GitRetry(),
+    ReadSettings? readSettings,
+    ReposBetween? reposBetween,
     // coverage:ignore-start
-  }) : _selectOrganization = selectOrganization ?? defaultSelectOrganization,
+  }) : _readSettings = readSettings ?? _builtInSettings,
+       _reposBetween = reposBetween ?? ReposBetween(ggLog: ggLog, graph: graph),
+       _selectOrganization = selectOrganization ?? defaultSelectOrganization,
        _repoFreshness = repoFreshness ?? RepoFreshness(ggLog: ggLog),
        _defaultBranch = defaultBranch ?? DefaultBranch(ggLog: ggLog),
        _duplicateRepoCleanup =
@@ -181,7 +215,9 @@ class AddCommand extends Command<dynamic> {
     );
     argParser.addFlag(
       'transitive',
-      help: 'Also add the repos between the ticket repos (default)',
+      help:
+          'Also add the repos between the ticket repos (default; '
+          '~/.gg_rc can turn it off)',
       defaultsTo: true,
       negatable: true,
     );
@@ -259,6 +295,27 @@ class AddCommand extends Command<dynamic> {
   /// Asks which organization a plain repo name refers to when several own it.
   final SelectOrganization _selectOrganization;
 
+  /// Reads the user's settings — `GgRc.load`, which gg_multi hands in so
+  /// `gg do add` reads `~/.gg_rc`. Without, the built-in defaults hold:
+  /// no other construction — a test above all — reads or writes the file.
+  final ReadSettings _readSettings;
+
+  static GgRc _builtInSettings({required GgLog ggLog}) => const GgRc.defaults();
+
+  /// Finds the repos a breaking release strands between the ticket repos.
+  final ReposBetween _reposBetween;
+
+  /// The keys of the `~/.gg_rc` setting that presets `--[no-]transitive`.
+  static const List<String> _transitiveSetting = <String>[
+    'do',
+    'add',
+    'transitive',
+  ];
+
+  /// The word that turns `gg do add transitive [for <repo>…]` into adding
+  /// the repos between instead of repos by name.
+  static const String _transitiveWord = 'transitive';
+
   @override
   String get name => 'add';
 
@@ -266,16 +323,13 @@ class AddCommand extends Command<dynamic> {
   String get description =>
       'Add a repo or a whole organization to the ticket.\n'
       'A target may be a regular expression matching ocean repo names, '
-      'e.g. "ds_.+".';
+      'e.g. "ds_.+".\n'
+      '"gg do add transitive for <repo>" adds the repos between <repo> and '
+      'the ticket repos depending on it — what a breaking release of <repo> '
+      'needs.';
 
   @override
   Future<void> run() async {
-    ggLog(cDetail('\n✓ Copying repos'));
-    _repoLists = OrganizationRepoLists(
-      gitHubPlatform: gitHubPlatform,
-      azureDevOpsPlatform: azureDevOpsPlatform,
-    );
-
     var targets = argResults!.rest;
     final bool force = argResults!['force'] as bool;
     final String? ticketPath = WorkspaceUtils.detectTicketPath(executionPath);
@@ -283,13 +337,45 @@ class AddCommand extends Command<dynamic> {
     final bool localize = argResults!['localize'] as bool? ?? true;
     final orgs = argResults!['org'] as List<String>;
     final bool all = argResults!['all'] as bool;
-    final bool transitiveRepos = argResults!['transitive'] as bool? ?? true;
     final bool fetch = argResults!['fetch'] as bool? ?? true;
     final bool heal = argResults!['heal'] as bool? ?? true;
 
     if (targets.isEmpty && !all && orgs.isEmpty) {
       throw UsageException('Missing target parameter.', usage);
     }
+
+    // Read first — and written on the first run — so ~/.gg_rc exists after
+    // the first `gg do add`, whatever it adds.
+    final settings = _readSettings(ggLog: ggLog);
+
+    // `gg do add transitive [for <repo>…]` names no repos to add, but the
+    // releases whose dependents are missing.
+    if (targets.isNotEmpty && targets.first == _transitiveWord) {
+      if (ticketPath == null) {
+        throw UsageException(
+          '"gg do add transitive" can only be used from inside a ticket '
+          'workspace.',
+          usage,
+        );
+      }
+      await addReposBetween(
+        ticketPath: ticketPath,
+        releases: _transitiveReleases(targets),
+        fetch: fetch,
+        verbose: verbose,
+        localize: localize,
+      );
+      return;
+    }
+
+    ggLog(cDetail('\n✓ Copying repos'));
+    _repoLists = _newRepoLists();
+
+    // A flag on the command line wins; otherwise ~/.gg_rc decides.
+    final bool transitiveFromCli = argResults!.wasParsed('transitive');
+    final bool transitiveRepos = transitiveFromCli
+        ? argResults!['transitive'] as bool
+        : settings.flag(_transitiveSetting);
 
     // Both options take their repositories from the ocean and
     // copy them into a ticket, so outside of one there is nothing to do.
@@ -408,44 +494,11 @@ class AddCommand extends Command<dynamic> {
     final betweenNodes = <Node>[];
 
     if (transitiveRepos) {
-      // Clone missing transitive deps so the graph can resolve between-nodes.
-      // What the registries could not attribute, the organizations' own
-      // repository lists still can — and a repo cloned that way is scanned
-      // by the registry pass again, until neither finds anything new.
-      final clonedOrgRepos = <String>{};
-      final attemptedOrgRepos = <String>{};
-      final updated = <String>{};
-      final missingOceanRepos = MissingOceanRepos(
-        repoLists: _repoLists,
-        pubDevPackageExists: _pubDevPackageExists,
+      await _cloneMissingDeps(
+        requestedRepoNames: requestedRepoNames,
+        ticketPath: ticketPath,
+        fetch: fetch,
       );
-      MissingOceanReposReport? lastReport;
-      while (true) {
-        await _cloneMissingTransitiveDeps(
-          ggLog: ggLog,
-          requestedRepoNames: requestedRepoNames,
-          extraSeeds: clonedOrgRepos,
-          ticketPath: ticketPath,
-          fetch: fetch,
-          updated: updated,
-        );
-
-        final (:cloned, :report) = await _cloneMissingOrgRepos(
-          ggLog: ggLog,
-          requestedRepoNames: requestedRepoNames,
-          ticketPath: ticketPath,
-          attempted: attemptedOrgRepos,
-          missingOceanRepos: missingOceanRepos,
-        );
-        lastReport = report;
-        if (cloned.isEmpty) {
-          break;
-        }
-        clonedOrgRepos.addAll(cloned);
-      }
-
-      // What the search could not decide, once, after the last round.
-      _reportIncompleteSearch(lastReport, ggLog);
 
       // Ticket-shadowed: an edge only the ticket has pulls its repos in too.
       Map<String, Node> allNodes = const {};
@@ -493,25 +546,230 @@ class AddCommand extends Command<dynamic> {
         betweenNodes.addAll(_graph.getNodesBetween(allNodes, endpoints));
       }
     } else {
-      ggLog(cDetail('Skip adding transitive repos (--no-transitive).'));
+      final why = transitiveFromCli
+          ? '--no-transitive'
+          : '${settings.file?.path ?? GgRc.fileName}: '
+                '${GgRc.keyPath(_transitiveSetting)} = false';
+      ggLog(
+        cDetail(
+          'Skip adding transitive repos ($why). A breaking release adds '
+          'them later: gg do add transitive for <repo>.',
+        ),
+      );
     }
 
-    final ticketDir = Directory(ticketPath);
+    await _copyAndLocalize(
+      ticketPath: ticketPath,
+      repoNames: <String>{
+        ...requestedRepoNames,
+        // Use the directory name, not the (primary) package name: for a
+        // cross-language bridge repo the Dart package name differs from the
+        // folder name, and the copy step locates repos by folder name.
+        ...betweenNodes.map((n) => path.basename(n.directory.path)),
+      },
+      repoUrls: requestedRepoUrls,
+      verbose: verbose,
+      localize: localize,
+    );
 
-    final finalToCopy = <String>{
-      ...requestedRepoNames,
-      // Use the directory name, not the (primary) package name: for a
-      // cross-language bridge repo the Dart package name differs from the
-      // folder name, and the copy step locates repos by folder name.
-      ...betweenNodes.map((n) => path.basename(n.directory.path)),
+    ggLog(cDetail('✔ Successfully added repos'));
+  }
+
+  // ...........................................................................
+  /// Adds to the ticket at [ticketPath] the ocean repos between its repos and
+  /// [releases] (every ticket repo when null) and returns their folder names.
+  ///
+  /// The ocean first gets the dependencies of the ticket repos it lacks — a
+  /// repo it lacks cannot be found between them; the repos it clones are
+  /// brought to their remote state unless [fetch] is false. Like a regular
+  /// add, the closure of the ticket repos (helix, the `dna_*` packages, …) is
+  /// never fetched as a whole. A release is a ticket repo's folder name,
+  /// package name or a pattern of folder names; one naming no ticket repo
+  /// throws — its dependents cannot be meant —, and so does an ocean graph
+  /// that does not build: nothing could be said about the repos between.
+  Future<List<String>> addReposBetween({
+    required String ticketPath,
+    Set<String>? releases,
+    bool fetch = true,
+    bool verbose = false,
+    bool localize = true,
+  }) async {
+    if (releases != null) {
+      releases = _ticketReposNamed(ticketPath, releases);
+    }
+
+    final what = releases == null
+        ? 'the ticket repos'
+        : (releases.toList()..sort()).join(', ');
+    ggLog(cDetail('\n✓ Adding the repos between the ticket and $what'));
+    _repoLists = _newRepoLists();
+    // No requested repos: the scan reads the ticket repos' manifests for the
+    // dependencies the ocean lacks anyway, and seeding them would walk —
+    // and fetch — their whole closure.
+    await _cloneMissingDeps(
+      requestedRepoNames: const <String>{},
+      ticketPath: ticketPath,
+      fetch: fetch,
+    );
+
+    final between = await _reposBetween.find(
+      ticketPath: ticketPath,
+      oceanPath: oceanWorkspacePath,
+      from: releases,
+    );
+    if (between.error != null) {
+      brokenGraphReport(between.error!).forEach(ggLog);
+      throw Exception(
+        cError('Could not find the repos between: ${between.error}'),
+      );
+    }
+    if (between.names.isEmpty) {
+      ggLog(cDetail('✔ No repos missing between them'));
+      return const <String>[];
+    }
+
+    await _copyAndLocalize(
+      ticketPath: ticketPath,
+      repoNames: between.names.toSet(),
+      repoUrls: const <String, String>{},
+      verbose: verbose,
+      localize: localize,
+    );
+    ggLog(cDetail('✔ Successfully added ${between.names.join(', ')}'));
+    return between.names;
+  }
+
+  // ...........................................................................
+  /// The repository lists of the organizations, fresh for one run: every
+  /// plain name it resolves is checked against them.
+  OrganizationRepoLists _newRepoLists() => OrganizationRepoLists(
+    gitHubPlatform: gitHubPlatform,
+    azureDevOpsPlatform: azureDevOpsPlatform,
+  );
+
+  // ...........................................................................
+  /// The folder names of the ticket repos [names] select: a folder name, a
+  /// package name the repo declares, or a pattern of folder names
+  /// ([matchOceanRepoNames]). Throws for a name that selects none.
+  Set<String> _ticketReposNamed(String ticketPath, Set<String> names) {
+    final packageNames = <String, Set<String>>{
+      for (final dir in RepoFolderResolver.repoDirs(ticketPath))
+        path.basename(dir.path): RepoFolderResolver.packageNames(dir),
     };
+    final result = <String>{};
+    final unknown = <String>[];
+    for (final name in names) {
+      final selected = <String>{
+        for (final MapEntry(key: folder, value: aliases)
+            in packageNames.entries)
+          if (aliases.contains(name)) folder,
+        ...matchOceanRepoNames(name, packageNames.keys),
+      };
+      if (selected.isEmpty) {
+        unknown.add(name);
+      }
+      result.addAll(selected);
+    }
+    if (unknown.isNotEmpty) {
+      final list = (unknown..sort()).join(' ');
+      final one = unknown.length == 1;
+      throw Exception(
+        cError(
+          '$list ${one ? 'is' : 'are'} not in the ticket. '
+          'Add ${one ? 'it' : 'them'} first with gg do add $list.',
+        ),
+      );
+    }
+    return result;
+  }
 
+  // ...........................................................................
+  /// The releases `gg do add transitive [for <repo>…]` names in [targets],
+  /// whose first word is `transitive` — null for every ticket repo.
+  ///
+  /// `for` without a repo is a mistake, not »every ticket repo«: whoever
+  /// typed it meant to name one.
+  Set<String>? _transitiveReleases(List<String> targets) {
+    if (targets.length == 1) {
+      return null;
+    }
+    if (targets[1] != 'for' || targets.length == 2) {
+      throw UsageException(
+        'Use "gg do add transitive" or '
+        '"gg do add transitive for <repo> [<repo>…]".',
+        usage,
+      );
+    }
+    return targets.skip(2).toSet();
+  }
+
+  // ...........................................................................
+  /// Clones the missing dependencies of [requestedRepoNames] and of the
+  /// ticket repos into the ocean, until neither the registries nor the
+  /// organizations' repository lists find anything new.
+  ///
+  /// What the registries could not attribute, the organizations' own
+  /// repository lists still can — and a repo cloned that way is scanned by
+  /// the registry pass again.
+  Future<void> _cloneMissingDeps({
+    required Set<String> requestedRepoNames,
+    required String ticketPath,
+    required bool fetch,
+  }) async {
+    final clonedOrgRepos = <String>{};
+    final attemptedOrgRepos = <String>{};
+    final updated = <String>{};
+    final missingOceanRepos = MissingOceanRepos(
+      repoLists: _repoLists,
+      pubDevPackageExists: _pubDevPackageExists,
+    );
+    MissingOceanReposReport? lastReport;
+    while (true) {
+      await _cloneMissingTransitiveDeps(
+        ggLog: ggLog,
+        requestedRepoNames: requestedRepoNames,
+        extraSeeds: clonedOrgRepos,
+        ticketPath: ticketPath,
+        fetch: fetch,
+        updated: updated,
+      );
+
+      final (:cloned, :report) = await _cloneMissingOrgRepos(
+        ggLog: ggLog,
+        requestedRepoNames: requestedRepoNames,
+        ticketPath: ticketPath,
+        attempted: attemptedOrgRepos,
+        missingOceanRepos: missingOceanRepos,
+      );
+      lastReport = report;
+      if (cloned.isEmpty) {
+        break;
+      }
+      clonedOrgRepos.addAll(cloned);
+    }
+
+    // What the search could not decide, once, after the last round.
+    _reportIncompleteSearch(lastReport, ggLog);
+  }
+
+  // ...........................................................................
+  /// Copies [repoNames] from the ocean into the ticket at [ticketPath],
+  /// rewrites the ticket's config files and localizes the whole ticket —
+  /// or, without [localize], only rewrites its `ticket.json`.
+  Future<void> _copyAndLocalize({
+    required String ticketPath,
+    required Set<String> repoNames,
+    required Map<String, String> repoUrls,
+    required bool verbose,
+    required bool localize,
+  }) async {
+    final ticketDir = Directory(ticketPath);
     final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
     final copiedDirs = await _copyReposToTicket(
       ticketPath: ticketPath,
-      repoNames: finalToCopy,
-      repoUrls: requestedRepoUrls,
+      repoNames: repoNames,
+      repoUrls: repoUrls,
       ggLog: taskLog,
       reportLog: ggLog,
     );
@@ -550,8 +808,6 @@ class AddCommand extends Command<dynamic> {
       await _writeTicketJson(ticketDir: ticketDir, ggLog: taskLog);
       ggLog(cDetail('Skip localizing references (--no-localize).'));
     }
-
-    ggLog(cDetail('✔ Successfully added repos'));
   }
 
   /// Folder names of all repositories of the ocean.
