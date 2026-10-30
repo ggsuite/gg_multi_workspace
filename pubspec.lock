@@ -303,7 +303,7 @@ packages:
       path: "../gg_create_repo"
       relative: true
     source: path
-    version: "0.0.3"
+    version: "0.0.4"
   gg_direct_json:
     dependency: transitive
     description:
