@@ -1791,6 +1791,67 @@ version: 1.0.0
       );
     });
 
+    test('says once what to do when ssh fails for the git calls', () async {
+      const repoName = 'sshFailRepo';
+      // In the folder of its organization, where the remote url puts it.
+      final oceanRepoDir = Directory(
+        path.join(oceanWorkspacePath, 'org', repoName),
+      )..createSync(recursive: true);
+      File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
+      Directory(path.join(oceanRepoDir.path, '.git')).createSync();
+      File(path.join(oceanRepoDir.path, '.git', 'config')).writeAsStringSync(
+        '[remote "origin"]\n\turl = git@github.com:org/$repoName.git\n',
+      );
+
+      final ticketDir = Directory(
+        path.join(tempDir.path, ggMultiLegacyTicketFolder, 'TICKET_SSH_FAIL'),
+      )..createSync(recursive: true);
+
+      final mockProc = MockProcessRunner();
+      when(
+        () => mockProc(
+          any(),
+          any(),
+          workingDirectory: any(named: 'workingDirectory'),
+          runInShell: any(named: 'runInShell'),
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
+      // Every network call of the ocean repo fails: ssh does not know the
+      // host. The local ones work.
+      for (final arguments in [
+        ['fetch'],
+        ['remote', 'set-head', 'origin', '--auto'],
+        ['fetch', '--tags'],
+      ]) {
+        when(
+          () => mockProc(
+            'git',
+            arguments,
+            workingDirectory: oceanRepoDir.path,
+            runInShell: true,
+          ),
+        ).thenAnswer(
+          (_) async =>
+              ProcessResult(0, 128, '', 'Host key verification failed.'),
+        );
+      }
+
+      createRunner(executionPath: ticketDir.path, processRunner: mockProc.call);
+
+      await runner.run(['add', '--verbose', repoName]);
+
+      expect(
+        logMessages.where((m) => m.startsWith('Failed to execute git fetch')),
+        hasLength(2),
+      );
+      expect(
+        logMessages.where(
+          (m) => m.startsWith('SSH does not know github.com yet.'),
+        ),
+        hasLength(1),
+      );
+    });
+
     test('logs error when git reset fails but still copies repo', () async {
       const repoName = 'pullFailRepo';
       final oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
