@@ -111,10 +111,14 @@ void main() {
     });
 
     test('localizes and only warns about missing repos', () async {
-      // a reaches its ticket sibling d only through the ocean's c.
+      // a reaches its ticket sibling d only through the ocean's c, and the
+      // recorded major release of d breaks c.
       final a = await repo('a', 'dependencies:\n  b: ^1.0.0\n  c: ^1.0.0\n');
       await repo('b', '');
-      await repo('d', '');
+      final d = await repo('d', '');
+      File(path.join(d.path, '.gg', 'publish_config.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{"publishConfig": {"versionIncrement": "major"}}');
       final c = Directory(path.join(tmp.path, '.ocean', 'org', 'c'))
         ..createSync(recursive: true);
       File(path.join(c.path, 'pubspec.yaml')).writeAsStringSync(
@@ -125,7 +129,8 @@ void main() {
 
       expect(messages, [
         '✓ Localized the references of a',
-        for (final line in missingBetweenReport(['c'])) rmControls(line),
+        for (final line in missingBetweenReport(['c'], breaking: ['d']))
+          rmControls(line),
       ]);
       expect(
         File(path.join(a.path, 'pubspec_overrides.yaml')).readAsStringSync(),
