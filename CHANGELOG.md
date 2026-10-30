@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Explain ssh problems of ls-remote and fetch
+
 ## 4.20.0 - 2026-10-30
 
 ### Changed

@@ -291,19 +291,47 @@ class GitHandler {
   ///
   /// `ls-remote` is asked without `--exit-code`, so a repository that exists
   /// but is still empty counts as present too.
+  ///
+  /// An unknown ssh host is offered for trust like in [cloneRepo]. When ssh
+  /// is not set up for the host, the answer is false like for a missing
+  /// repository — but the next step is logged, once per host, so the
+  /// developer learns why.
   Future<bool> remoteExists(String repoUrl) async {
     try {
-      final result = await _gitRetry.run(
+      Future<ProcessResult> lsRemote() => _gitRetry.run(
         () => processRunner('git', <String>['ls-remote', repoUrl]),
         ggLog: _ggLog,
         description: 'git ls-remote $repoUrl',
       );
+
+      var result = await lsRemote();
+      if (result.exitCode != 0 &&
+          await _trustUnknownHost(repoUrl, '${result.stderr}')) {
+        result = await lsRemote();
+      }
+      if (result.exitCode != 0) {
+        _logSshHint(repoUrl, '${result.stderr}');
+      }
       return result.exitCode == 0;
     } catch (_) {
       // A missing git binary must not look like a missing repository.
       return false;
     }
   }
+
+  /// Logs what to do when [stderr] of a git command on [repoUrl] shows that
+  /// ssh is not set up for its host — once per host and run, however many
+  /// repositories of it fail.
+  void _logSshHint(String repoUrl, String stderr) {
+    final hint = SshHostKeys.setupHint(repoUrl, stderr);
+    final host = SshHostKeys.hostOf(repoUrl);
+    if (hint != null && _hintedHosts.add(host ?? repoUrl)) {
+      _ggLog(yellow(hint));
+    }
+  }
+
+  /// The hosts whose ssh hint was logged in this run.
+  final _hintedHosts = <String>{};
 
   /// Checks out a new branch [branchName] in the repository at [repoPath].
   /// Throws an exception if the checkout fails.

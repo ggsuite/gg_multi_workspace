@@ -733,6 +733,45 @@ void main() {
       expect(prompts.asked, isEmpty);
     });
 
+    group('remoteExists', () {
+      test('asks to trust an unknown host and asks git again', () async {
+        // exitCodes: the first ls-remote fails for the host, the next works.
+        expect(await handler().remoteExists(repoUrl), isTrue);
+
+        expect(prompts.asked, hasLength(1));
+        verify(() => sshHostKeys.trust([SshHostKey.example])).called(1);
+        verify(() => mockProcessRunner('git', ['ls-remote', repoUrl]))
+            .called(2);
+      });
+
+      test('logs the next step once per host when ssh fails', () async {
+        exitCodes = [128, 128];
+        final gitHandler = handler(hasTerminal: false);
+
+        expect(await gitHandler.remoteExists(repoUrl), isFalse);
+        expect(
+          await gitHandler.remoteExists('git@github.com:other/repo.git'),
+          isFalse,
+        );
+
+        final hints = messages
+            .map(rmControls)
+            .where((m) => m.startsWith('SSH does not know github.com yet.'));
+        expect(hints, hasLength(1));
+      });
+
+      test('logs nothing for a repository that does not exist', () async {
+        when(() => mockProcessRunner('git', ['ls-remote', repoUrl])).thenAnswer(
+          (_) async => ProcessResult(0, 128, '', 'Repository not found.'),
+        );
+
+        expect(await handler().remoteExists(repoUrl), isFalse);
+
+        expect(messages, isEmpty);
+        expect(prompts.asked, isEmpty);
+      });
+    });
+
     test('does not ask for a url without ssh', () async {
       const httpsUrl = 'https://github.com/ggsuite/gg.git';
 

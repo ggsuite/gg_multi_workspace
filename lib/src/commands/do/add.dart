@@ -1388,11 +1388,29 @@ class AddCommand extends Command<dynamic> {
 
     if (result.exitCode != 0) {
       ggLog(cError('Failed to execute $failureLabel: ${result.stderr}'));
+      if (network) {
+        _logSshHint(repoDir, '${result.stderr}', ggLog);
+      }
     } else {
       ggLog(darkGray(successMessage));
     }
     return result;
   }
+
+  /// Logs what to do when [stderr] of a network git command in [repoDir]
+  /// shows that ssh is not set up for the host of its `origin` — once per
+  /// host and run: the fetch, set-head and tag calls of every repository of
+  /// that host fail alike.
+  void _logSshHint(Directory repoDir, String stderr, GgLog ggLog) {
+    final url = RepoFolderResolver.remoteUrl(repoDir) ?? '';
+    final hint = SshHostKeys.setupHint(url, stderr);
+    if (hint != null && _sshHintedHosts.add(SshHostKeys.hostOf(url) ?? url)) {
+      ggLog(cAction(hint));
+    }
+  }
+
+  /// The hosts whose ssh hint was logged in this run.
+  final _sshHintedHosts = <String>{};
 
   /// Runs `git fetch` in [repoDir] and refreshes `origin/HEAD` afterwards.
   ///
