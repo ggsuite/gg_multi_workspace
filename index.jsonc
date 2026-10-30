@@ -25,7 +25,7 @@
     "uses": {
       "gg_multi_core": "workspace model: layout, org folders, ticket.json",
       "gg_one": "single-repo commands run per ticket repo",
-      "gg_git": "git calls: clone, fetch, branches",
+      "gg_git": "git calls: clone, fetch, branches; SshHostKeys for unknown ssh hosts",
       "gg_localize_refs": "localizes the references between ticket repos",
       "gg_local_package_dependencies": "dependency graph of the repos",
       "gg_create_repo": "RunDna, creates new repositories",

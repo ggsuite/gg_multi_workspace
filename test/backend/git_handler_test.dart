@@ -4,9 +4,11 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'dart:async';
 import 'dart:io';
 
-import 'package:gg_git/gg_git.dart' show GitRetry;
+import 'package:gg_git/gg_git.dart';
+import 'package:gg_one/gg_one.dart' show GgPrompts;
 
 import 'package:gg_multi_workspace/src/backend/git_handler.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
@@ -386,4 +388,452 @@ void main() {
       );
     });
   });
+
+  group('GitHandler cleanup after a failed clone', () {
+    late Directory tempDir;
+    late MockProcessRunner mockProcessRunner;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('git_handler_cleanup');
+      mockProcessRunner = MockProcessRunner();
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    test('leaves the folder of a clone running next to it alone', () async {
+      // Arrange: the org folder is new. While this clone fails, a second
+      // clone fills its own folder in the same org folder.
+      const repoUrl = 'https://github.com/org/failing.git';
+      final orgDir = Directory(path.join(tempDir.path, 'org'));
+      final targetDirectory = path.join(orgDir.path, 'failing');
+      final pack = Directory(
+        path.join(orgDir.path, 'other', '.git', 'objects', 'pack'),
+      );
+      when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+        pack.createSync(recursive: true);
+        return ProcessResult(0, 128, '', 'repository not found');
+      });
+
+      // Act
+      await expectLater(
+        GitHandler(processRunner: mockProcessRunner.call)
+            .cloneRepo(repoUrl, targetDirectory),
+        throwsA(isA<Exception>()),
+      );
+
+      // Assert: the empty folders of the other clone survive
+      expect(pack.existsSync(), isTrue);
+      expect(Directory(targetDirectory).existsSync(), isFalse);
+    });
+
+    test('removes the empty folders git left in the target', () async {
+      const repoUrl = 'https://github.com/org/failing.git';
+      final targetDirectory = path.join(tempDir.path, 'org', 'failing');
+      when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+        Directory(path.join(targetDirectory, '.git', 'objects', 'pack'))
+            .createSync(recursive: true);
+        return ProcessResult(0, 128, '', 'repository not found');
+      });
+
+      await expectLater(
+        GitHandler(processRunner: mockProcessRunner.call)
+            .cloneRepo(repoUrl, targetDirectory),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(Directory(path.join(tempDir.path, 'org')).existsSync(), isFalse);
+    });
+
+    for (final vanishing in ['target', 'org folder']) {
+      test(
+        'reports the clone error when the $vanishing cannot be listed',
+        () async {
+          // Arrange: git left a folder behind that vanishes while it is
+          // listed, as it happens on Windows right after git deleted it.
+          const repoUrl = 'https://github.com/org/failing.git';
+          final orgDirectory = path.join(tempDir.path, 'org');
+          final targetDirectory = path.join(orgDirectory, 'failing');
+          final vanishingPath = vanishing == 'target'
+              ? targetDirectory
+              : orgDirectory;
+          when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+            Directory(path.join(targetDirectory, '.git', 'objects', 'pack'))
+                .createSync(recursive: true);
+            return ProcessResult(0, 128, '', 'repository not found');
+          });
+
+          Directory real(String p) => Zone.root.run(() => Directory(p));
+
+          // Act
+          final error = await IOOverrides.runZoned(
+            () async {
+              try {
+                await GitHandler(processRunner: mockProcessRunner.call)
+                    .cloneRepo(repoUrl, targetDirectory);
+                return null;
+              } catch (e) {
+                return e;
+              }
+            },
+            createDirectory: (p) =>
+                p == vanishingPath ? _VanishingDirectory(real(p)) : real(p),
+          );
+
+          // Assert
+          expect(
+            rmControls(error.toString()),
+            'Exception: Failed to clone repo from $repoUrl: '
+            'repository not found',
+          );
+        },
+      );
+    }
+  });
+
+  group('GitHandler with an unknown ssh host', () {
+    const repoUrl = 'git@github.com:ggsuite/gg.git';
+    const unknownHost =
+        'No ED25519 host key is known for github.com and you have '
+        'requested strict checking.\r\nHost key verification failed.\r\n'
+        'fatal: Could not read from remote repository.';
+
+    late Directory tempDir;
+    late String targetDirectory;
+    late MockProcessRunner mockProcessRunner;
+    late MockSshHostKeys sshHostKeys;
+    late _Prompts prompts;
+    late List<String> messages;
+    late List<int> exitCodes;
+
+    String log() => rmControls(messages.join('\n'));
+
+    GitHandler handler({bool hasTerminal = true}) => GitHandler(
+      processRunner: mockProcessRunner.call,
+      ggLog: messages.add,
+      sshHostKeys: sshHostKeys,
+      prompts: prompts,
+      hasTerminal: () => hasTerminal,
+    );
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('git_handler_ssh');
+      targetDirectory = path.join(tempDir.path, 'ggsuite', 'gg');
+      mockProcessRunner = MockProcessRunner();
+      sshHostKeys = MockSshHostKeys();
+      prompts = _Prompts(yes: true);
+      messages = [];
+      // The first clone fails for the unknown host, the next one works.
+      exitCodes = [128, 0];
+      when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+        final exitCode = exitCodes.isEmpty ? 128 : exitCodes.removeAt(0);
+        return ProcessResult(0, exitCode, '', exitCode == 0 ? '' : unknownHost);
+      });
+      when(() => sshHostKeys.scan(repoUrl))
+          .thenAnswer((_) async => [SshHostKey.example]);
+      when(() => sshHostKeys.knownHostsPath).thenReturn('known_hosts');
+    });
+
+    tearDown(() {
+      tempDir.deleteSync(recursive: true);
+    });
+
+    test('adds the trusted key and clones again', () async {
+      await handler().cloneRepo(repoUrl, targetDirectory);
+
+      verify(() => sshHostKeys.trust([SshHostKey.example])).called(1);
+      verify(() => mockProcessRunner('git', any())).called(2);
+      expect(prompts.asked, ['Trust github.com and add it to known_hosts?']);
+      expect(prompts.defaults, [true]);
+      expect(log(), contains('SSH does not know github.com yet.'));
+      expect(
+        log(),
+        contains(
+          'ED25519 key fingerprint: '
+          'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU',
+        ),
+      );
+      expect(log(), contains('✓ Matches the fingerprint published for'));
+      expect(log(), contains('✓ Added github.com to known_hosts.'));
+    });
+
+    test('throws with the next step when the user declines', () async {
+      prompts = _Prompts(yes: false);
+      final gitHandler = handler();
+
+      await expectLater(
+        gitHandler.cloneRepo(repoUrl, targetDirectory),
+        throwsA(
+          isA<SshSetupException>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            allOf(
+              startsWith('Exception: Failed to clone repo from $repoUrl:'),
+              contains('Host key verification failed.'),
+              contains('Run "git ls-remote $repoUrl" once'),
+            ),
+          ),
+        ),
+      );
+      verifyNever(() => sshHostKeys.trust(any()));
+
+      // A declined host is not asked about again.
+      exitCodes = [128];
+      await expectLater(
+        gitHandler.cloneRepo(repoUrl, '${targetDirectory}2'),
+        throwsA(isA<SshSetupException>()),
+      );
+      expect(prompts.asked, hasLength(1));
+    });
+
+    test('asks once for clones of the same host running in parallel', () async {
+      exitCodes = [128, 128, 0, 0];
+      final gitHandler = handler();
+
+      await Future.wait([
+        gitHandler.cloneRepo(repoUrl, targetDirectory),
+        gitHandler.cloneRepo(repoUrl, '${targetDirectory}2'),
+      ]);
+
+      expect(prompts.asked, hasLength(1));
+      verify(() => sshHostKeys.trust(any())).called(1);
+      verify(() => mockProcessRunner('git', any())).called(4);
+    });
+
+    test('refuses a key that differs from the published one', () async {
+      when(() => sshHostKeys.scan(repoUrl)).thenAnswer(
+        (_) async => [
+          SshHostKey.fromLine('github.com ssh-ed25519 ${'A' * 68}'),
+        ],
+      );
+
+      await expectLater(
+        handler().cloneRepo(repoUrl, targetDirectory),
+        throwsA(isA<SshSetupException>()),
+      );
+
+      expect(prompts.asked, isEmpty);
+      verifyNever(() => sshHostKeys.trust(any()));
+      expect(
+        log(),
+        contains('✗ Differs from the fingerprints published for github.com.'),
+      );
+      expect(log(), contains('✗ The key of github.com is not trusted.'));
+    });
+
+    test('says when no fingerprint is published for the host', () async {
+      const otherUrl = 'git@example.com:repo.git';
+      when(() => sshHostKeys.scan(otherUrl)).thenAnswer(
+        (_) async => [SshHostKey.fromLine('example.com ssh-ed25519 AAAA')],
+      );
+
+      await handler().cloneRepo(otherUrl, targetDirectory);
+
+      expect(prompts.defaults, [false]);
+      expect(
+        log(),
+        contains('! No published fingerprint is known for example.com.'),
+      );
+    });
+
+    test('reports a known_hosts file it cannot write and asks again', () async {
+      when(() => sshHostKeys.trust(any()))
+          .thenThrow(const FileSystemException('Access denied', 'known_hosts'));
+      exitCodes = [128, 128];
+      final gitHandler = handler();
+
+      await expectLater(
+        gitHandler.cloneRepo(repoUrl, targetDirectory),
+        throwsA(
+          isA<SshSetupException>()
+              .having((e) => e.host, 'host', 'github.com')
+              .having(
+                (e) => e.message,
+                'message',
+                contains('SSH does not know github.com yet.'),
+              ),
+        ),
+      );
+      expect(log(), contains('✗ Could not add the key of github.com:'));
+      expect(Directory(targetDirectory).parent.existsSync(), isFalse);
+
+      // The host is offered again by the next clone.
+      await expectLater(
+        gitHandler.cloneRepo(repoUrl, targetDirectory),
+        throwsA(isA<SshSetupException>()),
+      );
+      expect(prompts.asked, hasLength(2));
+    });
+
+    test('says when ssh reads another known_hosts file', () async {
+      exitCodes = [128, 128];
+
+      await expectLater(
+        handler().cloneRepo(repoUrl, targetDirectory),
+        throwsA(
+          isA<SshSetupException>().having(
+            (e) => rmControls(e.message),
+            'message',
+            contains(
+              'The key of github.com was added to known_hosts, but ssh '
+              'still does not know the host',
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('shows the dialogs of different hosts one after another', () async {
+      const otherUrl = 'git@example.com:org/repo.git';
+      when(() => sshHostKeys.scan(otherUrl)).thenAnswer(
+        (_) async => [SshHostKey.fromLine('example.com ssh-ed25519 AAAA')],
+      );
+      exitCodes = [128, 128, 0, 0];
+      prompts = _Prompts(
+        yes: true,
+        answerDelay: const Duration(milliseconds: 20),
+      );
+      final gitHandler = handler();
+
+      await Future.wait([
+        gitHandler.cloneRepo(repoUrl, targetDirectory),
+        gitHandler.cloneRepo(otherUrl, '${targetDirectory}2'),
+      ]);
+
+      expect(prompts.asked, hasLength(2));
+      expect(prompts.mostOpenAtOnce, 1);
+    });
+
+    test('offers a host again that could not be scanned', () async {
+      when(() => sshHostKeys.scan(repoUrl)).thenAnswer((_) async => []);
+      exitCodes = [128, 128];
+      final gitHandler = handler();
+
+      for (final target in [targetDirectory, '${targetDirectory}2']) {
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, target),
+          throwsA(isA<SshSetupException>()),
+        );
+      }
+
+      verify(() => sshHostKeys.scan(repoUrl)).called(2);
+      expect(prompts.asked, isEmpty);
+    });
+
+    test('does not ask without a terminal', () async {
+      await expectLater(
+        handler(hasTerminal: false).cloneRepo(repoUrl, targetDirectory),
+        throwsA(isA<SshSetupException>()),
+      );
+
+      verifyNever(() => sshHostKeys.scan(any()));
+      expect(prompts.asked, isEmpty);
+    });
+
+    test('does not ask for a url without ssh', () async {
+      const httpsUrl = 'https://github.com/ggsuite/gg.git';
+
+      await expectLater(
+        handler().cloneRepo(httpsUrl, targetDirectory),
+        throwsA(
+          isA<SshSetupException>().having(
+            (e) => e.message,
+            'message',
+            contains('SSH does not know the host yet.'),
+          ),
+        ),
+      );
+
+      expect(prompts.asked, isEmpty);
+    });
+
+    test('reads keys and asks with the defaults of gg', () {
+      // Constructed without ssh helpers: reads keys with git, asks with
+      // GgPrompts.current and checks stdin and stdout for a terminal.
+      expect(GitHandler(), isA<GitHandler>());
+    });
+  });
+}
+
+/// Answers every yes/no question with [yes] after [answerDelay] and records
+/// it, and how many questions were open at the same time.
+class _Prompts extends GgPrompts {
+  _Prompts({required this.yes, this.answerDelay = Duration.zero});
+
+  final bool yes;
+  final Duration answerDelay;
+  final asked = <String>[];
+  final defaults = <bool>[];
+  var mostOpenAtOnce = 0;
+  var _open = 0;
+
+  @override
+  Future<bool> confirm({required String prompt, bool defaultValue = true}) {
+    defaults.add(defaultValue);
+    return super.confirm(prompt: prompt, defaultValue: defaultValue);
+  }
+
+  @override
+  Future<int> select({
+    required String prompt,
+    required List<String> options,
+    int initialIndex = 0,
+  }) async {
+    asked.add(prompt);
+    _open++;
+    if (_open > mostOpenAtOnce) {
+      mostOpenAtOnce = _open;
+    }
+    await Future<void>.delayed(answerDelay);
+    _open--;
+    return yes ? 0 : 1;
+  }
+
+  @override
+  Future<String> input({
+    required String prompt,
+    String? defaultValue,
+    String? initialText,
+    bool asMessageEditor = false,
+  }) async => fail('asks no text');
+}
+
+/// A folder that exists but is gone as soon as it is listed.
+class _VanishingDirectory implements Directory {
+  _VanishingDirectory(this._real);
+
+  final Directory _real;
+
+  @override
+  String get path => _real.path;
+
+  @override
+  Directory get parent => _real.parent;
+
+  @override
+  bool existsSync() => _real.existsSync();
+
+  @override
+  void createSync({bool recursive = false}) =>
+      _real.createSync(recursive: recursive);
+
+  @override
+  void deleteSync({bool recursive = false}) =>
+      _real.deleteSync(recursive: recursive);
+
+  @override
+  List<FileSystemEntity> listSync({
+    bool recursive = false,
+    bool followLinks = true,
+  }) => throw PathNotFoundException(
+    path,
+    const OSError('The system cannot find the path specified.', 3),
+    'Directory listing failed',
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

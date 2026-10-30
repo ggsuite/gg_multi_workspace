@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Ask to trust an unknown ssh host when a clone fails
+
 ## 4.19.0 - 2026-10-29
 
 ### Changed

@@ -885,13 +885,16 @@ class AddCommand extends Command<dynamic> {
             selectOrganization: _selectOrganization,
           );
         } catch (e) {
-          cloneFailedReport(
+          final report = cloneFailedReport(
             repoName: repo.repoName,
             url: repo.owners.first.repo.cloneUrl,
             dependency: repo.dependency,
             manifestPath: repo.manifestPath,
             error: plainError(e),
-          ).forEach(ggLog);
+          );
+          // An ssh problem carries its own next step; the generic guess
+          // about access and network would only contradict it.
+          (e is SshSetupException ? report.take(1) : report).forEach(ggLog);
         }
         if (RepoFolderResolver.resolve(
               workspacePath: oceanWorkspacePath,
