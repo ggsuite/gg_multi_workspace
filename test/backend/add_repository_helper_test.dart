@@ -1071,6 +1071,111 @@ void main() {
       },
     );
 
+    test('reports an ssh problem instead of a missing repository', () async {
+      // Arrange: the primary clone fails for ssh, the fallback is missing
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      const fallbackOrgUrl = 'https://github.com/fallbackOrg';
+      orgFile.writeAsStringSync(jsonEncode({'fallbackOrg': fallbackOrgUrl}));
+
+      const repoName = 'sshRepo';
+      const primaryUrl = 'https://github.com/$repoName/$repoName.git';
+
+      final mockGitCloner = MockGitCloner();
+      when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
+          .thenThrow(SshSetupException('SSH does not know github.com yet.'));
+      when(
+        () => mockGitCloner.cloneRepo('$fallbackOrgUrl/$repoName.git', any()),
+      ).thenThrow(Exception('repository not found'));
+
+      await expectLater(
+        addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+        ),
+        throwsA(
+          isA<SshSetupException>().having(
+            (e) => e.message,
+            'message',
+            'SSH does not know github.com yet.',
+          ),
+        ),
+      );
+    });
+
+    test('skips fallback organizations on the host ssh failed for', () async {
+      // Arrange: the first organization on github.com fails for ssh, so the
+      // second one on the same host is not even tried.
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      orgFile.writeAsStringSync(
+        jsonEncode({
+          'first': 'git@github.com:first',
+          'second': 'git@github.com:second',
+        }),
+      );
+
+      const repoName = 'sshRepo';
+
+      final mockGitCloner = MockGitCloner();
+      // No organization answers for the name: every one is tried in turn.
+      when(() => mockGitCloner.remoteExists(any()))
+          .thenAnswer((_) async => false);
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenThrow(Exception('repository not found'));
+      when(
+        () => mockGitCloner.cloneRepo(
+          'git@github.com:first/$repoName.git',
+          any(),
+        ),
+      ).thenThrow(
+        SshSetupException(
+          'github.com refused your SSH key.',
+          host: 'github.com',
+        ),
+      );
+
+      await expectLater(
+        addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+        ),
+        throwsA(isA<SshSetupException>()),
+      );
+
+      verifyNever(
+        () => mockGitCloner.cloneRepo(any(that: contains('second')), any()),
+      );
+    });
+
+    test('reports an ssh problem of a fallback organization', () async {
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      const fallbackOrgUrl = 'https://github.com/fallbackOrg';
+      orgFile.writeAsStringSync(jsonEncode({'fallbackOrg': fallbackOrgUrl}));
+
+      const repoName = 'sshRepo';
+      const primaryUrl = 'https://github.com/$repoName/$repoName.git';
+
+      final mockGitCloner = MockGitCloner();
+      when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
+          .thenThrow(Exception('repository not found'));
+      when(
+        () => mockGitCloner.cloneRepo('$fallbackOrgUrl/$repoName.git', any()),
+      ).thenThrow(SshSetupException('github.com refused your SSH key.'));
+
+      await expectLater(
+        addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+        ),
+        throwsA(isA<SshSetupException>()),
+      );
+    });
+
     test('logs the failure hint when the clone fails', () async {
       // Arrange: one fallback org, every clone fails
       final orgFile = File(path.join(workspacePath, '.organizations'));

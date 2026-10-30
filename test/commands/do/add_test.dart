@@ -1457,6 +1457,30 @@ dev_dependencies:
         );
       });
 
+      test('and reports only the next step of an ssh problem', () async {
+        oceanDartRepo('requested', ['org_dep']);
+        when(
+          () => mockGitCloner.cloneRepo(
+            'git@github.com:myorg/org_dep.git',
+            any(),
+          ),
+        ).thenThrow(SshSetupException('SSH does not know github.com yet.'));
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+          fetchRepoUrl: (_) async => null,
+          gitHubPlatform: offering(['requested', 'org_dep']),
+        );
+
+        await runner.run(['add', 'requested', '--no-localize']);
+
+        expect(
+          logMessages,
+          contains(endsWith('needs: SSH does not know github.com yet.')),
+        );
+        expect(logMessages, isNot(contains(contains('Probably your SSH key'))));
+      });
+
       test('and warns about organizations it cannot list', () async {
         oceanDartRepo('requested', ['org_dep']);
         final broken = MockGitHubPlatform();

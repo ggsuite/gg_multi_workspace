@@ -7,6 +7,7 @@
 import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
+import 'package:gg_git/gg_git.dart' show SshHostKeys;
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_one/gg_one.dart' as gg;
@@ -295,11 +296,20 @@ Future<void> addRepositoryHelper({
       if (!allowFallback) {
         rethrow;
       }
-      // Attempt fallback: try each known organization from .organizations
+      // Attempt fallback: try each known organization from .organizations.
+      // An ssh problem is kept: when no organization works, it — and not
+      // »not found« — is what the developer has to fix.
+      var sshProblem = e is SshSetupException ? e : null;
       final orgs = OrganizationUtils.readOrganizations(workspacePath);
       bool anySuccess = false;
       for (final org in orgs) {
         final fallbackUrl = repoUrlOfOrganization(org, repoName);
+        // Every organization on a host ssh is not set up for fails the same
+        // way, so their clones are not even tried.
+        final sshHost = sshProblem?.host;
+        if (sshHost != null && SshHostKeys.hostOf(fallbackUrl) == sshHost) {
+          continue;
+        }
         try {
           // The fallback URL names another organization than the one guessed
           // from the target, so the destination is recomputed from it.
@@ -316,11 +326,16 @@ Future<void> addRepositoryHelper({
           );
           anySuccess = true;
           break;
+        } on SshSetupException catch (e) {
+          sshProblem ??= e;
         } catch (_) {
           // Continue trying next
         }
       }
       if (!anySuccess) {
+        if (sshProblem != null) {
+          throw sshProblem;
+        }
         // A repository nobody owns is a typo in the name much more often than
         // it is a broken remote, so the run stops here instead of continuing
         // with a repository that will be missing from every following step.
