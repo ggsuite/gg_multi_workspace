@@ -14,6 +14,18 @@ import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_process/gg_process.dart';
 
+/// [url] in its ssh form when it is a GitHub https URL, else unchanged:
+/// gg clones new repositories from GitHub always over ssh.
+String sshUrlOf(String url) {
+  final match = _gitHubHttpsUrl.firstMatch(url);
+  return match == null ? url : 'git@github.com:${match[1]}/${match[2]}.git';
+}
+
+final _gitHubHttpsUrl = RegExp(
+  r'^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/*$',
+  caseSensitive: false,
+);
+
 /// Thrown when a clone failed because ssh is not set up for the host yet:
 /// the host is unknown, its key changed or it refused the user's key.
 class SshSetupException implements Exception {
@@ -77,9 +89,11 @@ class GitHandler {
 
   static void _silent(String message) {}
 
-  /// Clones the repository from [repoUrl] into [targetDirectory].
+  /// Clones the repository from [url] into [targetDirectory], from GitHub
+  /// over ssh, see [sshUrlOf].
   /// Throws an exception if cloning fails.
-  Future<void> cloneRepo(String repoUrl, String targetDirectory) async {
+  Future<void> cloneRepo(String url, String targetDirectory) async {
+    final repoUrl = sshUrlOf(url);
     // Ensure the parent directory exists. A clone that fails must not leave
     // the folders behind that were created for it, so the outermost folder
     // created here is remembered and removed again below.

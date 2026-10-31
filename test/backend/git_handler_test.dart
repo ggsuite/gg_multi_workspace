@@ -53,7 +53,7 @@ void main() {
 
     group('cloneRepo', () {
       test(
-        'successfully clones a repository when process returns exit code 0',
+        'clones a GitHub repository over ssh when git returns exit code 0',
         () async {
           // Arrange
           const repoUrl = 'https://github.com/example/repo.git';
@@ -80,7 +80,13 @@ void main() {
           verify(
             () => mockProcessRunner(
               'git',
-              any(that: equals(['clone', repoUrl, targetDirectory])),
+              any(
+                that: equals([
+                  'clone',
+                  'git@github.com:example/repo.git',
+                  targetDirectory,
+                ]),
+              ),
             ),
           ).called(1);
 
@@ -90,7 +96,7 @@ void main() {
       );
 
       test('retries a clone the remote dropped', () async {
-        const repoUrl = 'https://github.com/example/repo.git';
+        const repoUrl = 'https://git.example.com/example/repo.git';
         final targetDirectory = path.join(tempDir.path, 'cloned_repo');
         var calls = 0;
         when(
@@ -117,7 +123,7 @@ void main() {
 
       test('throws an exception when the clone process fails', () async {
         // Arrange
-        const repoUrl = 'https://github.com/example/failure.git';
+        const repoUrl = 'https://git.example.com/example/failure.git';
         final targetDirectory = path.join(tempDir.path, 'failed_clone');
 
         // Stub the mock process runner to return a failing ProcessResult
@@ -151,7 +157,7 @@ void main() {
       test('removes the folders it created when the clone fails', () async {
         // Arrange: the org folder does not exist yet, so cloneRepo has to
         // create it — a failing clone must not leave it behind.
-        const repoUrl = 'https://github.com/unknownOrg/unknown.git';
+        const repoUrl = 'https://git.example.com/unknownOrg/unknown.git';
         final orgDir = Directory(path.join(tempDir.path, 'unknownOrg'));
         final targetDirectory = path.join(orgDir.path, 'unknown');
         expect(orgDir.existsSync(), isFalse);
@@ -175,7 +181,7 @@ void main() {
         // Arrange: neither the workspace nor the org folder exist, so
         // cloneRepo walks up to the first existing ancestor and creates
         // several levels at once. A failing clone must remove all of them.
-        const repoUrl = 'https://github.com/unknownOrg/unknown.git';
+        const repoUrl = 'https://git.example.com/unknownOrg/unknown.git';
         final workspaceDir = Directory(
           path.join(tempDir.path, 'new_workspace'),
         );
@@ -202,7 +208,7 @@ void main() {
       test('keeps an existing org folder that holds other repos', () async {
         // Arrange: the org folder existed before and holds another repo, so
         // a failing clone must leave it untouched.
-        const repoUrl = 'https://github.com/knownOrg/unknown.git';
+        const repoUrl = 'https://git.example.com/knownOrg/unknown.git';
         final orgDir = Directory(path.join(tempDir.path, 'knownOrg'));
         final otherRepo = Directory(path.join(orgDir.path, 'other_repo'));
         otherRepo.createSync(recursive: true);
@@ -228,7 +234,7 @@ void main() {
         'ensures parent directory is created if it does not exist',
         () async {
           // Arrange
-          const repoUrl = 'https://github.com/example/repo.git';
+          const repoUrl = 'https://git.example.com/example/repo.git';
           // Choosing a target directory in a nested non-existent structure
           final targetDirectory = path.join(
             tempDir.path,
@@ -305,18 +311,18 @@ void main() {
         when(
           () => mockProcessRunner('git', [
             'ls-remote',
-            'https://github.com/org/repo.git',
+            'https://git.example.com/org/repo.git',
           ]),
         ).thenAnswer((_) async => ProcessResult(0, 0, 'hash\tHEAD', ''));
 
         expect(
-          await gitHandler.remoteExists('https://github.com/org/repo.git'),
+          await gitHandler.remoteExists('https://git.example.com/org/repo.git'),
           isTrue,
         );
       });
 
       test('is true after retrying a lookup the remote dropped', () async {
-        const repoUrl = 'https://github.com/org/repo.git';
+        const repoUrl = 'https://git.example.com/org/repo.git';
         final messages = <String>[];
         var calls = 0;
         when(() => mockProcessRunner('git', ['ls-remote', repoUrl])).thenAnswer(
@@ -407,7 +413,7 @@ void main() {
     test('leaves the folder of a clone running next to it alone', () async {
       // Arrange: the org folder is new. While this clone fails, a second
       // clone fills its own folder in the same org folder.
-      const repoUrl = 'https://github.com/org/failing.git';
+      const repoUrl = 'https://git.example.com/org/failing.git';
       final orgDir = Directory(path.join(tempDir.path, 'org'));
       final targetDirectory = path.join(orgDir.path, 'failing');
       final pack = Directory(
@@ -431,7 +437,7 @@ void main() {
     });
 
     test('removes the empty folders git left in the target', () async {
-      const repoUrl = 'https://github.com/org/failing.git';
+      const repoUrl = 'https://git.example.com/org/failing.git';
       final targetDirectory = path.join(tempDir.path, 'org', 'failing');
       when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
         Directory(path.join(targetDirectory, '.git', 'objects', 'pack'))
@@ -454,7 +460,7 @@ void main() {
         () async {
           // Arrange: git left a folder behind that vanishes while it is
           // listed, as it happens on Windows right after git deleted it.
-          const repoUrl = 'https://github.com/org/failing.git';
+          const repoUrl = 'https://git.example.com/org/failing.git';
           final orgDirectory = path.join(tempDir.path, 'org');
           final targetDirectory = path.join(orgDirectory, 'failing');
           final vanishingPath = vanishing == 'target'
@@ -773,7 +779,7 @@ void main() {
     });
 
     test('does not ask for a url without ssh', () async {
-      const httpsUrl = 'https://github.com/ggsuite/gg.git';
+      const httpsUrl = 'https://git.example.com/ggsuite/gg.git';
 
       await expectLater(
         handler().cloneRepo(httpsUrl, targetDirectory),

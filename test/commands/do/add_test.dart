@@ -217,17 +217,15 @@ void main() {
 
     test('should clone single repository when target is a repo name', () async {
       await runner.run(['add', 'myrepo']);
+      // GitHub is cloned over ssh, the organization is still registered by
+      // its https url.
       verify(
-        () => mockGitCloner.cloneRepo(
-          'https://github.com/myrepo/myrepo.git',
-          any(),
-        ),
+        () =>
+            mockGitCloner.cloneRepo('git@github.com:myrepo/myrepo.git', any()),
       ).called(1);
       expect(
         logMessages,
-        anyElement(
-          contains('myrepo from https://github.com/myrepo/myrepo.git'),
-        ),
+        anyElement(contains('myrepo from git@github.com:myrepo/myrepo.git')),
       );
 
       final orgFile = File(path.join(oceanWorkspacePath, '.organizations'));
@@ -243,14 +241,14 @@ void main() {
       await runner.run(['add', 'testuser/testrepo']);
       verify(
         () => mockGitCloner.cloneRepo(
-          'https://github.com/testuser/testrepo.git',
+          'git@github.com:testuser/testrepo.git',
           any(),
         ),
       ).called(1);
       expect(
         logMessages,
         anyElement(
-          contains('testrepo from https://github.com/testuser/testrepo.git'),
+          contains('testrepo from git@github.com:testuser/testrepo.git'),
         ),
       );
     });
@@ -277,14 +275,14 @@ void main() {
       await runner.run(['add', urlWithoutGit]);
       verify(
         () => mockGitCloner.cloneRepo(
-          'https://github.com/ggsuite/gg_multi.git',
+          'git@github.com:ggsuite/gg_multi.git',
           any(),
         ),
       ).called(1);
       expect(
         logMessages,
         anyElement(
-          contains('gg_multi from https://github.com/ggsuite/gg_multi.git'),
+          contains('gg_multi from git@github.com:ggsuite/gg_multi.git'),
         ),
       );
     });
@@ -347,28 +345,29 @@ void main() {
       );
       const orgUrl = 'https://github.com/myorganization';
       await orgRunner.run(['add', orgUrl]);
+      // The https urls the platform reports are cloned over ssh.
       verify(
         () => mockGitCloner.cloneRepo(
-          'https://github.com/myorganization/repo1.git',
+          'git@github.com:myorganization/repo1.git',
           any(),
         ),
       ).called(1);
       verify(
         () => mockGitCloner.cloneRepo(
-          'https://github.com/myorganization/repo2.git',
+          'git@github.com:myorganization/repo2.git',
           any(),
         ),
       ).called(1);
       expect(
         logMessages,
         anyElement(
-          contains('repo1 from https://github.com/myorganization/repo1.git'),
+          contains('repo1 from git@github.com:myorganization/repo1.git'),
         ),
       );
       expect(
         logMessages,
         anyElement(
-          contains('repo2 from https://github.com/myorganization/repo2.git'),
+          contains('repo2 from git@github.com:myorganization/repo2.git'),
         ),
       );
     });
@@ -992,10 +991,10 @@ dev_dependencies:
 
       await runner.run(['add', existingRepoName]);
 
-      // Org fallback: `https://github.com/<dep>/<dep>.git`.
+      // Org fallback: `github.com/<dep>/<dep>`, cloned over ssh.
       verify(
         () => mockGitCloner.cloneRepo(
-          'https://github.com/$gitDepName/$gitDepName.git',
+          'git@github.com:$gitDepName/$gitDepName.git',
           any(),
         ),
       ).called(1);
@@ -1138,7 +1137,9 @@ dev_dependencies:
         ),
       );
 
+      // pub.dev names the https url, the repo is cloned over ssh.
       const repoUrl = '${orgUrl}tx_known_org_dep.git';
+      const cloneUrl = 'git@github.com:myorg/tx_known_org_dep.git';
       when(
         () => mockProc(
           'git',
@@ -1156,7 +1157,7 @@ dev_dependencies:
 
       await runner.run(['add', existingRepoName]);
 
-      verify(() => mockGitCloner.cloneRepo(repoUrl, any())).called(1);
+      verify(() => mockGitCloner.cloneRepo(cloneUrl, any())).called(1);
     });
 
     test('transitive scan skips a hosted dep whose pub.dev repo URL '
@@ -1376,7 +1377,7 @@ dev_dependencies:
           expect(offered, ['org_dep', 'myorg', 'otherorg']);
           verify(
             () => mockGitCloner.cloneRepo(
-              'https://github.com/otherorg/org_dep.git',
+              'git@github.com:otherorg/org_dep.git',
               any(),
             ),
           ).called(1);
@@ -2917,24 +2918,20 @@ version: 1.0.0
 
         await runner.run(['add', 'repoA', 'repoB']);
         verify(
-          () => mockGitCloner.cloneRepo(
-            'https://github.com/repoA/repoA.git',
-            any(),
-          ),
+          () =>
+              mockGitCloner.cloneRepo('git@github.com:repoA/repoA.git', any()),
         ).called(1);
         verify(
-          () => mockGitCloner.cloneRepo(
-            'https://github.com/repoB/repoB.git',
-            any(),
-          ),
+          () =>
+              mockGitCloner.cloneRepo('git@github.com:repoB/repoB.git', any()),
         ).called(1);
         expect(
           logMessages,
-          anyElement(contains('repoA from https://github.com/repoA/repoA.git')),
+          anyElement(contains('repoA from git@github.com:repoA/repoA.git')),
         );
         expect(
           logMessages,
-          anyElement(contains('repoB from https://github.com/repoB/repoB.git')),
+          anyElement(contains('repoB from git@github.com:repoB/repoB.git')),
         );
       },
     );
@@ -3988,7 +3985,7 @@ version: 1.0.0
         // The clone declares a dependency of its own, which is followed too.
         when(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/tx_new_dep/tx_new_dep.git',
+            'git@github.com:tx_new_dep/tx_new_dep.git',
             any(),
           ),
         ).thenAnswer((invocation) async {
@@ -4013,13 +4010,13 @@ version: 1.0.0
 
         verify(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/tx_new_dep/tx_new_dep.git',
+            'git@github.com:tx_new_dep/tx_new_dep.git',
             any(),
           ),
         ).called(1);
         verify(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/tx_deeper/tx_deeper.git',
+            'git@github.com:tx_deeper/tx_deeper.git',
             any(),
           ),
         ).called(1);
