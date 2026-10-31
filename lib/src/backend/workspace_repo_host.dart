@@ -104,7 +104,7 @@ class WorkspaceRepoHost extends RepoHost {
     _registerOrg(spec);
     if (!_addsToTicket) return;
     await _add(
-      url: '${spec.webUrl}.git',
+      url: spec.cloneUrl,
       ticketPath: _ticketPath!,
       oceanPath: oceanPath,
       ggLog: ggLog,

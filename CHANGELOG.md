@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.22.1 - 2026-10-31
+
+### Changed
+
+- Clone GitHub repositories always over ssh
+
 ## 4.22.0 - 2026-10-30
 
 ### Changed

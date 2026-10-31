@@ -385,7 +385,7 @@ void main() {
 
     // #########################################################################
     group('afterCreate()', () {
-      test('registers the org and adds the repo by its url', () async {
+      test('registers the org and adds the repo by its ssh url', () async {
         final added = <String>[];
         final spec = RepoSpec.example(org: 'NewOrg', name: 'gg_new');
         final ticketHost = host(
@@ -412,7 +412,7 @@ void main() {
           ggLog: (_) {},
         );
 
-        const url = 'https://github.com/NewOrg/gg_new.git';
+        const url = 'git@github.com:NewOrg/gg_new.git';
         expect(added, List.filled(2, '$url $inTicket $ocean'));
         expect(registeredOrgs(), ['ggsuite', 'NewOrg']);
       });
