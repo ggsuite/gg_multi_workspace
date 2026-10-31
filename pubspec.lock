@@ -300,10 +300,11 @@ packages:
   gg_create_repo:
     dependency: "direct main"
     description:
-      path: "../gg_create_repo"
-      relative: true
-    source: path
-    version: "0.0.4"
+      name: gg_create_repo
+      sha256: e489c33111352763958aa28a34ddd83b49e4b487f856c01d9ffdecc53653cb73
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.5"
   gg_direct_json:
     dependency: transitive
     description:
