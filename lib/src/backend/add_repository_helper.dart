@@ -39,7 +39,7 @@ String repoUrlOfOrganization(Organization org, String repoName) {
   if (azureSsh != null) {
     return '$azureSsh$repoName';
   }
-  return '$baseUrl$repoName.git';
+  return sshUrlOf('$baseUrl$repoName.git');
 }
 
 /// [baseUrl] as an Azure DevOps SSH base, `git@ssh.dev.azure.com:v3/…/`, or
@@ -277,17 +277,19 @@ Future<void> addRepositoryHelper({
       }
     }
 
+    // cloneRepo clones GitHub over ssh anyway; the log names that url.
+    final url = sshUrlOf(repoUrl);
     final destination = RepoFolderResolver.destination(
       workspacePath: workspacePath,
-      repoUrl: repoUrl,
+      repoUrl: url,
       repoName: repoName,
     );
 
     // Try to clone the repository ............................................
     try {
-      await gitCloner.cloneRepo(repoUrl, destination);
+      await gitCloner.cloneRepo(url, destination);
       await reportClone(
-        repoUrl: repoUrl,
+        repoUrl: url,
         repoName: repoName,
         destination: destination,
       );

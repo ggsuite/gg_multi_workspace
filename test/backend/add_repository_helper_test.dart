@@ -51,15 +51,64 @@ void main() {
     }
   });
 
+  group('sshUrlOf', () {
+    test('turns a GitHub https url into the ssh form', () {
+      for (final url in [
+        'https://github.com/ggsuite/gg_dna.git',
+        'https://github.com/ggsuite/gg_dna',
+        'https://github.com/ggsuite/gg_dna/',
+        'https://github.com/ggsuite/gg_dna.git/',
+        'http://github.com/ggsuite/gg_dna.git',
+        'https://GitHub.com/ggsuite/gg_dna.git',
+      ]) {
+        expect(sshUrlOf(url), 'git@github.com:ggsuite/gg_dna.git', reason: url);
+      }
+    });
+
+    test('keeps a .git inside the repository name', () {
+      expect(
+        sshUrlOf('https://github.com/user/user.github.io.git'),
+        'git@github.com:user/user.github.io.git',
+      );
+    });
+
+    test('leaves urls of other hosts and ssh urls unchanged', () {
+      for (final url in [
+        'https://gitlab.com/ggsuite/gg_dna.git',
+        'https://github.com.evil.com/ggsuite/gg_dna.git',
+        'git@github.com:ggsuite/gg_dna.git',
+        'ssh://git@github.com/ggsuite/gg_dna.git',
+        'git://github.com/ggsuite/gg_dna.git',
+        'https://dev.azure.com/myorg/myproj/_git/myrepo',
+        'git@ssh.dev.azure.com:v3/acme/proj/myrepo',
+        // No repository named: an organization, not a clone url.
+        'https://github.com/ggsuite',
+      ]) {
+        expect(sshUrlOf(url), url, reason: url);
+      }
+    });
+  });
+
   group('repoUrlOfOrganization', () {
-    test('appends the repo name and .git to a GitHub organization', () {
+    test('builds the ssh url of a repo of a GitHub organization', () {
       final org = Organization(
         name: 'ggsuite',
         url: 'https://github.com/ggsuite',
       );
       expect(
         repoUrlOfOrganization(org, 'gg_dna'),
-        'https://github.com/ggsuite/gg_dna.git',
+        'git@github.com:ggsuite/gg_dna.git',
+      );
+    });
+
+    test('keeps the url of an organization on another https host', () {
+      final org = Organization(
+        name: 'ggsuite',
+        url: 'https://gitlab.com/ggsuite/',
+      );
+      expect(
+        repoUrlOfOrganization(org, 'gg_dna'),
+        'https://gitlab.com/ggsuite/gg_dna.git',
       );
     });
 
@@ -140,8 +189,9 @@ void main() {
           force: false,
         );
 
-        // The URL should have the trailing '#' removed and appended with .git
-        const expectedRepoUrl = 'http://github.com/user/repo.git';
+        // The URL should have the trailing '#' removed, and GitHub is cloned
+        // over ssh.
+        const expectedRepoUrl = 'git@github.com:user/repo.git';
         // The repo lands in the folder of the organization of its URL.
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
 
@@ -234,7 +284,7 @@ void main() {
 
         verify(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/ggsuite/gg_dna.git',
+            'git@github.com:ggsuite/gg_dna.git',
             path.join(workspacePath, 'ggsuite', 'gg_dna'),
           ),
         ).called(1);
@@ -242,6 +292,7 @@ void main() {
 
       test('Processes repository URL that already ends with .git', () async {
         const targetArg = 'https://github.com/user/repo.git';
+        const expectedRepoUrl = 'git@github.com:user/repo.git';
         final mockGitCloner = MockGitCloner();
         when(() => mockGitCloner.cloneRepo(any(), any()))
             .thenAnswer((_) async {});
@@ -255,9 +306,10 @@ void main() {
         );
 
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
-        verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
-            .called(1);
-        expect(logs, anyElement(contains('repo from $targetArg')));
+        verify(
+          () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
+        ).called(1);
+        expect(logs, anyElement(contains('repo from $expectedRepoUrl')));
       });
 
       test('Processes organization URL and clones multiple repos', () async {
@@ -297,10 +349,10 @@ void main() {
           force: false,
         );
 
-        // Verify cloneRepo called for each repository
+        // Verify cloneRepo called for each repository, over ssh
         for (final repo in repoList) {
           final repoName = repo.name;
-          final cloneUrl = repo.httpsUrl;
+          final cloneUrl = 'git@github.com:myorg/$repoName.git';
           final destination = path.join(workspacePath, 'myorg', repoName);
           verify(() => mockGitCloner.cloneRepo(cloneUrl, destination))
               .called(1);
@@ -347,8 +399,8 @@ void main() {
 
         expect(logs, [
           'Cloning repos ...',
-          '✓ repo1 from https://github.com/myorg/repo1.git',
-          '✓ repo2 from https://github.com/myorg/repo2.git',
+          '✓ repo1 from git@github.com:myorg/repo1.git',
+          '✓ repo2 from git@github.com:myorg/repo2.git',
         ]);
       });
 
@@ -744,8 +796,9 @@ void main() {
           'git+ssh://git@github.com/user/repo.git':
               'ssh://git@github.com/user/repo.git',
           'git://github.com/user/repo.git': 'git://github.com/user/repo.git',
+          // GitHub https is cloned over ssh.
           'git+https://github.com/user/repo.git':
-              'https://github.com/user/repo.git',
+              'git@github.com:user/repo.git',
         };
         for (final MapEntry(key: targetArg, value: cloneUrl)
             in targets.entries) {
@@ -809,7 +862,7 @@ void main() {
           force: false,
         );
 
-        const expectedRepoUrl = 'https://github.com/user/repo.git';
+        const expectedRepoUrl = 'git@github.com:user/repo.git';
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
         verify(
           () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
@@ -831,7 +884,7 @@ void main() {
           force: false,
         );
 
-        const expectedRepoUrl = 'https://github.com/user/repo.git';
+        const expectedRepoUrl = 'git@github.com:user/repo.git';
         final expectedDestination = path.join(workspacePath, 'user', 'repo');
         verify(
           () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
@@ -854,7 +907,7 @@ void main() {
           force: false,
         );
 
-        const expectedRepoUrl = 'https://github.com/repo/repo.git';
+        const expectedRepoUrl = 'git@github.com:repo/repo.git';
         final expectedDestination = path.join(workspacePath, 'repo', 'repo');
         verify(
           () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
@@ -934,10 +987,7 @@ void main() {
         );
 
         verify(
-          () => mockGitCloner.cloneRepo(
-            'https://github.com/repo/repo.git',
-            any(),
-          ),
+          () => mockGitCloner.cloneRepo('git@github.com:repo/repo.git', any()),
         ).called(1);
       });
 
@@ -972,9 +1022,10 @@ void main() {
       orgFile.writeAsStringSync(jsonEncode({fallbackOrgName: fallbackOrgUrl}));
 
       // Given a plain repo name (targetArg), the initial github URL...
+      // Both are cloned over ssh.
       const repoName = 'test';
-      const primaryUrl = 'https://github.com/$repoName/$repoName.git';
-      const fallbackUrl = '$fallbackOrgUrl/$repoName.git';
+      const primaryUrl = 'git@github.com:$repoName/$repoName.git';
+      const fallbackUrl = 'git@github.com:$fallbackOrgName/$repoName.git';
       // The primary URL guesses the repo name as organization, the fallback
       // URL names the real one — each clone goes to its own org folder.
       final primaryDestination = path.join(workspacePath, repoName, repoName);
@@ -1034,8 +1085,8 @@ void main() {
         );
 
         const repoName = 'fallbackRepo';
-        const primaryUrl = 'https://github.com/$repoName/$repoName.git';
-        const fallbackUrl = '$fallbackOrgUrl/$repoName.git';
+        const primaryUrl = 'git@github.com:$repoName/$repoName.git';
+        const fallbackUrl = 'git@github.com:$fallbackOrgName/$repoName.git';
 
         final mockGitCloner = MockGitCloner();
         // Both primary and fallback throw an error
@@ -1078,14 +1129,14 @@ void main() {
       orgFile.writeAsStringSync(jsonEncode({'fallbackOrg': fallbackOrgUrl}));
 
       const repoName = 'sshRepo';
-      const primaryUrl = 'https://github.com/$repoName/$repoName.git';
+      const primaryUrl = 'git@github.com:$repoName/$repoName.git';
+      const fallbackUrl = 'git@github.com:fallbackOrg/$repoName.git';
 
       final mockGitCloner = MockGitCloner();
       when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
           .thenThrow(SshSetupException('SSH does not know github.com yet.'));
-      when(
-        () => mockGitCloner.cloneRepo('$fallbackOrgUrl/$repoName.git', any()),
-      ).thenThrow(Exception('repository not found'));
+      when(() => mockGitCloner.cloneRepo(fallbackUrl, any()))
+          .thenThrow(Exception('repository not found'));
 
       await expectLater(
         addRepositoryHelper(
@@ -1150,20 +1201,64 @@ void main() {
       );
     });
 
+    test('skips GitHub fallback organizations registered by their https url '
+        'once ssh failed for github.com', () async {
+      // A GitHub organization is cloned over ssh, however it was registered,
+      // so it fails the same way and is not even tried.
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      orgFile.writeAsStringSync(
+        jsonEncode({'fallbackOrg': 'https://github.com/fallbackOrg'}),
+      );
+
+      const repoName = 'sshRepo';
+
+      final mockGitCloner = MockGitCloner();
+      when(
+        () => mockGitCloner.cloneRepo(
+          'git@github.com:$repoName/$repoName.git',
+          any(),
+        ),
+      ).thenThrow(
+        SshSetupException(
+          'github.com refused your SSH key.',
+          host: 'github.com',
+        ),
+      );
+      when(
+        () =>
+            mockGitCloner.cloneRepo(any(that: contains('fallbackOrg')), any()),
+      ).thenAnswer((_) async {});
+
+      await expectLater(
+        addRepositoryHelper(
+          targetArg: repoName,
+          ggLog: ggLog,
+          gitCloner: mockGitCloner,
+          workspacePath: workspacePath,
+        ),
+        throwsA(isA<SshSetupException>()),
+      );
+
+      verifyNever(
+        () =>
+            mockGitCloner.cloneRepo(any(that: contains('fallbackOrg')), any()),
+      );
+    });
+
     test('reports an ssh problem of a fallback organization', () async {
       final orgFile = File(path.join(workspacePath, '.organizations'));
       const fallbackOrgUrl = 'https://github.com/fallbackOrg';
       orgFile.writeAsStringSync(jsonEncode({'fallbackOrg': fallbackOrgUrl}));
 
       const repoName = 'sshRepo';
-      const primaryUrl = 'https://github.com/$repoName/$repoName.git';
+      const primaryUrl = 'git@github.com:$repoName/$repoName.git';
+      const fallbackUrl = 'git@github.com:fallbackOrg/$repoName.git';
 
       final mockGitCloner = MockGitCloner();
       when(() => mockGitCloner.cloneRepo(primaryUrl, any()))
           .thenThrow(Exception('repository not found'));
-      when(
-        () => mockGitCloner.cloneRepo('$fallbackOrgUrl/$repoName.git', any()),
-      ).thenThrow(SshSetupException('github.com refused your SSH key.'));
+      when(() => mockGitCloner.cloneRepo(fallbackUrl, any()))
+          .thenThrow(SshSetupException('github.com refused your SSH key.'));
 
       await expectLater(
         addRepositoryHelper(
@@ -1206,8 +1301,10 @@ void main() {
 
     group('plain name owned by several organizations', () {
       const repoName = 'shared_repo';
-      const urlA = 'https://github.com/orgA/$repoName.git';
-      const urlB = 'https://github.com/orgB/$repoName.git';
+      // The organizations are registered by their https url, but probed
+      // and cloned over ssh.
+      const urlA = 'git@github.com:orgA/$repoName.git';
+      const urlB = 'git@github.com:orgB/$repoName.git';
 
       /// Registers [names] as known organizations of the workspace.
       void writeOrganizations(List<String> names) {
@@ -1454,13 +1551,13 @@ void main() {
         verify(() => platform.fetchOrgRepos('orgB')).called(1);
         verify(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/orgA/first.git',
+            'git@github.com:orgA/first.git',
             path.join(workspacePath, 'orgA', 'first'),
           ),
         ).called(1);
         verify(
           () => mockGitCloner.cloneRepo(
-            'https://github.com/orgB/second.git',
+            'git@github.com:orgB/second.git',
             path.join(workspacePath, 'orgB', 'second'),
           ),
         ).called(1);
@@ -1501,7 +1598,7 @@ void main() {
           // The github.com/<name>/<name> guess is tried first.
           verify(
             () => mockGitCloner.cloneRepo(
-              'https://github.com/$repoName/$repoName.git',
+              'git@github.com:$repoName/$repoName.git',
               path.join(workspacePath, repoName, repoName),
             ),
           ).called(1);
@@ -1697,17 +1794,14 @@ void main() {
     expect(callbackExecuted, isTrue);
     verify(
       () => mockGitCloner.cloneRepo(
-        'https://github.com/fresh_repo/fresh_repo.git',
+        'git@github.com:fresh_repo/fresh_repo.git',
         any(),
       ),
     ).called(1);
     expect(
       logs,
       anyElement(
-        contains(
-          'fresh_repo from '
-          'https://github.com/fresh_repo/fresh_repo.git',
-        ),
+        contains('fresh_repo from git@github.com:fresh_repo/fresh_repo.git'),
       ),
     );
   });
