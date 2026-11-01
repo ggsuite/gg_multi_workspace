@@ -395,6 +395,53 @@ void main() {
     });
   });
 
+  group('GitHandler.setOriginUrl', () {
+    late Directory repo;
+
+    /// Runs git in [repo] and returns its output; fails on an error.
+    Future<String> git(List<String> args) async {
+      final result = await Process.run(
+        'git',
+        args,
+        workingDirectory: repo.path,
+      );
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      return '${result.stdout}'.trim();
+    }
+
+    setUp(() async {
+      repo = await Directory.systemTemp.createTemp('set_origin_test');
+      await git(['init', '-q']);
+    });
+
+    tearDown(() => repo.delete(recursive: true));
+
+    test('sets the url of origin', () async {
+      await git(['remote', 'add', 'origin', 'https://github.com/o/r.git']);
+
+      await GitHandler().setOriginUrl(repo.path, 'git@github.com:o/r.git');
+
+      expect(
+        await git(['remote', 'get-url', 'origin']),
+        'git@github.com:o/r.git',
+      );
+    });
+
+    test('throws when git cannot change the origin', () async {
+      await expectLater(
+        GitHandler().setOriginUrl(repo.path, 'git@github.com:o/r.git'),
+        throwsA(
+          predicate(
+            (e) => rmControls('$e').startsWith(
+              'Exception: Failed to set the origin of ${repo.path} to '
+              'git@github.com:o/r.git: ',
+            ),
+          ),
+        ),
+      );
+    });
+  });
+
   group('GitHandler cleanup after a failed clone', () {
     late Directory tempDir;
     late MockProcessRunner mockProcessRunner;

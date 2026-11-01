@@ -36,10 +36,17 @@ void main() {
     void ggLog(String message) => messages.add(rmControls(message));
 
     // .........................................................................
-    /// Creates `<ocean>/<org>/<repo>` with a git remote pointing at [url].
-    Directory createRepo(String org, String repo, String url) {
-      final dir = Directory(path.join(oceanPath, org, repo))
-        ..createSync(recursive: true);
+    /// Creates `<ocean>/<org>/<repo>` with a git remote pointing at [url],
+    /// or `<parent>/<repo>` when a [parent] is given.
+    Directory createRepo(
+      String org,
+      String repo,
+      String url, {
+      String? parent,
+    }) {
+      final dir = Directory(
+        path.join(parent ?? path.join(oceanPath, org), repo),
+      )..createSync(recursive: true);
       Directory(path.join(dir.path, '.git')).createSync();
       File(path.join(dir.path, '.git', 'config')).writeAsStringSync(
         '[remote "origin"]\n\turl = $url\n\tfetch = +refs/heads/*\n',
@@ -82,6 +89,7 @@ void main() {
       gitHub = MockGitHubPlatform();
       azure = MockAzureDevOpsPlatform();
       when(() => gitCloner.cloneRepo(any(), any())).thenAnswer((_) async {});
+      when(() => gitCloner.setOriginUrl(any(), any())).thenAnswer((_) async {});
 
       tempDir = Directory.systemTemp.createTempSync('update_ocean_test');
       oceanPath = path.join(tempDir.path, ggMultiOceanFolder);
@@ -292,6 +300,90 @@ void main() {
           expect(other.existsSync(), isTrue);
         },
       );
+    });
+
+    // .........................................................................
+    group('switches GitHub https remotes to ssh', () {
+      late Directory oceanRepo;
+      late Directory ticketRepo;
+
+      setUp(() {
+        oceanRepo = createRepo(
+          'ggsuite',
+          'gg_one',
+          'https://github.com/ggsuite/gg_one.git',
+        );
+        createRepo('ggsuite', 'gg', 'git@github.com:ggsuite/gg.git');
+
+        final ticket = path.join(tempDir.path, 'my_ticket');
+        Directory(ticket).createSync();
+        File(path.join(ticket, 'ticket.json')).writeAsStringSync('{}');
+        ticketRepo = createRepo(
+          'ggsuite',
+          'gg_one',
+          'https://github.com/ggsuite/gg_one',
+          parent: ticket,
+        );
+
+        when(() => gitHub.fetchOrgRepos('ggsuite')).thenAnswer(
+          (_) async => [ghRepo('ggsuite', 'gg_one'), ghRepo('ggsuite', 'gg')],
+        );
+      });
+
+      test('in the ocean and in the tickets', () async {
+        await run([]);
+
+        verify(
+          () => gitCloner.setOriginUrl(
+            oceanRepo.path,
+            'git@github.com:ggsuite/gg_one.git',
+          ),
+        ).called(1);
+        verify(
+          () => gitCloner.setOriginUrl(
+            ticketRepo.path,
+            'git@github.com:ggsuite/gg_one.git',
+          ),
+        ).called(1);
+        verifyNoMoreInteractions(gitCloner);
+        expect(
+          messages.first,
+          '✓ Switched the remotes of 2 repo(s) from https to ssh',
+        );
+      });
+
+      test('reading the url of origin, not of another remote', () async {
+        File(path.join(oceanRepo.path, '.git', 'config')).writeAsStringSync(
+          '[remote "upstream"]\n\turl = https://github.com/other/gg_one\n'
+          '[remote "origin"]\n\turl = git@github.com:ggsuite/gg_one.git\n',
+        );
+
+        await run([]);
+
+        verifyNever(() => gitCloner.setOriginUrl(oceanRepo.path, any()));
+        expect(messages.first, contains('remotes of 1 repo(s)'));
+      });
+
+      test('but only reports them on a dry run', () async {
+        await run(['--dry-run']);
+
+        verifyNever(() => gitCloner.setOriginUrl(any(), any()));
+        expect(
+          messages.first,
+          '✓ Would switch the remotes of 2 repo(s) from https to ssh',
+        );
+      });
+
+      test('reporting a remote it cannot change and going on', () async {
+        when(() => gitCloner.setOriginUrl(ticketRepo.path, any()))
+            .thenThrow(Exception('locked'));
+
+        await run([]);
+
+        expect(messages.first, 'Exception: locked');
+        expect(messages[1], contains('remotes of 1 repo(s)'));
+        expect(messages.last, contains('ocean is up to date'));
+      });
     });
 
     // .........................................................................

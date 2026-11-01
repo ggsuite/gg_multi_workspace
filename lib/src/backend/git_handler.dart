@@ -347,6 +347,26 @@ class GitHandler {
   /// The hosts whose ssh hint was logged in this run.
   final _hintedHosts = <String>{};
 
+  /// Sets the url of the remote `origin` of the repository at [repoPath].
+  /// Throws an exception if git cannot change the remote.
+  Future<void> setOriginUrl(String repoPath, String url) async {
+    final result = await processRunner('git', <String>[
+      '-C',
+      repoPath,
+      'remote',
+      'set-url',
+      'origin',
+      url,
+    ]);
+    if (result.exitCode != 0) {
+      throw Exception(
+        cError(
+          'Failed to set the origin of $repoPath to $url: ${result.stderr}',
+        ),
+      );
+    }
+  }
+
   /// Checks out a new branch [branchName] in the repository at [repoPath].
   /// Throws an exception if the checkout fails.
   Future<void> checkoutBranch(String branchName, String repoPath) async {
