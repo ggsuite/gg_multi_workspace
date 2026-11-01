@@ -395,66 +395,47 @@ void main() {
     });
   });
 
-  group('GitHandler.switchOriginToSsh', () {
+  group('GitHandler.setOriginUrl', () {
     late Directory repo;
 
+    /// Runs git in [repo] and returns its output; fails on an error.
+    Future<String> git(List<String> args) async {
+      final result = await Process.run(
+        'git',
+        args,
+        workingDirectory: repo.path,
+      );
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      return '${result.stdout}'.trim();
+    }
+
     setUp(() async {
-      repo = await Directory.systemTemp.createTemp('switch_origin_test');
-      await Process.run('git', ['init', '-q'], workingDirectory: repo.path);
+      repo = await Directory.systemTemp.createTemp('set_origin_test');
+      await git(['init', '-q']);
     });
 
     tearDown(() => repo.delete(recursive: true));
 
-    Future<String> origin() async {
-      final result = await Process.run('git', [
-        'remote',
-        'get-url',
-        'origin',
-      ], workingDirectory: repo.path);
-      return '${result.stdout}'.trim();
-    }
+    test('sets the url of origin', () async {
+      await git(['remote', 'add', 'origin', 'https://github.com/o/r.git']);
 
-    Future<void> setOrigin(String url) => Process.run('git', [
-      'remote',
-      'add',
-      'origin',
-      url,
-    ], workingDirectory: repo.path);
+      await GitHandler().setOriginUrl(repo.path, 'git@github.com:o/r.git');
 
-    test('switches a GitHub https origin to ssh', () async {
-      await setOrigin('https://github.com/ggsuite/gg.git');
-
-      expect(await GitHandler().switchOriginToSsh(repo.path), isTrue);
-      expect(await origin(), 'git@github.com:ggsuite/gg.git');
-    });
-
-    test('leaves other origins alone', () async {
-      expect(await GitHandler().switchOriginToSsh(repo.path), isFalse);
-
-      await setOrigin('git@github.com:ggsuite/gg.git');
-      expect(await GitHandler().switchOriginToSsh(repo.path), isFalse);
-      expect(await origin(), 'git@github.com:ggsuite/gg.git');
+      expect(
+        await git(['remote', 'get-url', 'origin']),
+        'git@github.com:o/r.git',
+      );
     });
 
     test('throws when git cannot change the origin', () async {
-      final runner = MockProcessRunner();
-      when(() => runner('git', any())).thenAnswer(
-        (invocation) async =>
-            (invocation.positionalArguments[1] as List<String>).contains(
-              'get-url',
-            )
-            ? ProcessResult(1, 0, 'https://github.com/o/r\n', '')
-            : ProcessResult(1, 1, '', 'locked'),
-      );
-
       await expectLater(
-        GitHandler(processRunner: runner.call).switchOriginToSsh('repoDir'),
+        GitHandler().setOriginUrl(repo.path, 'git@github.com:o/r.git'),
         throwsA(
           predicate(
-            (e) =>
-                rmControls('$e') ==
-                'Exception: Failed to switch the origin of repoDir to '
-                    'git@github.com:o/r.git: locked',
+            (e) => rmControls('$e').startsWith(
+              'Exception: Failed to set the origin of ${repo.path} to '
+              'git@github.com:o/r.git: ',
+            ),
           ),
         ),
       );

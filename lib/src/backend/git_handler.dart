@@ -347,42 +347,24 @@ class GitHandler {
   /// The hosts whose ssh hint was logged in this run.
   final _hintedHosts = <String>{};
 
-  /// Switches the remote `origin` of the repository at [repoPath] to ssh
-  /// when it is a GitHub https URL, see [sshUrlOf]. Returns whether it did.
+  /// Sets the url of the remote `origin` of the repository at [repoPath].
   /// Throws an exception if git cannot change the remote.
-  Future<bool> switchOriginToSsh(String repoPath) async {
-    final current = await processRunner('git', <String>[
-      '-C',
-      repoPath,
-      'remote',
-      'get-url',
-      'origin',
-    ]);
-    if (current.exitCode != 0) {
-      return false;
-    }
-    final url = '${current.stdout}'.trim();
-    final sshUrl = sshUrlOf(url);
-    if (sshUrl == url) {
-      return false;
-    }
+  Future<void> setOriginUrl(String repoPath, String url) async {
     final result = await processRunner('git', <String>[
       '-C',
       repoPath,
       'remote',
       'set-url',
       'origin',
-      sshUrl,
+      url,
     ]);
     if (result.exitCode != 0) {
       throw Exception(
         cError(
-          'Failed to switch the origin of $repoPath to $sshUrl: '
-          '${result.stderr}',
+          'Failed to set the origin of $repoPath to $url: ${result.stderr}',
         ),
       );
     }
-    return true;
   }
 
   /// Checks out a new branch [branchName] in the repository at [repoPath].

@@ -24,8 +24,9 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 /// deleted. Tickets are not consulted: a ticket owns its own clone, so
 /// removing the ocean copy does not break it.
 ///
-/// GitHub remotes still set to https, in the ocean and in the tickets, are
-/// switched to ssh first: gg clones GitHub over ssh.
+/// One step reaches into the tickets: GitHub remotes still set to https are
+/// switched to ssh first, in the ocean and in the tickets, because gg clones
+/// GitHub over ssh.
 class UpdateOceanCommand extends Command<void> {
   /// Constructor.
   UpdateOceanCommand({
@@ -104,7 +105,12 @@ class UpdateOceanCommand extends Command<void> {
       migrateToOrgFolders(workspacePath: oceanPath, ggLog: ggLog);
     }
 
-    await _switchRemotesToSsh(oceanPath: oceanPath, root: root, dryRun: dryRun);
+    final oceanRepos = RepoFolderResolver.repoDirs(oceanPath);
+    await _switchRemotesToSsh(
+      oceanRepos: oceanRepos,
+      root: root,
+      dryRun: dryRun,
+    );
 
     // `.organizations` lives inside the ocean — that is the path
     // `do add` hands to `addRepositoryHelper`, which maintains the file.
@@ -126,7 +132,7 @@ class UpdateOceanCommand extends Command<void> {
     // deciding on the user's behalf what happens to that work.
     await repoFreshness.updateAll(
       ggLog: ggLog,
-      directories: RepoFolderResolver.repoDirs(oceanPath),
+      directories: oceanRepos,
       workspacePath: oceanPath,
       dryRun: dryRun,
     );
@@ -171,31 +177,32 @@ class UpdateOceanCommand extends Command<void> {
 
   // ...........................................................................
   /// Switches the GitHub https remotes of the ocean and of every ticket to
-  /// ssh, the protocol gg clones GitHub with, see [sshUrlOf].
+  /// ssh, the protocol gg clones GitHub with, see [sshUrlOf]. A repository
+  /// whose remote cannot be changed is reported and does not stop the run.
   Future<void> _switchRemotesToSsh({
-    required String oceanPath,
+    required List<Directory> oceanRepos,
     required String root,
     required bool dryRun,
   }) async {
-    final repoDirs = [
-      ...RepoFolderResolver.repoDirs(oceanPath),
+    var switched = 0;
+    for (final dir in [
+      ...oceanRepos,
       for (final ticket in WorkspaceUtils.ticketDirs(root))
         ...RepoFolderResolver.repoDirs(ticket.path),
-    ];
-    final https = [
-      for (final dir in repoDirs)
-        if (_isGitHubHttps(RepoFolderResolver.remoteUrl(dir))) dir,
-    ];
-
-    var switched = 0;
-    if (dryRun) {
-      switched = https.length;
-    } else {
-      await runWithLimit(https, 4, (dir) async {
-        if (await gitCloner.switchOriginToSsh(dir.path)) {
-          switched++;
+    ]) {
+      final url = _originUrl(dir);
+      final sshUrl = url == null ? null : sshUrlOf(url);
+      if (sshUrl == null || sshUrl == url) {
+        continue;
+      }
+      try {
+        if (!dryRun) {
+          await gitCloner.setOriginUrl(dir.path, sshUrl);
         }
-      });
+        switched++;
+      } catch (e) {
+        ggLog(cError('$e'));
+      }
     }
 
     if (switched > 0) {
@@ -208,9 +215,29 @@ class UpdateOceanCommand extends Command<void> {
     }
   }
 
-  /// Whether [url] is a GitHub https URL gg would rather reach over ssh.
-  static bool _isGitHubHttps(String? url) =>
-      url != null && sshUrlOf(url) != url;
+  static final _configUrl = RegExp(r'^url\s*=\s*(.+)$');
+
+  /// The url of the remote `origin` as `.git/config` of [dir] stores it, or
+  /// null. Read without git: `git remote get-url` would apply the user's
+  /// `insteadOf` rules and hide an https url.
+  static String? _originUrl(Directory dir) {
+    final config = File(path.join(dir.path, '.git', 'config'));
+    if (!config.existsSync()) {
+      return null;
+    }
+    var inOrigin = false;
+    for (final line in config.readAsLinesSync().map((l) => l.trim())) {
+      if (line.startsWith('[')) {
+        inOrigin = line == '[remote "origin"]';
+        continue;
+      }
+      final url = _configUrl.firstMatch(line)?[1];
+      if (inOrigin && url != null) {
+        return url;
+      }
+    }
+    return null;
+  }
 
   // ...........................................................................
   /// Asks every organization of [organizations] for its repositories.
