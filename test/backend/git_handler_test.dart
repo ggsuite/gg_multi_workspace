@@ -395,6 +395,72 @@ void main() {
     });
   });
 
+  group('GitHandler.switchOriginToSsh', () {
+    late Directory repo;
+
+    setUp(() async {
+      repo = await Directory.systemTemp.createTemp('switch_origin_test');
+      await Process.run('git', ['init', '-q'], workingDirectory: repo.path);
+    });
+
+    tearDown(() => repo.delete(recursive: true));
+
+    Future<String> origin() async {
+      final result = await Process.run('git', [
+        'remote',
+        'get-url',
+        'origin',
+      ], workingDirectory: repo.path);
+      return '${result.stdout}'.trim();
+    }
+
+    Future<void> setOrigin(String url) => Process.run('git', [
+      'remote',
+      'add',
+      'origin',
+      url,
+    ], workingDirectory: repo.path);
+
+    test('switches a GitHub https origin to ssh', () async {
+      await setOrigin('https://github.com/ggsuite/gg.git');
+
+      expect(await GitHandler().switchOriginToSsh(repo.path), isTrue);
+      expect(await origin(), 'git@github.com:ggsuite/gg.git');
+    });
+
+    test('leaves other origins alone', () async {
+      expect(await GitHandler().switchOriginToSsh(repo.path), isFalse);
+
+      await setOrigin('git@github.com:ggsuite/gg.git');
+      expect(await GitHandler().switchOriginToSsh(repo.path), isFalse);
+      expect(await origin(), 'git@github.com:ggsuite/gg.git');
+    });
+
+    test('throws when git cannot change the origin', () async {
+      final runner = MockProcessRunner();
+      when(() => runner('git', any())).thenAnswer(
+        (invocation) async =>
+            (invocation.positionalArguments[1] as List<String>).contains(
+              'get-url',
+            )
+            ? ProcessResult(1, 0, 'https://github.com/o/r\n', '')
+            : ProcessResult(1, 1, '', 'locked'),
+      );
+
+      await expectLater(
+        GitHandler(processRunner: runner.call).switchOriginToSsh('repoDir'),
+        throwsA(
+          predicate(
+            (e) =>
+                rmControls('$e') ==
+                'Exception: Failed to switch the origin of repoDir to '
+                    'git@github.com:o/r.git: locked',
+          ),
+        ),
+      );
+    });
+  });
+
   group('GitHandler cleanup after a failed clone', () {
     late Directory tempDir;
     late MockProcessRunner mockProcessRunner;

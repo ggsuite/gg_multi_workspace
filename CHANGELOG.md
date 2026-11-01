@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Switch the GitHub https remotes of the ocean and the tickets to ssh in gg do upgrade ocean
+
 ## 4.22.1 - 2026-10-31
 
 ### Changed

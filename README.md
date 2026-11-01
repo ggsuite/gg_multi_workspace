@@ -20,7 +20,7 @@ underlying model lives in `gg_multi_core`.
 | `do create graph`                           | write the dependency graph of the workspace as mermaid or json                                |
 | `do rm repo <name…>`                        | delete repos from the current ticket (never from the ocean)                                   |
 | `do rm ticket [<id>...]`                    | close tickets: delete remote branches, move the whole folder to `.trash`                      |
-| `do upgrade ocean`                          | sync `.ocean` with every registered organisation: clone new repos, trash gone ones            |
+| `do upgrade ocean`                          | sync `.ocean` with the organisations: clone new repos, trash gone ones, use ssh for GitHub    |
 | `do code`                                   | open the current ticket in VS Code                                                            |
 | `do init claude`                            | aggregate each repo's `CLAUDE.md` into one ticket-level `CLAUDE.md`                           |
 | `do exec cmd <cmd>`                         | run a shell command in every ticket repo in dependency order                                  |

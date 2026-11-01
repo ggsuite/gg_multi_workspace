@@ -23,6 +23,9 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 /// organization no longer offers is moved to `<root>/.trash/.ocean`, never
 /// deleted. Tickets are not consulted: a ticket owns its own clone, so
 /// removing the ocean copy does not break it.
+///
+/// GitHub remotes still set to https, in the ocean and in the tickets, are
+/// switched to ssh first: gg clones GitHub over ssh.
 class UpdateOceanCommand extends Command<void> {
   /// Constructor.
   UpdateOceanCommand({
@@ -101,6 +104,8 @@ class UpdateOceanCommand extends Command<void> {
       migrateToOrgFolders(workspacePath: oceanPath, ggLog: ggLog);
     }
 
+    await _switchRemotesToSsh(oceanPath: oceanPath, root: root, dryRun: dryRun);
+
     // `.organizations` lives inside the ocean — that is the path
     // `do add` hands to `addRepositoryHelper`, which maintains the file.
     final organizations = OrganizationUtils.readOrganizations(oceanPath);
@@ -163,6 +168,49 @@ class UpdateOceanCommand extends Command<void> {
   // ######################
   // Private
   // ######################
+
+  // ...........................................................................
+  /// Switches the GitHub https remotes of the ocean and of every ticket to
+  /// ssh, the protocol gg clones GitHub with, see [sshUrlOf].
+  Future<void> _switchRemotesToSsh({
+    required String oceanPath,
+    required String root,
+    required bool dryRun,
+  }) async {
+    final repoDirs = [
+      ...RepoFolderResolver.repoDirs(oceanPath),
+      for (final ticket in WorkspaceUtils.ticketDirs(root))
+        ...RepoFolderResolver.repoDirs(ticket.path),
+    ];
+    final https = [
+      for (final dir in repoDirs)
+        if (_isGitHubHttps(RepoFolderResolver.remoteUrl(dir))) dir,
+    ];
+
+    var switched = 0;
+    if (dryRun) {
+      switched = https.length;
+    } else {
+      await runWithLimit(https, 4, (dir) async {
+        if (await gitCloner.switchOriginToSsh(dir.path)) {
+          switched++;
+        }
+      });
+    }
+
+    if (switched > 0) {
+      ggLog(
+        cDetail(
+          '✓ ${dryRun ? 'Would switch' : 'Switched'} the remotes of '
+          '$switched repo(s) from https to ssh',
+        ),
+      );
+    }
+  }
+
+  /// Whether [url] is a GitHub https URL gg would rather reach over ssh.
+  static bool _isGitHubHttps(String? url) =>
+      url != null && sshUrlOf(url) != url;
 
   // ...........................................................................
   /// Asks every organization of [organizations] for its repositories.

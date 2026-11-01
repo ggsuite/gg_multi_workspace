@@ -82,6 +82,8 @@ void main() {
       gitHub = MockGitHubPlatform();
       azure = MockAzureDevOpsPlatform();
       when(() => gitCloner.cloneRepo(any(), any())).thenAnswer((_) async {});
+      when(() => gitCloner.switchOriginToSsh(any()))
+          .thenAnswer((_) async => true);
 
       tempDir = Directory.systemTemp.createTempSync('update_ocean_test');
       oceanPath = path.join(tempDir.path, ggMultiOceanFolder);
@@ -292,6 +294,56 @@ void main() {
           expect(other.existsSync(), isTrue);
         },
       );
+    });
+
+    // .........................................................................
+    group('switches GitHub https remotes to ssh', () {
+      late Directory oceanRepo;
+      late Directory ticketRepo;
+
+      setUp(() {
+        oceanRepo = createRepo(
+          'ggsuite',
+          'gg_one',
+          'https://github.com/ggsuite/gg_one.git',
+        );
+        createRepo('ggsuite', 'gg', 'git@github.com:ggsuite/gg.git');
+
+        final ticket = Directory(path.join(tempDir.path, 'my_ticket'))
+          ..createSync();
+        File(path.join(ticket.path, 'ticket.json')).writeAsStringSync('{}');
+        ticketRepo = Directory(path.join(ticket.path, 'gg_one'))..createSync();
+        Directory(path.join(ticketRepo.path, '.git')).createSync();
+        File(path.join(ticketRepo.path, '.git', 'config')).writeAsStringSync(
+          '[remote "origin"]\n\turl = https://github.com/ggsuite/gg_one\n',
+        );
+
+        when(() => gitHub.fetchOrgRepos('ggsuite')).thenAnswer(
+          (_) async => [ghRepo('ggsuite', 'gg_one'), ghRepo('ggsuite', 'gg')],
+        );
+      });
+
+      test('in the ocean and in the tickets', () async {
+        await run([]);
+
+        verify(() => gitCloner.switchOriginToSsh(oceanRepo.path)).called(1);
+        verify(() => gitCloner.switchOriginToSsh(ticketRepo.path)).called(1);
+        verifyNoMoreInteractions(gitCloner);
+        expect(
+          messages.first,
+          '✓ Switched the remotes of 2 repo(s) from https to ssh',
+        );
+      });
+
+      test('but only reports them on a dry run', () async {
+        await run(['--dry-run']);
+
+        verifyNever(() => gitCloner.switchOriginToSsh(any()));
+        expect(
+          messages.first,
+          '✓ Would switch the remotes of 2 repo(s) from https to ssh',
+        );
+      });
     });
 
     // .........................................................................
