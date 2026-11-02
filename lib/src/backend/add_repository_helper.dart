@@ -106,12 +106,17 @@ String? azureCloneUrl(Uri uri, ParseResult parsed) {
 /// packages that merely share a name are a different problem, and the price of
 /// getting this wrong is a repository that was legitimately added being thrown
 /// away again.
+///
+/// A checkout outside the folder its manifests name does not count when the
+/// clone sits in its own — the rule of [DuplicateRepoCleanup]: the clone is
+/// current and the checkout a leftover of a former name, see
+/// [isFormerNameCheckoutOf].
 Directory? existingCheckoutOf({
   required String workspacePath,
   required Directory clone,
 }) {
-  final identity = RepoIdentity.of(clone).declaredIdentity;
-  if (identity == null) {
+  final cloned = RepoIdentity.of(clone);
+  if (cloned.declaredIdentity == null) {
     return null;
   }
 
@@ -119,12 +124,46 @@ Directory? existingCheckoutOf({
     if (path.equals(dir.path, clone.path)) {
       continue;
     }
-    if (RepoIdentity.of(dir).declaredIdentity == identity) {
-      return dir;
+    final other = RepoIdentity.of(dir);
+    if (!cloned.isSameRepoAs(other) ||
+        (cloned.sitsInDeclaredRepoFolder && !other.sitsInDeclaredRepoFolder)) {
+      continue;
     }
+    return dir;
   }
 
   return null;
+}
+
+/// Whether [dir] is a checkout of [repoName] under a former name: its
+/// manifests declare [repoName], while its folder and its remote still name
+/// another repository of the same organization.
+///
+/// The platform redirects a renamed repository, so refreshing such a checkout
+/// brings in manifests that declare the new name while folder and remote keep
+/// the old one. `do upgrade ocean` and `do add` then clone the repository
+/// under its new name, keep that clone (see [existingCheckoutOf]) and let
+/// [DuplicateRepoCleanup] move the old folder to the trash. A folder that
+/// merely carries the package name has a remote that agrees with its
+/// manifests, and a fork or mirror has a remote in another organization —
+/// neither is affected.
+bool isFormerNameCheckoutOf(Directory dir, String repoName) {
+  // A folder named like the repository sits where it belongs; spare the read.
+  if (path.basename(dir.path) == repoName) {
+    return false;
+  }
+  final identity = RepoIdentity.of(dir);
+  final remote = identity.remoteUrl;
+  final declared = identity.declaredUrl;
+  if (identity.declaredRepoName != repoName ||
+      remote == null ||
+      declared == null ||
+      identity.remoteIdentity == identity.declaredIdentity) {
+    return false;
+  }
+  final remoteOrg = RepoFolderResolver.organizationOf(remote)?.toLowerCase();
+  return remoteOrg != null &&
+      remoteOrg == RepoFolderResolver.organizationOf(declared)?.toLowerCase();
 }
 
 /// Asks the user which organization a repository should be taken from.
@@ -259,7 +298,11 @@ Future<void> addRepositoryHelper({
     );
 
     // If repository folder already exists and is not empty ....................
-    if (existing != null && existing.listSync().isNotEmpty) {
+    // A checkout of a former name only shares the package name; the
+    // repository is cloned under its current name, see isFormerNameCheckoutOf.
+    if (existing != null &&
+        existing.listSync().isNotEmpty &&
+        !isFormerNameCheckoutOf(existing, repoName)) {
       if (!force) {
         if (logIfAlreadyAdded) {
           ggLog(darkGray('✓ $repoName (already added).'));

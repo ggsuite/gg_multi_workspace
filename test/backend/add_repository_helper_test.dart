@@ -1816,6 +1816,13 @@ void main() {
       );
     }
 
+    /// Points the git remote `origin` of [dir] at [url].
+    void writeRemote(Directory dir, String url) {
+      Directory(path.join(dir.path, '.git')).createSync();
+      File(path.join(dir.path, '.git', 'config'))
+          .writeAsStringSync('[remote "origin"]\n\turl = $url\n');
+    }
+
     /// A cloner that produces such a package wherever it is told to.
     MockGitCloner clonerWritingDnaDart() {
       final cloner = MockGitCloner();
@@ -1856,6 +1863,66 @@ void main() {
         anyElement(contains('dart_dna is dna_dart under a former name')),
       );
     });
+
+    test('of the current name is kept beside the checkout of the former '
+        'name', () async {
+      // `do upgrade ocean` refreshes the checkout of the former name through
+      // the platform's redirect, so it already declares the new name when
+      // the renamed repository is cloned. The clone sits where it belongs;
+      // moving the old folder away is DuplicateRepoCleanup's job.
+      final former = Directory(path.join(workspacePath, 'ggdna', 'dart_dna'));
+      writeDnaDart(former);
+      writeRemote(former, 'git@github.com:ggdna/dart_dna.git');
+
+      String? addedRepo;
+      await addRepositoryHelper(
+        targetArg: 'https://github.com/ggdna/dna_dart.git',
+        ggLog: ggLog,
+        gitCloner: clonerWritingDnaDart(),
+        workspacePath: workspacePath,
+        onRepoAdded: (name) async => addedRepo = name,
+      );
+
+      expect(
+        Directory(path.join(workspacePath, 'ggdna', 'dna_dart')).existsSync(),
+        isTrue,
+      );
+      expect(former.existsSync(), isTrue);
+      expect(addedRepo, 'dna_dart');
+      expect(logs, anyElement(contains('dna_dart from')));
+    });
+
+    // A folder found by package name is no checkout of a former name when
+    // its remote agrees with its manifests, or lies in another organization.
+    for (final (label, folder, remote) in [
+      (
+        'a folder named after the package has the remote its manifests declare',
+        'ggdna/dna_dart_pkg',
+        'git@github.com:ggdna/dna_dart.git',
+      ),
+      (
+        'the folder found by package name is a fork in another organization',
+        'goeran/my_dna',
+        'git@github.com:goeran/my_dna.git',
+      ),
+    ]) {
+      test('is not made when $label', () async {
+        final existing = Directory(path.join(workspacePath, folder));
+        writeDnaDart(existing);
+        writeRemote(existing, remote);
+        final cloner = clonerWritingDnaDart();
+
+        await addRepositoryHelper(
+          targetArg: 'https://github.com/ggdna/dna_dart.git',
+          ggLog: ggLog,
+          gitCloner: cloner,
+          workspacePath: workspacePath,
+        );
+
+        verifyNever(() => cloner.cloneRepo(any(), any()));
+        expect(existing.existsSync(), isTrue);
+      });
+    }
 
     test('drops the organization folder it was alone in', () async {
       writeDnaDart(Directory(path.join(workspacePath, 'ggdna', 'dna_dart')));

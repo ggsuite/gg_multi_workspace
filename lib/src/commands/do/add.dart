@@ -396,11 +396,7 @@ class AddCommand extends Command<dynamic> {
     // which is as likely to drop the current checkout as the stale one.
     // Repairing it here means the user never has to know it happened.
     if (heal) {
-      await _duplicateRepoCleanup.run(
-        workspacePath: oceanWorkspacePath,
-        rootPath: path.dirname(oceanWorkspacePath),
-        ggLog: ggLog,
-      );
+      await _healOcean();
     }
 
     if (ticketPath != null) {
@@ -434,6 +430,9 @@ class AddCommand extends Command<dynamic> {
           selectOrganization: _selectOrganization,
         ),
       );
+      if (heal) {
+        await _healOcean();
+      }
       return;
     }
 
@@ -487,6 +486,9 @@ class AddCommand extends Command<dynamic> {
         // We intentionally do not copy here; we copy after graph processing.
       ),
     );
+    if (heal && !transitiveRepos) {
+      await _healOcean();
+    }
 
     // The whole graph machinery below exists to find the repos that lie
     // between the ticket repos. With --no-transitive only the requested
@@ -499,6 +501,10 @@ class AddCommand extends Command<dynamic> {
         ticketPath: ticketPath,
         fetch: fetch,
       );
+      // Once after all clones, before the graph reads the ocean.
+      if (heal) {
+        await _healOcean();
+      }
 
       // Ticket-shadowed: an edge only the ticket has pulls its repos in too.
       Map<String, Node> allNodes = const {};
@@ -702,6 +708,16 @@ class AddCommand extends Command<dynamic> {
     }
     return targets.skip(2).toSet();
   }
+
+  // ...........................................................................
+  /// Moves the checkouts a repository rename left behind out of the ocean,
+  /// see [DuplicateRepoCleanup]. Runs before the clones and again after
+  /// them, see [isFormerNameCheckoutOf].
+  Future<void> _healOcean() => _duplicateRepoCleanup.run(
+    workspacePath: oceanWorkspacePath,
+    rootPath: path.dirname(oceanWorkspacePath),
+    ggLog: ggLog,
+  );
 
   // ...........................................................................
   /// Clones the missing dependencies of [requestedRepoNames] and of the
