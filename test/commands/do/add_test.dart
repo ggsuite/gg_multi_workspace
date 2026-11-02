@@ -215,6 +215,72 @@ void main() {
       }
     });
 
+    group('a renamed repository', () {
+      /// Writes a pubspec into [dir] that declares `ggsuite/xyz`.
+      void declareXyz(Directory dir) {
+        dir.createSync(recursive: true);
+        File(path.join(dir.path, 'pubspec.yaml')).writeAsStringSync(
+          'name: aud_xyz\nversion: 1.0.0\n'
+          'repository: https://github.com/ggsuite/xyz\n',
+        );
+      }
+
+      late Directory former;
+
+      setUp(() {
+        // The checkout of the former name already declares the new one.
+        former = Directory(path.join(oceanWorkspacePath, 'ggsuite', 'abc'));
+        declareXyz(former);
+        Directory(path.join(former.path, '.git')).createSync();
+        File(path.join(former.path, '.git', 'config')).writeAsStringSync(
+          '[remote "origin"]\n\turl = git@github.com:ggsuite/abc.git\n',
+        );
+        when(() => mockGitCloner.cloneRepo(any(), any()))
+            .thenAnswer((inv) async {
+              declareXyz(Directory(inv.positionalArguments[1] as String));
+            });
+      });
+
+      test('is cloned under its new name and the old folder is moved to '
+          'the trash', () async {
+        await runner.run(['add', 'https://github.com/ggsuite/xyz.git']);
+
+        expect(
+          Directory(path.join(oceanWorkspacePath, 'ggsuite', 'xyz'))
+              .existsSync(),
+          isTrue,
+        );
+        expect(former.existsSync(), isFalse);
+        expect(
+          Directory(
+            path.join(
+              tempDir.path,
+              ggMultiTrashFolder,
+              ggMultiOceanFolder,
+              'ggsuite',
+              'abc',
+            ),
+          ).existsSync(),
+          isTrue,
+        );
+      });
+
+      test('leaves the old folder alone with --no-heal', () async {
+        await runner.run([
+          'add',
+          'https://github.com/ggsuite/xyz.git',
+          '--no-heal',
+        ]);
+
+        expect(
+          Directory(path.join(oceanWorkspacePath, 'ggsuite', 'xyz'))
+              .existsSync(),
+          isTrue,
+        );
+        expect(former.existsSync(), isTrue);
+      });
+    });
+
     test('should clone single repository when target is a repo name', () async {
       await runner.run(['add', 'myrepo']);
       // GitHub is cloned over ssh, the organization is still registered by

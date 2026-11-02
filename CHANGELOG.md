@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Keep the clone of a renamed repository and move the folder of its former name to the trash
+
 ## 4.23.0 - 2026-11-01
 
 ### Changed

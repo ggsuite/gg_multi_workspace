@@ -266,6 +266,72 @@ void main() {
     });
 
     // .........................................................................
+    group('renamed repositories', () {
+      // The package is named either like the repository or differently —
+      // the first makes the folder of the former name findable by the new
+      // name, the second does not.
+      for (final package in ['xyz', 'aud_xyz']) {
+        /// Writes a pubspec into [dir] that declares `ggsuite/<repo>`.
+        void declare(Directory dir, String repo) {
+          dir.createSync(recursive: true);
+          File(path.join(dir.path, 'pubspec.yaml')).writeAsStringSync(
+            'name: $package\nversion: 1.0.0\n'
+            'repository: https://github.com/ggsuite/$repo\n',
+          );
+        }
+
+        test('end up under the new name after a single run '
+            '(package $package)', () async {
+          // The folder of the former name still has its former remote, but
+          // its content — refreshed through GitHub's redirect — already
+          // declares the new name.
+          final former = createRepo(
+            'ggsuite',
+            'abc',
+            'git@github.com:ggsuite/abc.git',
+          );
+          declare(former, 'xyz');
+          when(() => gitHub.fetchOrgRepos('ggsuite'))
+              .thenAnswer((_) async => [ghRepo('ggsuite', 'xyz')]);
+          when(() => gitCloner.cloneRepo(any(), any())).thenAnswer((inv) async {
+            declare(Directory(inv.positionalArguments[1] as String), 'xyz');
+          });
+
+          await run([]);
+
+          expect(
+            Directory(path.join(oceanPath, 'ggsuite', 'xyz')).existsSync(),
+            isTrue,
+          );
+          expect(former.existsSync(), isFalse);
+          expect(
+            Directory(
+              path.join(
+                tempDir.path,
+                ggMultiTrashFolder,
+                ggMultiOceanFolder,
+                'ggsuite',
+                'abc',
+              ),
+            ).existsSync(),
+            isTrue,
+          );
+          expect(
+            messages,
+            contains(
+              '🗑️ Moving ggsuite/abc to the trash: '
+              'it is xyz under a former name.',
+            ),
+          );
+          expect(
+            messages.last,
+            contains('1 added, 1 moved to the trash, 1 organization(s)'),
+          );
+        });
+      }
+    });
+
+    // .........................................................................
     group('azure organizations', () {
       test('are fetched with their project', () async {
         writeOrganizations(

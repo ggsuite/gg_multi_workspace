@@ -139,12 +139,13 @@ class UpdateOceanCommand extends Command<void> {
 
     // Now that every checkout is current, the ones a rename left behind are
     // recognizable by their own manifests.
-    await duplicateRepoCleanup.run(
+    Future<List<String>> trashDuplicates() => duplicateRepoCleanup.run(
       workspacePath: oceanPath,
       rootPath: root,
       ggLog: ggLog,
       dryRun: dryRun,
     );
+    final duplicates = await trashDuplicates();
 
     final fetched = await _fetchAll(organizations);
     if (fetched.isEmpty) {
@@ -156,7 +157,13 @@ class UpdateOceanCommand extends Command<void> {
       oceanPath: oceanPath,
       dryRun: dryRun,
     );
-    final removed = await _removeOrphans(
+
+    // A clone of a renamed repository leaves the folder of the former name
+    // behind, see isFormerNameCheckoutOf.
+    final leftovers = dryRun || added.isEmpty
+        ? const <String>[]
+        : await trashDuplicates();
+    final orphans = await _removeOrphans(
       fetched: fetched,
       oceanPath: oceanPath,
       root: root,
@@ -165,7 +172,7 @@ class UpdateOceanCommand extends Command<void> {
 
     _logSummary(
       added: added,
-      removed: removed,
+      removed: [...duplicates, ...leftovers, ...orphans],
       organizations: fetched.length,
       dryRun: dryRun,
     );
