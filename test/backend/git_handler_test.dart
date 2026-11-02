@@ -786,6 +786,43 @@ void main() {
       expect(prompts.asked, isEmpty);
     });
 
+    test('explains the refused key of Azure DevOps', () async {
+      const azureUrl =
+          'git@ssh.dev.azure.com:v3/mhk-carat/cos-carat-one-serverless/'
+          'cos-one-client';
+      when(() => mockProcessRunner('git', any())).thenAnswer(
+        (_) async => ProcessResult(
+          0,
+          128,
+          '',
+          "Cloning into 'cos-one-client'...\n"
+              '** WARNING: connection is not using a post-quantum key '
+              'exchange algorithm.\n'
+              'remote: Public key authentication failed.\n'
+              'fatal: Could not read from remote repository.',
+        ),
+      );
+
+      await expectLater(
+        handler().cloneRepo(azureUrl, targetDirectory),
+        throwsA(
+          isA<SshSetupException>()
+              .having((e) => e.host, 'host', 'ssh.dev.azure.com')
+              .having(
+                (e) => rmControls(e.message),
+                'message',
+                allOf(
+                  contains('Public key authentication failed.'),
+                  contains('ssh.dev.azure.com refused your SSH key.'),
+                  contains('"ssh-keygen -t rsa -b 4096"'),
+                ),
+              ),
+        ),
+      );
+      verifyNever(() => sshHostKeys.scan(any()));
+      expect(prompts.asked, isEmpty);
+    });
+
     group('remoteExists', () {
       test('asks to trust an unknown host and asks git again', () async {
         // exitCodes: the first ls-remote fails for the host, the next works.
