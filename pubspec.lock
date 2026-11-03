@@ -165,10 +165,10 @@ packages:
     dependency: transitive
     description:
       name: dna_gg
-      sha256: a65db7338ce48417162cb55637160b5a86adcc360d023cf7c06bebb3c6f9624c
+      sha256: ac1750bbef9083dbd6e75f7acc2f5b332751429df7bd0b74d5530d5ccfd1e42b
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.4.0"
   dna_ggsuite:
     dependency: "direct dev"
     description:
@@ -317,10 +317,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_git
-      sha256: "2937d71318553ce07a7b5a90811c54d124bfc5d9276a3e5d27c186063e0086a1"
+      sha256: "745a67be902bf8876402e0ea08430b92d07e1bb7d1d5492d26a344eb6004bc65"
       url: "https://pub.dev"
     source: hosted
-    version: "4.7.0"
+    version: "4.8.0"
   gg_hash:
     dependency: transitive
     description:

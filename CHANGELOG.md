@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.23.2 - 2026-11-03
+
+### Changed
+
+- Explain the refused SSH key of Azure DevOps
+
 ## 4.23.1 - 2026-11-02
 
 ### Changed
