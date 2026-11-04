@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- gg do add clones Azure DevOps repos always over ssh, not just GitHub, so a password prompt never has to succeed against an org that enforces 2FA
+
 ## 4.23.2 - 2026-11-03
 
 ### Changed

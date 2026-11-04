@@ -79,13 +79,38 @@ void main() {
         'git@github.com:ggsuite/gg_dna.git',
         'ssh://git@github.com/ggsuite/gg_dna.git',
         'git://github.com/ggsuite/gg_dna.git',
-        'https://dev.azure.com/myorg/myproj/_git/myrepo',
         'git@ssh.dev.azure.com:v3/acme/proj/myrepo',
         // No repository named: an organization, not a clone url.
         'https://github.com/ggsuite',
+        'https://dev.azure.com/myorg/myproj',
       ]) {
         expect(sshUrlOf(url), url, reason: url);
       }
+    });
+
+    test('turns an Azure DevOps web url into the ssh form', () {
+      // gg clones Azure DevOps always over ssh too: a password prompt on its
+      // https urls cannot succeed once the organization enforces 2FA.
+      for (final url in [
+        'https://dev.azure.com/myorg/myproj/_git/myrepo',
+        'https://dev.azure.com/myorg/myproj/_git/myrepo.git',
+        'https://myorg.visualstudio.com/myproj/_git/myrepo.git',
+      ]) {
+        expect(
+          sshUrlOf(url),
+          'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
+          reason: url,
+        );
+      }
+    });
+
+    test('expands the <org>/_git/<repo> shortcut to the ssh form', () {
+      // Azure accepts the shortcut when the project is named like the
+      // repository, so both are that one name.
+      expect(
+        sshUrlOf('https://dev.azure.com/myorg/_git/myrepo'),
+        'git@ssh.dev.azure.com:v3/myorg/myrepo/myrepo',
+      );
     });
   });
 
@@ -155,9 +180,8 @@ void main() {
       expect(azureSshBase('https://dev.azure.com/acme/proj/_git/'), isNull);
     });
 
-    test('appends only the repo name to an Azure DevOps web url', () {
-      // Azure rejects `.git` on its web URLs, so an organization whose base
-      // url ends in `_git/` gets the bare name.
+    test('builds the ssh url of a repo of an Azure web organization', () {
+      // gg clones Azure DevOps always over ssh, see [sshUrlOf].
       final org = Organization(
         name: 'myorg',
         url: 'https://dev.azure.com/myorg/myproj/_git/',
@@ -165,7 +189,7 @@ void main() {
       );
       expect(
         repoUrlOfOrganization(org, 'myrepo'),
-        'https://dev.azure.com/myorg/myproj/_git/myrepo',
+        'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
       );
     });
   });
@@ -224,17 +248,20 @@ void main() {
           verify(() => mockGitCloner.cloneRepo(cloneUrl, any())).called(1);
         }
 
-        test('Clones the full clone URL without appending .git', () async {
+        test('Clones the full clone URL over ssh', () async {
+          // gg clones Azure DevOps always over ssh, see [sshUrlOf]: a
+          // password prompt on its https urls cannot succeed once the
+          // organization enforces 2FA.
           await expectClone(
             'https://dev.azure.com/myorg/myproj/_git/myrepo',
-            'https://dev.azure.com/myorg/myproj/_git/myrepo',
+            'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
           );
         });
 
         test('Drops a .git suffix the user typed', () async {
           await expectClone(
             'https://dev.azure.com/myorg/myproj/_git/myrepo.git',
-            'https://dev.azure.com/myorg/myproj/_git/myrepo',
+            'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
           );
         });
 
@@ -246,22 +273,24 @@ void main() {
             // `myrepo.git` and failed.
             await expectClone(
               'https://dev.azure.com/myorg/_git/myrepo',
-              'https://dev.azure.com/myorg/myrepo/_git/myrepo',
+              'git@ssh.dev.azure.com:v3/myorg/myrepo/myrepo',
             );
           },
         );
 
-        test('Keeps the user info in front of the host', () async {
+        test('Drops the user info in front of the host over ssh', () async {
+          // The ssh form always connects as `git@`; a user name typed in
+          // front of the https host has no ssh equivalent.
           await expectClone(
             'https://myorg@dev.azure.com/myorg/myproj/_git/myrepo',
-            'https://myorg@dev.azure.com/myorg/myproj/_git/myrepo',
+            'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
           );
         });
 
         test('Keeps the legacy visualstudio.com host', () async {
           await expectClone(
             'https://myorg.visualstudio.com/myproj/_git/myrepo.git',
-            'https://myorg.visualstudio.com/myproj/_git/myrepo',
+            'git@ssh.dev.azure.com:v3/myorg/myproj/myrepo',
           );
         });
       });
@@ -568,11 +597,11 @@ void main() {
         final repoList = <Repository>[
           const Repository(
             name: 'repo1',
-            httpsUrl: 'https://dev.azure.com/myorg/myproj/repo1.git',
+            httpsUrl: 'https://dev.azure.com/myorg/myproj/_git/repo1',
           ),
           const Repository(
             name: 'repo2',
-            httpsUrl: 'https://dev.azure.com/myorg/myproj/repo2.git',
+            httpsUrl: 'https://dev.azure.com/myorg/myproj/_git/repo2',
           ),
         ];
 
@@ -596,7 +625,9 @@ void main() {
 
         for (final repo in repoList) {
           final repoName = repo.name;
-          final cloneUrl = repo.httpsUrl;
+          // gg clones Azure DevOps always over ssh, see [sshUrlOf], even
+          // when the platform only handed out the https url.
+          final cloneUrl = 'git@ssh.dev.azure.com:v3/myorg/myproj/$repoName';
           // On Azure DevOps the repo names are scoped to the project, so the
           // project is the folder that keeps them apart.
           final destination = path.join(workspacePath, 'myproj', repoName);
@@ -824,6 +855,11 @@ void main() {
     test('Processes Azure SSH URL correctly', () async {
       const targetArg =
           'git@ssh.dev.azure.com:v3/goeranhegenberg/project123/project123.git';
+      // A `.git` suffix the user typed is dropped: gg rebuilds the ssh url
+      // from its parts, see [sshUrlOf], and Azure's web host never accepts
+      // one — the ssh host is normalized the same way for consistency.
+      const expectedRepoUrl =
+          'git@ssh.dev.azure.com:v3/goeranhegenberg/project123/project123';
       final mockGitCloner = MockGitCloner();
       when(() => mockGitCloner.cloneRepo(any(), any()))
           .thenAnswer((_) async {});
@@ -842,9 +878,10 @@ void main() {
         'project123',
         'project123',
       );
-      verify(() => mockGitCloner.cloneRepo(targetArg, expectedDestination))
-          .called(1);
-      expect(logs, anyElement(contains('project123 from $targetArg')));
+      verify(
+        () => mockGitCloner.cloneRepo(expectedRepoUrl, expectedDestination),
+      ).called(1);
+      expect(logs, anyElement(contains('project123 from $expectedRepoUrl')));
     });
 
     group('Target containing "/" (non-http, non-SSH)', () {
