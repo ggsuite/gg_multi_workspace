@@ -165,8 +165,10 @@ gg can push # check for all repos if they are ready to push (checks + commit)
 gg do push # merge main into the feature branches and push all repos
 gg do review # push all repos (incl. main merge) and open the pull requests
 gg did review # check whether the current ticket state was reviewed
-gg do publish # publish all repos after review is approved (should be executed manually by a human)
+gg do publish -i <ticket> # publish all repos after review is approved (should be executed manually by a human, from the workspace root)
 ```
+
+Run `gg do publish` from the workspace root and name the ticket with `-i`: at the end gg moves the ticket folder to the trash, and Windows refuses to move a folder a terminal sits in.
 
 To install gg, run:
 ```bash

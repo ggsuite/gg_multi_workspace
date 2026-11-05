@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Name the ticket with -i in the gg do publish line of the generated CLAUDE.md and run it from the workspace root
+
 ## 4.23.3 - 2026-11-05
 
 ### Changed
