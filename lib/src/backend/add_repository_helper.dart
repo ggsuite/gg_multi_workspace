@@ -28,9 +28,11 @@ String repoUrlOfOrganization(Organization org, String repoName) {
   final baseUrl = org.url.endsWith('/') ? org.url : '${org.url}/';
   // Azure DevOps rejects a `.git` suffix on its web URLs
   // (`dev.azure.com/<org>/<project>/_git/<repo>`): it reads `repo.git` as
-  // the name of a repository that does not exist.
+  // the name of a repository that does not exist. gg clones Azure DevOps
+  // always over ssh too, see [sshUrlOf], so the web form is rebuilt as
+  // the ssh url before it is used.
   if (isAzureWebHost(Uri.tryParse(baseUrl)?.host ?? '')) {
-    return '$baseUrl$repoName';
+    return sshUrlOf('$baseUrl$repoName');
   }
   // Organizations recorded from an Azure SSH clone. Earlier versions stored
   // them as `https://ssh.dev.azure.com:v3/<org>/<project>/`, which git cannot

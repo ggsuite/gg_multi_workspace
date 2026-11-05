@@ -11,14 +11,31 @@ import 'dart:io';
 
 import 'package:gg_console_colors/gg_console_colors.dart';
 import 'package:gg_log/gg_log.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_process/gg_process.dart';
 
-/// [url] in its ssh form when it is a GitHub https URL, else unchanged:
-/// gg clones new repositories from GitHub always over ssh.
+/// [url] in its ssh form when it names a GitHub or Azure DevOps repository
+/// over https, else unchanged: gg clones both hosts always over ssh — a
+/// password prompt there cannot succeed once the organization enforces
+/// 2FA, which Azure DevOps commonly does.
 String sshUrlOf(String url) {
-  final match = _gitHubHttpsUrl.firstMatch(url);
-  return match == null ? url : 'git@github.com:${match[1]}/${match[2]}.git';
+  final gitHub = _gitHubHttpsUrl.firstMatch(url);
+  if (gitHub != null) {
+    return 'git@github.com:${gitHub[1]}/${gitHub[2]}.git';
+  }
+  final azure = const UrlParser().parse(url);
+  if (azure.platformType == 'azure' &&
+      azure.org != null &&
+      azure.project != null &&
+      azure.repo != null) {
+    return AzureDevOpsPlatform().buildRepoUrl(
+      azure.org!,
+      azure.repo!,
+      azure.project,
+    );
+  }
+  return url;
 }
 
 final _gitHubHttpsUrl = RegExp(
