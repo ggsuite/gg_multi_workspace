@@ -4215,6 +4215,28 @@ version: 1.0.0
             ..createSync(recursive: true)
             ..writeAsStringSync(pubspec);
 
+      /// Records that pub resolved the ticket repo [name], each package of
+      /// [rootUris] to its rootUri.
+      void resolved(String name, [Map<String, String> rootUris = const {}]) =>
+          File(
+              path.join(
+                ticketDir.path,
+                name,
+                '.dart_tool',
+                'package_config.json',
+              ),
+            )
+            ..createSync(recursive: true)
+            ..writeAsStringSync(
+              jsonEncode({
+                'configVersion': 2,
+                'packages': [
+                  for (final MapEntry(:key, :value) in rootUris.entries)
+                    {'name': key, 'rootUri': value},
+                ],
+              }),
+            );
+
       /// The repos `dart pub <command>` ran in, by folder name.
       List<String> pubRuns(String command) => [
         for (final dir in verify(
@@ -4229,7 +4251,11 @@ version: 1.0.0
       ];
 
       /// Runs `gg do add` with [args] in a ticket that holds [nodes].
-      Future<void> add(List<String> args, List<Node> nodes) async {
+      Future<void> add(
+        List<String> args,
+        List<Node> nodes, {
+        bool verbose = true,
+      }) async {
         final mockSorted = MockSortedProcessingList();
         when(
           () => mockSorted.get(
@@ -4265,7 +4291,12 @@ version: 1.0.0
           sortedProcessingList: mockSorted,
           localizeRefs: mockLoc,
         );
-        await runner.run(['add', '--verbose', '--no-transitive', ...args]);
+        await runner.run([
+          'add',
+          if (verbose) '--verbose',
+          '--no-transitive',
+          ...args,
+        ]);
       }
 
       setUp(() {
@@ -4310,6 +4341,7 @@ version: 1.0.0
 
       test('leaves a ticket repo in sync alone', () async {
         repo(ticketDir.path, 'old', 'name: old');
+        resolved('old');
         repo(oceanWorkspacePath, 'fresh', 'name: fresh');
 
         await add(['fresh'], [node('old'), node('fresh')]);
@@ -4337,6 +4369,66 @@ version: 1.0.0
         await add(['fresh'], [node('fresh'), node('old')]);
 
         expect(pubRuns('get'), ['fresh', 'old']);
+      });
+
+      test('resolves a ticket repo again whose last resolution failed, '
+          'so the next run heals an interrupted one', () async {
+        // In sync, but pub still resolves dep from the registry.
+        repo(
+          ticketDir.path,
+          'old',
+          'name: old\nversion: 1.0.0\ndependencies:\n  dep: ^1.0.0\n',
+        );
+        File(path.join(ticketDir.path, 'old', 'pubspec_overrides.yaml'))
+            .writeAsStringSync(
+              'dependency_overrides:\n  dep:\n    path: ../dep\n',
+            );
+        resolved('old', {'dep': 'file:///pub-cache/hosted/dep-1.0.0/'});
+        repo(ticketDir.path, 'dep', 'name: dep\nversion: 1.0.0\n');
+        resolved('dep');
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+
+        await add(['fresh'], [node('dep'), node('old'), node('fresh')]);
+
+        expect(pubRuns('get'), ['old', 'fresh']);
+      });
+
+      test('shows a failing pub get also without --verbose', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+        when(
+          () => mockProc(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 1, '', 'offline'));
+
+        await add(['fresh'], [node('fresh')], verbose: false);
+
+        expect(
+          logMessages,
+          contains('Failed to execute dart pub get in fresh: offline'),
+        );
+      });
+
+      test('shows a failing install with --no-localize', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+        when(
+          () => mockProc(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 1, '', 'offline'));
+
+        await add(['--no-localize', 'fresh'], [node('fresh')], verbose: false);
+
+        expect(
+          logMessages,
+          contains('Failed to execute dart pub get in fresh: offline'),
+        );
       });
 
       test('installs the copied repos with --no-localize', () async {

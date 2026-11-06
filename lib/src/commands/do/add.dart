@@ -828,7 +828,8 @@ class AddCommand extends Command<dynamic> {
   }
 
   /// Installs the dependencies of the repos copied now, one after the other:
-  /// parallel installs would fetch the same git mirrors of the pub cache.
+  /// parallel installs would fetch the same git mirrors of the pub cache. A
+  /// failure is always shown, also without `--verbose`.
   Future<void> _installDependencies({
     required Set<String> copiedDirs,
     required GgLog ggLog,
@@ -839,6 +840,7 @@ class AddCommand extends Command<dynamic> {
         repoName: path.basename(dir),
         ggLog: ggLog,
         processRunner: processRunner,
+        errorLog: this.ggLog,
       );
     }
   }
@@ -1882,11 +1884,13 @@ class AddCommand extends Command<dynamic> {
   /// and commits what gg changed since [baseline]; the user's own changes
   /// stay uncommitted.
   ///
-  /// Only the repos this run touches are localized and resolved: the ones in
-  /// [copiedDirs], never resolved in the ticket, and the ones a new repo put
-  /// out of sync. Resolving every repo on every call would make adding repos
-  /// one by one quadratic — each resolution contacts the remote of every git
-  /// dependency the lock file does not cover yet.
+  /// Only the repos that need it are localized and resolved: the ones in
+  /// [copiedDirs], never resolved in the ticket, the ones a new repo put out
+  /// of sync, and the ones whose last resolution failed or never ran (see
+  /// [repoDependenciesOutdated]) — which keeps an interrupted run healing
+  /// with the next one. Resolving every repo on every call would make adding
+  /// repos one by one quadratic — each resolution contacts the remote of
+  /// every git dependency the lock file does not cover yet.
   Future<void> _localizeTicket({
     required Directory ticketDir,
     required Map<String, RepoBaseline> baseline,
@@ -1898,12 +1902,13 @@ class AddCommand extends Command<dynamic> {
       return;
     }
 
-    final copied = copiedDirs.map(path.normalize).toSet();
+    final copied = copiedDirs.map(path.canonicalize).toSet();
     final outOfSync = (await _ticketLocalizer.outOfSync(nodes)).toSet();
     final repos = [
       for (final node in nodes)
-        if (outOfSync.contains(node) ||
-            copied.contains(path.normalize(node.directory.path)))
+        if (copied.contains(path.canonicalize(node.directory.path)) ||
+            outOfSync.contains(node) ||
+            repoDependenciesOutdated(node.directory))
           node,
     ];
 
@@ -1914,6 +1919,8 @@ class AddCommand extends Command<dynamic> {
       repoDirs: RepoFolderResolver.repoDirs(ticketDir.path),
       baseline: baseline,
       ggLog: ggLog,
+      // Shown also without --verbose: the repo does not build until fixed.
+      installErrorLog: this.ggLog,
       // Only the repos copied now are clean ocean code: record them.
       recordStateFor: copiedDirs,
     );
