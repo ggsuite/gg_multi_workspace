@@ -30,9 +30,13 @@ underlying model lives in `gg_multi_core`.
 ### Localized references
 
 Inside a ticket every repo resolves its sibling repos from their checkouts,
-not from the registry. `do add` localizes the whole ticket at its end;
-`do localize` does the same without adding anything — run it after adding a
-dependency on a sibling repo by hand. Both commit only gg's own files
+not from the registry. `do add` brings the whole ticket in sync at its end,
+but resolves only the repos that need it: the ones it copied, the ones a new
+repo put out of sync and the ones an earlier run left unresolved — with
+`pub get`, which keeps the lock file; `gg do push` upgrades. So adding repos
+one by one costs about as much as adding them in one call. `do localize`
+localizes without adding anything — run it after adding a dependency on a
+sibling repo by hand. Both commit only gg's own files
 (`pubspec_overrides.yaml`, `pnpm-workspace.yaml`, lock files, `.gg/`, and
 what gg itself wrote during the run) as a `#gg:` commit. Unfinished work —
 including the manifest edit that added the dependency — stays uncommitted
