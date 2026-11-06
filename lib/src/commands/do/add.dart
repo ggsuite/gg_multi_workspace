@@ -822,7 +822,26 @@ class AddCommand extends Command<dynamic> {
       // Without localization the ticket description is still kept current — it
       // describes which repos the ticket holds, not how they reference another.
       await _writeTicketJson(ticketDir: ticketDir, ggLog: taskLog);
+      await _installDependencies(copiedDirs: copiedDirs, ggLog: taskLog);
       ggLog(cDetail('Skip localizing references (--no-localize).'));
+    }
+  }
+
+  /// Installs the dependencies of the repos copied now, one after the other:
+  /// parallel installs would fetch the same git mirrors of the pub cache. A
+  /// failure is always shown, also without `--verbose`.
+  Future<void> _installDependencies({
+    required Set<String> copiedDirs,
+    required GgLog ggLog,
+  }) async {
+    for (final dir in copiedDirs) {
+      await installRepoDependencies(
+        dir: Directory(dir),
+        repoName: path.basename(dir),
+        ggLog: ggLog,
+        processRunner: processRunner,
+        errorLog: this.ggLog,
+      );
     }
   }
 
@@ -1448,8 +1467,9 @@ class AddCommand extends Command<dynamic> {
     return copiedDirs;
   }
 
-  /// Copies the repository from the ocean to the [ticketPath] but
-  /// does not trigger a ticket-wide relocalization.
+  /// Copies the repository from the ocean to the [ticketPath] but neither
+  /// localizes it nor installs its dependencies — [_copyAndLocalize] does,
+  /// once all repos are in place.
   ///
   /// `found` is false when the repository is not in the ocean at all;
   /// `copiedDir` is its ticket folder when it was copied now.
@@ -1512,14 +1532,6 @@ class AddCommand extends Command<dynamic> {
     } catch (e) {
       ggLog(cError('Failed to checkout branch $ticketName: $e'));
     }
-
-    // Install deps for every package manager the repo uses (Dart and/or TS).
-    await installRepoDependencies(
-      dir: destDir,
-      repoName: repoName,
-      ggLog: ggLog,
-      processRunner: processRunner,
-    );
 
     ggLog(cDetail('Added repository $repoName to ticket workspace.'));
     return (found: true, copiedDir: destDir);
@@ -1868,9 +1880,17 @@ class AddCommand extends Command<dynamic> {
     return nodes;
   }
 
-  /// Localizes the references between all ticket repos (sorted order),
-  /// upgrades their dependencies and commits what gg changed since
-  /// [baseline]; the user's own changes stay uncommitted.
+  /// Brings the references between all ticket repos in sync (sorted order)
+  /// and commits what gg changed since [baseline]; the user's own changes
+  /// stay uncommitted.
+  ///
+  /// Only the repos that need it are localized and resolved: the ones in
+  /// [copiedDirs], never resolved in the ticket, the ones a new repo put out
+  /// of sync, and the ones whose last resolution failed or never ran (see
+  /// [repoDependenciesOutdated]) — which keeps an interrupted run healing
+  /// with the next one. Resolving every repo on every call would make adding
+  /// repos one by one quadratic — each resolution contacts the remote of
+  /// every git dependency the lock file does not cover yet.
   Future<void> _localizeTicket({
     required Directory ticketDir,
     required Map<String, RepoBaseline> baseline,
@@ -1882,15 +1902,27 @@ class AddCommand extends Command<dynamic> {
       return;
     }
 
-    // Commits the repos localized before a failing one all the same.
+    final copied = copiedDirs.map(path.canonicalize).toSet();
+    final outOfSync = (await _ticketLocalizer.outOfSync(nodes)).toSet();
+    final repos = [
+      for (final node in nodes)
+        if (copied.contains(path.canonicalize(node.directory.path)) ||
+            outOfSync.contains(node) ||
+            repoDependenciesOutdated(node.directory))
+          node,
+    ];
+
+    // Commits the repos localized before a failing one all the same — and
+    // the config files gg wrote into the others.
     await _ticketLocalizer.localizeAndCommit(
-      repos: nodes,
+      repos: repos,
       repoDirs: RepoFolderResolver.repoDirs(ticketDir.path),
       baseline: baseline,
       ggLog: ggLog,
+      // Shown also without --verbose: the repo does not build until fixed.
+      installErrorLog: this.ggLog,
       // Only the repos copied now are clean ocean code: record them.
       recordStateFor: copiedDirs,
-      upgrade: true,
     );
 
     final ticketName = path.basename(ticketDir.path);
