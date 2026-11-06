@@ -383,7 +383,7 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "4.15.1"
+    version: "4.16.0"
   gg_one:
     dependency: "direct main"
     description:
