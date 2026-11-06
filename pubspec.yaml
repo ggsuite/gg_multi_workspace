@@ -15,9 +15,9 @@ dependencies:
   gg_localize_refs: ^5.2.1
   gg_log: ^1.2.0
   gg_create_repo: ^0.0.5
-  gg_multi_core: ^4.16.0
+  gg_multi_core: ^4.17.0
   gg_one: ^14.4.13
-  gg_process: ^1.4.0
+  gg_process: ^1.4.1
   gg_status_printer: ^1.6.4
   helix: ^1.14.0
   http: ^1.6.0
@@ -27,7 +27,7 @@ dependencies:
   yaml_edit: ^2.2.4
 
 dev_dependencies:
-  dna_ggsuite: ^1.0.1
+  dna_ggsuite: ^1.0.2
   gg_capture_print: ^1.2.1
   gg_lang: ^0.8.4
   lints: ^6.1.0
