@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- gg do add localizes and resolves only the copied and out-of-sync repos, with pub get instead of pub upgrade and without a second install after copying
+
 ## 4.23.3 - 2026-11-05
 
 ### Changed
