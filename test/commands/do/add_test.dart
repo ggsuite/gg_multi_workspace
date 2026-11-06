@@ -2395,7 +2395,7 @@ version: 1.0.0
 
         await runner.run(['add', '--verbose', repoName]);
 
-        // npm install runs twice: after copy and after localizing.
+        // Once, in the closing localization: the copy installs nothing.
         verify(
           () => mockProcessRunner(
             'npm',
@@ -2403,7 +2403,7 @@ version: 1.0.0
             workingDirectory: path.join(ticketDir.path, repoName),
             runInShell: true,
           ),
-        ).called(2);
+        ).called(1);
         expect(logMessages, contains('Executed npm install in $repoName.'));
       });
     });
@@ -2628,7 +2628,22 @@ version: 1.0.0
           path.join(tempDir.path, ggMultiLegacyTicketFolder, 'NOFETCH_TICKET'),
         )..createSync(recursive: true);
 
-        createRunner(executionPath: ticketDir.path);
+        // No real pub or npm: they would try to resolve the made-up packages
+        // against the registries.
+        final mockProc = MockProcessRunner();
+        when(
+          () => mockProc(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
+
+        createRunner(
+          executionPath: ticketDir.path,
+          processRunner: mockProc.call,
+        );
 
         await runner.run(['add', targetName, '--no-fetch']);
 
@@ -2780,7 +2795,7 @@ version: 1.0.0
           await runner.run(['add', repoName]);
 
           final ticketRepo = path.join(ticketDir.path, repoName);
-          // After copy: both dart pub get and npm install run.
+          // The closing localization installs both languages, once each.
           verify(
             () => mockProc(
               'dart',
@@ -2793,15 +2808,6 @@ version: 1.0.0
             () => mockProc(
               'npm',
               ['install'],
-              workingDirectory: ticketRepo,
-              runInShell: true,
-            ),
-          ).called(greaterThanOrEqualTo(1));
-          // After localizing: dart pub upgrade also runs.
-          verify(
-            () => mockProc(
-              'dart',
-              ['pub', 'upgrade'],
               workingDirectory: ticketRepo,
               runInShell: true,
             ),
@@ -4191,181 +4197,72 @@ version: 1.0.0
       );
     });
 
-    group('dart pub upgrade in localization', () {
-      test(
-        'executes dart pub upgrade after localize and logs success',
-        () async {
-          const repoName = 'upgradeRepo';
-          final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
-            ..createSync(recursive: true);
-          File(path.join(repoDir.path, 'pubspec.yaml'))
-              .writeAsStringSync('name: $repoName');
+    group('resolution in the closing localization', () {
+      late Directory ticketDir;
+      late MockProcessRunner mockProc;
+      late MockLocalizeRefs mockLoc;
 
-          final ticketDir = Directory(
-            path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG'),
-          )..createSync(recursive: true);
-
-          final mockSorted = MockSortedProcessingList();
-          when(
-            () => mockSorted.get(
-              directory: any(named: 'directory'),
-              ggLog: any(named: 'ggLog'),
-            ),
-          ).thenAnswer(
-            (_) async => [
-              Node(
-                name: repoName,
-                directory: Directory(path.join(ticketDir.path, repoName)),
-                manifest: DartPackageManifest(pubspec: Pubspec(repoName)),
-              ),
-            ],
-          );
-
-          final mockLoc = MockLocalizeRefs();
-          when(
-            () => mockLoc.get(
-              directory: any(named: 'directory'),
-              ggLog: any(named: 'ggLog'),
-            ),
-          ).thenAnswer((_) async {});
-
-          final mockProc = MockProcessRunner();
-          when(
-            () => mockProc(
-              'git',
-              any(),
-              workingDirectory: any(named: 'workingDirectory'),
-              runInShell: true,
-            ),
-          ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-          when(
-            () => mockProc(
-              'dart',
-              ['pub', 'get'],
-              workingDirectory: any(named: 'workingDirectory'),
-              runInShell: true,
-            ),
-          ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-          when(
-            () => mockProc(
-              'dart',
-              ['pub', 'upgrade'],
-              workingDirectory: any(named: 'workingDirectory'),
-              runInShell: true,
-            ),
-          ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-
-          final mockDoCommit = MockGgSystemCommit();
-          when(
-            () => mockDoCommit.commit(
-              directory: any(named: 'directory'),
-              ggLog: any(named: 'ggLog'),
-              message: any(named: 'message'),
-              paths: any(named: 'paths'),
-              includeUntracked: any(named: 'includeUntracked'),
-              ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
-              userCommitMessage: any(named: 'userCommitMessage'),
-              stateKey: any(named: 'stateKey'),
-              keepForeignChanges: any(named: 'keepForeignChanges'),
-            ),
-          ).thenAnswer(
-            (_) async => const gg.GgSystemCommitResult(
-              userCommitCreated: false,
-              systemCommitCreated: true,
-              ggOwnedPaths: ['pubspec_overrides.yaml'],
-              foreignPaths: [],
-            ),
-          );
-
-          when(
-            () => mockProc(
-              'git',
-              ['status', '--porcelain', '--untracked-files=no'],
-              workingDirectory: any(named: 'workingDirectory'),
-              runInShell: true,
-            ),
-          ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-          createRunner(
-            executionPath: ticketDir.path,
-            processRunner: mockProc.call,
-            systemCommit: mockDoCommit,
-            sortedProcessingList: mockSorted,
-            localizeRefs: mockLoc,
-          );
-
-          await runner.run(['add', '--verbose', repoName]);
-
-          expect(
-            logMessages.any(
-              (m) => m.contains('Executed dart pub upgrade in $repoName.'),
-            ),
-            isTrue,
-          );
-        },
+      /// The node of the ticket repo [name].
+      Node node(String name) => Node(
+        name: name,
+        directory: Directory(path.join(ticketDir.path, name)),
+        manifest: DartPackageManifest(pubspec: Pubspec(name)),
       );
 
-      test('logs error and aborts when dart pub upgrade '
-          'fails in localization', () async {
-        const repoName = 'upgradeFailRepo';
-        final repoDir = Directory(path.join(oceanWorkspacePath, repoName))
-          ..createSync(recursive: true);
-        File(path.join(repoDir.path, 'pubspec.yaml'))
-            .writeAsStringSync('name: $repoName');
+      /// Writes [pubspec] into the folder of [name] below [root].
+      void repo(String root, String name, String pubspec) =>
+          File(path.join(root, name, 'pubspec.yaml'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync(pubspec);
 
-        final ticketDir = Directory(
-          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-UPG-FAIL'),
-        )..createSync(recursive: true);
+      /// Records that pub resolved the ticket repo [name], each package of
+      /// [rootUris] to its rootUri.
+      void resolved(String name, [Map<String, String> rootUris = const {}]) =>
+          File(
+              path.join(
+                ticketDir.path,
+                name,
+                '.dart_tool',
+                'package_config.json',
+              ),
+            )
+            ..createSync(recursive: true)
+            ..writeAsStringSync(
+              jsonEncode({
+                'configVersion': 2,
+                'packages': [
+                  for (final MapEntry(:key, :value) in rootUris.entries)
+                    {'name': key, 'rootUri': value},
+                ],
+              }),
+            );
 
+      /// The repos `dart pub <command>` ran in, by folder name.
+      List<String> pubRuns(String command) => [
+        for (final dir in verify(
+          () => mockProc(
+            'dart',
+            ['pub', command],
+            workingDirectory: captureAny(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).captured)
+          path.basename(dir as String),
+      ];
+
+      /// Runs `gg do add` with [args] in a ticket that holds [nodes].
+      Future<void> add(
+        List<String> args,
+        List<Node> nodes, {
+        bool verbose = true,
+      }) async {
         final mockSorted = MockSortedProcessingList();
         when(
           () => mockSorted.get(
             directory: any(named: 'directory'),
             ggLog: any(named: 'ggLog'),
           ),
-        ).thenAnswer(
-          (_) async => [
-            Node(
-              name: repoName,
-              directory: Directory(path.join(ticketDir.path, repoName)),
-              manifest: DartPackageManifest(pubspec: Pubspec(repoName)),
-            ),
-          ],
-        );
-
-        final mockLoc = MockLocalizeRefs();
-        when(
-          () => mockLoc.get(
-            directory: any(named: 'directory'),
-            ggLog: any(named: 'ggLog'),
-          ),
-        ).thenAnswer((_) async {});
-
-        final mockProc = MockProcessRunner();
-        when(
-          () => mockProc(
-            'git',
-            any(),
-            workingDirectory: any(named: 'workingDirectory'),
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'dart',
-            ['pub', 'get'],
-            workingDirectory: any(named: 'workingDirectory'),
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(1, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'dart',
-            ['pub', 'upgrade'],
-            workingDirectory: any(named: 'workingDirectory'),
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(1, 1, '', 'Upgrade error'));
-
+        ).thenAnswer((_) async => nodes);
         final mockDoCommit = MockGgSystemCommit();
         when(
           () => mockDoCommit.commit(
@@ -4387,15 +4284,6 @@ version: 1.0.0
             foreignPaths: [],
           ),
         );
-
-        when(
-          () => mockProc(
-            'git',
-            ['status', '--porcelain', '--untracked-files=no'],
-            workingDirectory: any(named: 'workingDirectory'),
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
         createRunner(
           executionPath: ticketDir.path,
           processRunner: mockProc.call,
@@ -4403,17 +4291,157 @@ version: 1.0.0
           sortedProcessingList: mockSorted,
           localizeRefs: mockLoc,
         );
+        await runner.run([
+          'add',
+          if (verbose) '--verbose',
+          '--no-transitive',
+          ...args,
+        ]);
+      }
 
-        await runner.run(['add', '--verbose', repoName]);
+      setUp(() {
+        ticketDir = Directory(
+          path.join(tempDir.path, ggMultiLegacyTicketFolder, 'T-RESOLVE'),
+        )..createSync(recursive: true);
+        mockLoc = MockLocalizeRefs();
+        when(
+          () => mockLoc.get(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).thenAnswer((_) async {});
+        // Every command succeeds silently: an empty `git status` is clean.
+        mockProc = MockProcessRunner();
+        when(
+          () => mockProc(
+            any(),
+            any(),
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
+      });
+
+      test('resolves a copied repo once, with pub get', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+
+        await add(['fresh'], [node('fresh')]);
+
+        expect(pubRuns('get'), ['fresh']);
+        verifyNever(
+          () => mockProc(
+            'dart',
+            ['pub', 'upgrade'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        );
+        expect(logMessages, contains('Executed dart pub get in fresh.'));
+      });
+
+      test('leaves a ticket repo in sync alone', () async {
+        repo(ticketDir.path, 'old', 'name: old');
+        resolved('old');
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+
+        await add(['fresh'], [node('old'), node('fresh')]);
+
+        expect(pubRuns('get'), ['fresh']);
+        final localized = verify(
+          () => mockLoc.get(
+            directory: captureAny(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).captured;
+        expect(localized.map((d) => path.basename((d as Directory).path)), [
+          'fresh',
+        ]);
+      });
+
+      test('resolves a ticket repo the new repo puts out of sync', () async {
+        repo(
+          ticketDir.path,
+          'old',
+          'name: old\nversion: 1.0.0\ndependencies:\n  fresh: ^1.0.0\n',
+        );
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh\nversion: 1.0.0\n');
+
+        await add(['fresh'], [node('fresh'), node('old')]);
+
+        expect(pubRuns('get'), ['fresh', 'old']);
+      });
+
+      test('resolves a ticket repo again whose last resolution failed, '
+          'so the next run heals an interrupted one', () async {
+        // In sync, but pub still resolves dep from the registry.
+        repo(
+          ticketDir.path,
+          'old',
+          'name: old\nversion: 1.0.0\ndependencies:\n  dep: ^1.0.0\n',
+        );
+        File(path.join(ticketDir.path, 'old', 'pubspec_overrides.yaml'))
+            .writeAsStringSync(
+              'dependency_overrides:\n  dep:\n    path: ../dep\n',
+            );
+        resolved('old', {'dep': 'file:///pub-cache/hosted/dep-1.0.0/'});
+        repo(ticketDir.path, 'dep', 'name: dep\nversion: 1.0.0\n');
+        resolved('dep');
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+
+        await add(['fresh'], [node('dep'), node('old'), node('fresh')]);
+
+        expect(pubRuns('get'), ['old', 'fresh']);
+      });
+
+      test('shows a failing pub get also without --verbose', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+        when(
+          () => mockProc(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
+          ),
+        ).thenAnswer((_) async => ProcessResult(1, 1, '', 'offline'));
+
+        await add(['fresh'], [node('fresh')], verbose: false);
 
         expect(
-          logMessages.any(
-            (m) => m.contains(
-              'Failed to execute dart pub upgrade '
-              'in $repoName: Upgrade error',
-            ),
+          logMessages,
+          contains('Failed to execute dart pub get in fresh: offline'),
+        );
+      });
+
+      test('shows a failing install with --no-localize', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+        when(
+          () => mockProc(
+            'dart',
+            ['pub', 'get'],
+            workingDirectory: any(named: 'workingDirectory'),
+            runInShell: true,
           ),
-          isTrue,
+        ).thenAnswer((_) async => ProcessResult(1, 1, '', 'offline'));
+
+        await add(['--no-localize', 'fresh'], [node('fresh')], verbose: false);
+
+        expect(
+          logMessages,
+          contains('Failed to execute dart pub get in fresh: offline'),
+        );
+      });
+
+      test('installs the copied repos with --no-localize', () async {
+        repo(oceanWorkspacePath, 'fresh', 'name: fresh');
+
+        await add(['--no-localize', 'fresh'], [node('fresh')]);
+
+        expect(pubRuns('get'), ['fresh']);
+        verifyNever(
+          () => mockLoc.get(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+          ),
         );
       });
     });

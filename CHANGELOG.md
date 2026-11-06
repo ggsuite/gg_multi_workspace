@@ -5,6 +5,12 @@
 ### Changed
 
 - Name the ticket with -i in the gg do publish line of the generated CLAUDE.md and run it from the workspace root
+## 4.24.0 - 2026-11-06
+
+### Changed
+
+- gg do add localizes and resolves only the copied and out-of-sync repos, with pub get instead of pub upgrade and without a second install after copying
+- gg do add also resolves the ticket repos an interrupted or failed run left unresolved, and shows failed installs without --verbose
 
 ## 4.23.3 - 2026-11-05
 
