@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.24.2 - 2026-11-10
+
+### Added
+
+- Add a blog post about using ReadSettings from gg_multi_core
+- Add the German blog post about ReadSettings
+
+### Changed
+
+- Use ReadSettings from gg_multi_core
+
 ## 4.24.1 - 2026-11-06
 
 ### Changed

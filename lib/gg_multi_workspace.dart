@@ -16,7 +16,8 @@ export 'src/backend/legacy_git_hooks.dart';
 export 'src/backend/list_backend.dart';
 
 // Moved to gg_multi_core; still exported for the users of this package.
-export 'package:gg_multi_core/gg_multi_core.dart' show OrganizationRepoLists;
+export 'package:gg_multi_core/gg_multi_core.dart'
+    show OrganizationRepoLists, ReadSettings;
 
 export 'src/backend/repo_setup.dart';
 export 'src/backend/vscode_launcher.dart';

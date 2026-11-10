@@ -87,10 +87,6 @@ List<String> matchOceanRepoNames(
 }
 
 // #############################################################################
-/// Reads the user's settings — [GgRc.load] fits.
-typedef ReadSettings = GgRc Function({required GgLog ggLog});
-
-// #############################################################################
 /// The [AddReposBetween] `gg do review` is handed: adds the repos between
 /// [releases] and the ticket in [ticketDir] the way
 /// `gg do add transitive for <releases>` does — `--no-fetch`, like
