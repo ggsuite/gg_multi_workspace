@@ -5,6 +5,7 @@
 ### Added
 
 - Add a blog post about using ReadSettings from gg_multi_core
+- Add the German blog post about ReadSettings
 
 ### Changed
 
