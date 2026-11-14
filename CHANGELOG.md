@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add only the requested repos with gg do add by default
+
+--transitive, or do.add.transitive = true in ~/.gg_rc, adds the repos between
+The skip line names the default as its source when no file sets it
+
 ## 4.25.0 - 2026-11-14
 
 ### Changed

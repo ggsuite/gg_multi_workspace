@@ -114,13 +114,13 @@ Future<List<String>> addReposBetweenWithAddCommand({
 /// `--organization` may be given multiple times to add all repos of several
 /// organization folders of the ocean at once. `--no-localize`
 /// copies the repos without rewriting their references to local paths.
-/// `--no-transitive` copies only the requested repos and leaves the
-/// repos between them in the dependency graph out of the ticket; `~/.gg_rc`
-/// (`{"do": {"add": {"transitive": false}}}`, see [GgRc]) makes that the
-/// default. `gg do add transitive for <repo>…` adds them afterwards — only
-/// the repos above `<repo>`, which its breaking release strands (see
-/// [ReposBetween]); `gg do add transitive` without `for` asks about every
-/// ticket repo.
+/// By default only the requested repos are copied: the repos between them in
+/// the dependency graph stay out of the ticket. `--transitive` copies those
+/// too; `~/.gg_rc` (`{"do": {"add": {"transitive": true}}}`, see [GgRc])
+/// makes that the default. `gg do add transitive for <repo>…` adds them
+/// afterwards — only the repos above `<repo>`, which its breaking release
+/// strands (see [ReposBetween]); `gg do add transitive` without `for` asks
+/// about every ticket repo.
 class AddCommand extends Command<dynamic> {
   /// Constructor. [localizeRefs], [backupPublishTo], [systemCommit] and
   /// [processRunner] reach the localization only when [ticketLocalizer] is
@@ -213,9 +213,9 @@ class AddCommand extends Command<dynamic> {
     argParser.addFlag(
       'transitive',
       help:
-          'Also add the repos between the ticket repos (default; '
-          '~/.gg_rc can turn it off)',
-      defaultsTo: true,
+          'Also add the repos between the ticket repos (off by default; '
+          '~/.gg_rc can turn it on)',
+      defaultsTo: false,
       negatable: true,
     );
     argParser.addFlag(
@@ -496,8 +496,9 @@ class AddCommand extends Command<dynamic> {
     }
 
     // The whole graph machinery below exists to find the repos that lie
-    // between the ticket repos. With --no-transitive only the requested
-    // repos are copied, so neither the clone step nor the graph is needed.
+    // between the ticket repos. Without --transitive — the default — only
+    // the requested repos are copied, so neither the clone step nor the
+    // graph is needed.
     final betweenNodes = <Node>[];
 
     if (transitiveRepos) {
@@ -559,8 +560,10 @@ class AddCommand extends Command<dynamic> {
     } else {
       final why = transitiveFromCli
           ? '--no-transitive'
-          : '${settings.file?.path ?? GgRc.fileName}: '
-                '${GgRc.keyPath(_transitiveSetting)} = false';
+          : settings.isSet(_transitiveSetting)
+          ? '${settings.file?.path ?? GgRc.fileName}: '
+                '${GgRc.keyPath(_transitiveSetting)} = false'
+          : 'default';
       ggLog(
         cDetail(
           'Skip adding transitive repos ($why). A breaking release adds '
