@@ -5,9 +5,9 @@
 ### Added
 
 - Add only the requested repos with gg do add by default
+- Add a blog post on adding only the requested repos
 
---transitive, or do.add.transitive = true in ~/.gg_rc, adds the repos between
-The skip line names the default as its source when no file sets it
+doc/blog/2026/2026-11-14-add-only-the-requested-repos-by-default.md
 
 ## 4.25.0 - 2026-11-14
 
