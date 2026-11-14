@@ -6,8 +6,9 @@
 
 - Add only the requested repos with gg do add by default
 - Add a blog post on adding only the requested repos
+- Add the German version of the blog post
 
-doc/blog/2026/2026-11-14-add-only-the-requested-repos-by-default.md
+doc/de/blog/2026/2026-11-14-add-only-the-requested-repos-by-default.md
 
 ## 4.25.0 - 2026-11-14
 
