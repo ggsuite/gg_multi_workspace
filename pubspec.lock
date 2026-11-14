@@ -426,12 +426,11 @@ packages:
     source: hosted
     version: "2.10.0"
   gg_one_core:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_core
-      sha256: "31e4f9cd4428475cf9f65b60a7509c7c00202984156478705f9e7776c9c5aeb2"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_core"
+      relative: true
+    source: path
     version: "2.18.0"
   gg_one_do_publish:
     dependency: transitive
