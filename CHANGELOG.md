@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.25.0 - 2026-11-14
+
+### Changed
+
+- Fetch each ocean repo once per gg do add
+- Keep the test of the add command off the network
+
 ## 4.24.2 - 2026-11-10
 
 ### Added

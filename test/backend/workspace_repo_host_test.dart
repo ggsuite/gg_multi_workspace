@@ -444,6 +444,15 @@ void main() {
         final ocean = p.join(root.path, 'add', ggMultiOceanFolder);
         final repo = p.join(ocean, 'ggsuite', 'gg_new');
         final ticket = p.join(root.path, 'add', 'ticket');
+
+        // The remote of the url does not exist. Git is told to take a
+        // repository on disk for it: adding the repo fetches its remote,
+        // and a fetch from the real host asks for a login — in a terminal
+        // with a dialog nobody answers, until the test times out.
+        final remote = p
+            .join(root.path, 'add', 'remote.git')
+            .replaceAll(r'\', '/');
+
         File(p.join(repo, 'pubspec.yaml'))
           ..createSync(recursive: true)
           ..writeAsStringSync(
@@ -457,7 +466,9 @@ void main() {
           ['init', '-q', '--initial-branch=main'],
           ['add', '--all'],
           ['commit', '-qm', 'Initial version'],
+          ['clone', '-q', '--bare', '.', remote],
           ['remote', 'add', 'origin', url],
+          ['config', 'url.$remote.insteadOf', url],
         ]) {
           final result = Process.runSync(
             'git',
