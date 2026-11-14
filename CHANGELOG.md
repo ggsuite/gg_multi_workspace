@@ -5,10 +5,11 @@
 ### Changed
 
 - Fetch each ocean repo once per gg do add
+- Keep the test of the add command off the network
 
-One fetch brings branches, tags and the default branch
-A repo the run refreshed already is not fetched again
-pub.dev is asked about all hosted dependencies at once
+The test of addWithAddCommand fetched a repository that does not exist from its host. The host asks for a login, and in a terminal git waits for it until the test times out. Git now takes a repository on disk for that url
+Add the blog post of the change
+Tighten the dependencies
 
 ## 4.24.2 - 2026-11-10
 
