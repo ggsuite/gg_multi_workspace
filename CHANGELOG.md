@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Fetch each ocean repo once per gg do add
+
+One fetch brings branches, tags and the default branch
+A repo the run refreshed already is not fetched again
+pub.dev is asked about all hosted dependencies at once
+
 ## 4.24.2 - 2026-11-10
 
 ### Added

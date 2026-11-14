@@ -148,6 +148,7 @@ class AddCommand extends Command<dynamic> {
     DuplicateRepoCleanup? duplicateRepoCleanup,
     DefaultBranch? defaultBranch,
     GitRetry gitRetry = const GitRetry(),
+    this._gitVersion = const GitVersion(),
     ReadSettings? readSettings,
     ReposBetween? reposBetween,
     // coverage:ignore-start
@@ -258,6 +259,13 @@ class AddCommand extends Command<dynamic> {
   /// Retries a git network command the remote dropped.
   final GitRetry _gitRetry;
 
+  /// Tells whether git refreshes `origin/HEAD` while it fetches.
+  final GitVersion _gitVersion;
+
+  /// The canonical paths of the ocean repos this run has brought to the
+  /// state of their remote: fetched with their tags and fast-forwarded.
+  final Set<String> _oceanReposOnRemoteState = <String>{};
+
   /// Resolved ocean path.
   final String oceanWorkspacePath;
 
@@ -366,6 +374,7 @@ class AddCommand extends Command<dynamic> {
 
     ggLog(cDetail('\n✓ Copying repos'));
     _repoLists = _newRepoLists();
+    _oceanReposOnRemoteState.clear();
 
     // A flag on the command line wins; otherwise ~/.gg_rc decides.
     final bool transitiveFromCli = argResults!.wasParsed('transitive');
@@ -605,6 +614,7 @@ class AddCommand extends Command<dynamic> {
         : (releases.toList()..sort()).join(', ');
     ggLog(cDetail('\n✓ Adding the repos between the ticket and $what'));
     _repoLists = _newRepoLists();
+    _oceanReposOnRemoteState.clear();
     // No requested repos: the scan reads the ticket repos' manifests for the
     // dependencies the ocean lacks anyway, and seeding them would walk —
     // and fetch — their whole closure.
@@ -823,22 +833,66 @@ class AddCommand extends Command<dynamic> {
     }
   }
 
-  /// Installs the dependencies of the repos copied now, one after the other:
-  /// parallel installs would fetch the same git mirrors of the pub cache. A
-  /// failure is always shown, also without `--verbose`.
+  /// Installs the dependencies of the repos copied now — several at a time
+  /// where they cannot get in each other's way, see
+  /// [installReposDependencies]. A failure is always shown, also without
+  /// `--verbose`.
   Future<void> _installDependencies({
     required Set<String> copiedDirs,
     required GgLog ggLog,
+  }) => installReposDependencies(
+    dirs: <Directory>[for (final dir in copiedDirs) Directory(dir)],
+    ggLog: ggLog,
+    processRunner: processRunner,
+    errorLog: this.ggLog,
+  );
+
+  /// Asks pub.dev for the repository url of every hosted dependency the
+  /// manifests of [repoDirs] declare that is neither in [knownPackages] nor
+  /// in [cache] yet, several at a time, and keeps the answers in [cache] —
+  /// null for a package pub.dev could not answer for.
+  Future<void> _lookUpHostedDependencies({
+    required List<Directory> repoDirs,
+    required Set<String> knownPackages,
+    required Map<String, String?> cache,
   }) async {
-    for (final dir in copiedDirs) {
-      await installRepoDependencies(
-        dir: Directory(dir),
-        repoName: path.basename(dir),
-        ggLog: ggLog,
-        processRunner: processRunner,
-        errorLog: this.ggLog,
-      );
+    final names = <String>{};
+    for (final repoDir in repoDirs) {
+      final pubspecFile = File(path.join(repoDir.path, 'pubspec.yaml'));
+      if (!pubspecFile.existsSync()) {
+        continue;
+      }
+      final Pubspec parsed;
+      try {
+        parsed = Pubspec.parse(pubspecFile.readAsStringSync());
+      } catch (_) {
+        continue; // the scan skips an unparseable pubspec as well
+      }
+      for (final deps in [parsed.dependencies, parsed.devDependencies]) {
+        for (final MapEntry(key: name, value: dep) in deps.entries) {
+          if (dep is HostedDependency &&
+              !knownPackages.contains(name) &&
+              !cache.containsKey(name)) {
+            names.add(name);
+          }
+        }
+      }
     }
+
+    final pending = names.toList();
+    await gg.runInParallel<void>(
+      count: pending.length,
+      maxParallel: gg.GgParallelism.network,
+      // The lookups log nothing.
+      ggLog: ggLog,
+      task: (index, _) async {
+        try {
+          cache[pending[index]] = await _fetchRepoUrl(pending[index]);
+        } catch (_) {
+          cache[pending[index]] = null;
+        }
+      },
+    );
   }
 
   /// Folder names of all repositories of the ocean.
@@ -986,12 +1040,26 @@ class AddCommand extends Command<dynamic> {
           ggLog: ggLog,
           directories: pending,
           workspacePath: oceanWorkspacePath,
+          // The repos copied into the ticket below need the tags as well;
+          // fetched here, they are not fetched a second time there.
+          mirrorTags: true,
+          onUpToDate: (dir) =>
+              _oceanReposOnRemoteState.add(path.canonicalize(dir.path)),
         );
         updated.addAll(pending.map((dir) => dir.path));
       }
 
       // Plan: depName -> the dependency and the manifest that declared it.
       final plan = <String, _PlannedDep>{};
+
+      // The scan below asks pub.dev about every hosted dependency the ocean
+      // does not hold — dozens of third-party packages. Asked one by one
+      // they are what a run waits for; asked at once they are not.
+      await _lookUpHostedDependencies(
+        repoDirs: [...closure, ...ticketDirs],
+        knownPackages: knownPackages,
+        cache: hostedLookupCache,
+      );
 
       for (final repoDir in [...closure, ...ticketDirs]) {
         final pubspecPath = path.join(repoDir.path, 'pubspec.yaml');
@@ -1011,14 +1079,8 @@ class AddCommand extends Command<dynamic> {
                 manifestPath: pubspecPath,
               );
             } else if (dep is HostedDependency) {
-              // Resolve repo URL via pub.dev; accept only known-org URLs.
-              if (!hostedLookupCache.containsKey(depName)) {
-                try {
-                  hostedLookupCache[depName] = await _fetchRepoUrl(depName);
-                } catch (_) {
-                  hostedLookupCache[depName] = null;
-                }
-              }
+              // The repo URL pub.dev names, looked up for all hosted
+              // dependencies at once above; accept only known-org URLs.
               final repoUrl = hostedLookupCache[depName];
               if (repoUrl == null || repoUrl.isEmpty) {
                 continue;
@@ -1421,8 +1483,10 @@ class AddCommand extends Command<dynamic> {
     required Map<String, String> repoUrls,
     required GgLog ggLog,
     required GgLog reportLog,
-    int maxParallel = 4,
+    int? maxParallel,
   }) async {
+    // Each copy starts with a fetch: as many as a remote takes at once.
+    maxParallel ??= gg.GgParallelism.network;
     final queue = repoNames.toList();
     final copiedDirs = <String>{};
     var nextIndex = 0;
@@ -1544,19 +1608,14 @@ class AddCommand extends Command<dynamic> {
       repoName: repoName,
       ggLog: ggLog,
     );
-    await _gitFetch(repoDir: repoDir, repoName: repoName, ggLog: ggLog);
+    // A repo this run brought to its remote state a moment ago — branches,
+    // tags and default branch — is not fetched again.
+    if (_oceanReposOnRemoteState.contains(path.canonicalize(repoDir.path))) {
+      ggLog(darkGray('$repoName in ocean was fetched by this run already.'));
+    } else {
+      await _gitFetch(repoDir: repoDir, repoName: repoName, ggLog: ggLog);
+    }
     await _gitResetHardToOriginDefault(
-      repoDir: repoDir,
-      repoName: repoName,
-      ggLog: ggLog,
-    );
-    await _gitDeleteAllLocalTags(
-      repoDir: repoDir,
-      repoName: repoName,
-      ggLog: ggLog,
-    );
-    await _gitFetchTags(repoDir: repoDir, repoName: repoName, ggLog: ggLog);
-    await _gitFetchPruneTags(
       repoDir: repoDir,
       repoName: repoName,
       ggLog: ggLog,
@@ -1642,15 +1701,16 @@ class AddCommand extends Command<dynamic> {
   }
 
   /// Runs a single git command in [repoDir] and logs success/failure. A
-  /// [network] command (fetch) is retried when the remote drops the
-  /// connection.
+  /// command that talks to the remote names itself with [networkCommand]
+  /// (`git fetch`): it is retried when the remote drops the connection, and
+  /// the retry notice calls it by that name.
   Future<ProcessResult> _runGit({
     required Directory repoDir,
     required List<String> arguments,
     required String successMessage,
     required String failureLabel,
     required GgLog ggLog,
-    bool network = false,
+    String? networkCommand,
   }) async {
     Future<ProcessResult> run() => processRunner(
       'git',
@@ -1658,17 +1718,13 @@ class AddCommand extends Command<dynamic> {
       workingDirectory: repoDir.path,
       runInShell: true,
     );
-    final result = network
-        ? await _gitRetry.run(
-            run,
-            ggLog: ggLog,
-            description: 'git ${arguments.join(' ')}',
-          )
+    final result = networkCommand != null
+        ? await _gitRetry.run(run, ggLog: ggLog, description: networkCommand)
         : await run();
 
     if (result.exitCode != 0) {
       ggLog(cError('Failed to execute $failureLabel: ${result.stderr}'));
-      if (network) {
+      if (networkCommand != null) {
         _logSshHint(repoDir, '${result.stderr}', ggLog);
       }
     } else {
@@ -1692,28 +1748,45 @@ class AddCommand extends Command<dynamic> {
   /// The hosts whose ssh hint was logged in this run.
   final _sshHintedHosts = <String>{};
 
-  /// Runs `git fetch` in [repoDir] and refreshes `origin/HEAD` afterwards.
+  /// Brings what [repoDir] knows about its remote to the state of the remote:
+  /// the remote-tracking branches, the tags and `origin/HEAD`.
   ///
-  /// `git fetch` updates every remote branch but never `origin/HEAD`, and a
-  /// checkout that was built with `git init` + `git remote add` does not
-  /// record it at all. `git remote set-head origin --auto` asks the remote
-  /// which branch it declares as its default, so the reset that follows lands
-  /// on the branch the remote means today — not on the one it meant when the
-  /// repository was cloned. Offline the call fails like the fetch does; both
-  /// are reported and the run goes on with what the checkout already knows.
+  /// One fetch does all of it (gg_git's [Fetch.arguments]): it prunes the
+  /// branches and tags the remote dropped and moves the tags the remote
+  /// moved, so the tags are the remote's afterwards — what deleting every
+  /// local tag and fetching them again used to do with three connections.
+  ///
+  /// `origin/HEAD` matters for the reset that follows: it lands on the branch
+  /// the remote declares as its default today — not on the one it declared
+  /// when the repository was cloned, and a checkout built with `git init` +
+  /// `git remote add` does not record one at all. A git that can do so
+  /// updates it while it fetches; an older one is asked with
+  /// `git remote set-head origin --auto` afterwards. Offline that call fails
+  /// like the fetch does; both are reported and the run goes on with what
+  /// the checkout already knows.
   Future<void> _gitFetch({
     required Directory repoDir,
     required String repoName,
     required GgLog ggLog,
   }) async {
+    final (major, minor) = GitVersion.followRemoteHead;
+    final followRemoteHead = await _gitVersion.isAtLeast(major, minor);
+
     await _runGit(
       repoDir: repoDir,
-      arguments: <String>['fetch'],
+      arguments: Fetch.arguments(
+        mirrorTags: true,
+        followRemoteHead: followRemoteHead,
+      ),
       successMessage: 'Executed git fetch in $repoName in ocean.',
       failureLabel: 'git fetch in $repoName in ocean',
       ggLog: ggLog,
-      network: true,
+      // Without the options: the retry notice names what is repeated.
+      networkCommand: 'git fetch',
     );
+    if (followRemoteHead) {
+      return;
+    }
 
     final setHead = await _gitRetry.run(
       () => processRunner(
@@ -1768,82 +1841,6 @@ class AddCommand extends Command<dynamic> {
           '$repoName in ocean.',
       failureLabel: 'git reset --hard origin/$branch in $repoName in ocean',
       ggLog: ggLog,
-    );
-  }
-
-  /// Deletes all local tags in [repoDir] without using a shell pipe.
-  /// Lists tags via `git tag -l`, then `git tag -d <tags...>` in one call
-  /// (macOS-safe; xargs-pipe variant fails under Process.run).
-  Future<void> _gitDeleteAllLocalTags({
-    required Directory repoDir,
-    required String repoName,
-    required GgLog ggLog,
-  }) async {
-    final list = await _runGit(
-      repoDir: repoDir,
-      arguments: <String>['tag', '-l'],
-      successMessage: 'Listed local tags in $repoName in ocean.',
-      failureLabel: 'git tag -l in $repoName in ocean',
-      ggLog: ggLog,
-    );
-
-    if (list.exitCode != 0) {
-      return;
-    }
-
-    final tags = (list.stdout as String)
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-
-    if (tags.isEmpty) {
-      ggLog(darkGray('No local tags to delete in $repoName in ocean.'));
-      return;
-    }
-
-    await _runGit(
-      repoDir: repoDir,
-      arguments: <String>['tag', '-d', ...tags],
-      successMessage:
-          'Deleted ${tags.length} local tag(s) in $repoName in ocean '
-          'workspace.',
-      failureLabel: 'git tag -d <tags> in $repoName in ocean',
-      ggLog: ggLog,
-    );
-  }
-
-  /// Runs `git fetch --tags` in [repoDir].
-  Future<void> _gitFetchTags({
-    required Directory repoDir,
-    required String repoName,
-    required GgLog ggLog,
-  }) async {
-    await _runGit(
-      repoDir: repoDir,
-      arguments: <String>['fetch', '--tags'],
-      successMessage: 'Executed git fetch --tags in $repoName in ocean.',
-      failureLabel: 'git fetch --tags in $repoName in ocean',
-      ggLog: ggLog,
-      network: true,
-    );
-  }
-
-  /// Runs `git fetch --prune --tags` in [repoDir].
-  Future<void> _gitFetchPruneTags({
-    required Directory repoDir,
-    required String repoName,
-    required GgLog ggLog,
-  }) async {
-    await _runGit(
-      repoDir: repoDir,
-      arguments: <String>['fetch', '--prune', '--tags'],
-      successMessage:
-          'Executed git fetch --prune --tags in '
-          '$repoName in ocean.',
-      failureLabel: 'git fetch --prune --tags in $repoName in ocean',
-      ggLog: ggLog,
-      network: true,
     );
   }
 

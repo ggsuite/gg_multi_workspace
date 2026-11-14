@@ -139,6 +139,9 @@ void main() {
       FetchRepoUrl? fetchRepoUrl,
       DefaultBranch? defaultBranch,
       GitRetry gitRetry = const GitRetry(),
+      // By default an older git: it asks for the default branch of the
+      // remote with a call of its own, which the tests can answer.
+      GitVersion gitVersion = const GitVersion.unknown(),
       GitHubPlatform? gitHubPlatform,
       SelectOrganization? selectOrganization,
       PubDevPackageExists? pubDevPackageExists,
@@ -172,6 +175,7 @@ void main() {
           fetchRepoUrl: fetchRepoUrl,
           defaultBranch: defaultBranch ?? fakeDefaultBranch(),
           gitRetry: gitRetry,
+          gitVersion: gitVersion,
         ),
       );
     }
@@ -629,7 +633,7 @@ void main() {
         Map<String, String>? environment,
         bool runInShell = false,
       }) async {
-        final isFetch = arguments.length == 1 && arguments.first == 'fetch';
+        final isFetch = arguments.first == 'fetch';
         if (isFetch && ++fetches == 1) {
           return ProcessResult(
             0,
@@ -707,7 +711,7 @@ dev_dependencies:
       when(
         () => mockProc(
           'git',
-          ['fetch'],
+          ['fetch', '--prune', '--prune-tags', '--force'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -724,30 +728,6 @@ dev_dependencies:
         () => mockProc(
           'git',
           ['reset', '--hard', 'origin/main'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['tag', '-l'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--tags'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--prune', '--tags'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -886,7 +866,7 @@ dev_dependencies:
         when(
           () => mockProc(
             'git',
-            ['fetch'],
+            ['fetch', '--prune', '--prune-tags', '--force'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -903,30 +883,6 @@ dev_dependencies:
           () => mockProc(
             'git',
             ['reset', '--hard', 'origin/main'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['tag', '-l'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['fetch', '--tags'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['fetch', '--prune', '--tags'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -1629,7 +1585,7 @@ version: 1.0.0
       when(
         () => mockProc(
           'git',
-          ['fetch'],
+          ['fetch', '--prune', '--prune-tags', '--force'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -1646,30 +1602,6 @@ version: 1.0.0
         () => mockProc(
           'git',
           ['reset', '--hard', 'origin/main'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['tag', '-l'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--tags'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--prune', '--tags'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -1886,9 +1818,8 @@ version: 1.0.0
       // Every network call of the ocean repo fails: ssh does not know the
       // host. The local ones work.
       for (final arguments in [
-        ['fetch'],
+        ['fetch', '--prune', '--prune-tags', '--force'],
         ['remote', 'set-head', 'origin', '--auto'],
-        ['fetch', '--tags'],
       ]) {
         when(
           () => mockProc(
@@ -1909,7 +1840,7 @@ version: 1.0.0
 
       expect(
         logMessages.where((m) => m.startsWith('Failed to execute git fetch')),
-        hasLength(2),
+        hasLength(1),
       );
       expect(
         logMessages.where(
@@ -1973,7 +1904,7 @@ version: 1.0.0
       when(
         () => mockProc(
           'git',
-          ['fetch'],
+          ['fetch', '--prune', '--prune-tags', '--force'],
           workingDirectory: oceanRepoDir.path,
           runInShell: true,
         ),
@@ -1994,30 +1925,6 @@ version: 1.0.0
           runInShell: true,
         ),
       ).thenAnswer((_) async => ProcessResult(1, 1, '', 'reset error'));
-      when(
-        () => mockProc(
-          'git',
-          ['tag', '-l'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--tags'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--prune', '--tags'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
       when(
         () => mockProc(
           'dart',
@@ -2047,6 +1954,7 @@ version: 1.0.0
       final localRunner = CommandRunner<void>('test', 'Add pull fail')
         ..addCommand(
           AddCommand(
+            gitVersion: const GitVersion.unknown(),
             ggLog: ggLog,
             gitCloner: mockGitCloner,
             processRunner: mockProc.call,
@@ -2075,7 +1983,7 @@ version: 1.0.0
       verify(
         () => mockProc(
           'git',
-          ['fetch'],
+          ['fetch', '--prune', '--prune-tags', '--force'],
           workingDirectory: oceanRepoDir.path,
           runInShell: true,
         ),
@@ -2092,30 +2000,6 @@ version: 1.0.0
         () => mockProc(
           'git',
           ['reset', '--hard', 'origin/main'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).called(1);
-      verify(
-        () => mockProc(
-          'git',
-          ['tag', '-l'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).called(1);
-      verify(
-        () => mockProc(
-          'git',
-          ['fetch', '--tags'],
-          workingDirectory: oceanRepoDir.path,
-          runInShell: true,
-        ),
-      ).called(1);
-      verify(
-        () => mockProc(
-          'git',
-          ['fetch', '--prune', '--tags'],
           workingDirectory: oceanRepoDir.path,
           runInShell: true,
         ),
@@ -2245,7 +2129,7 @@ version: 1.0.0
         when(
           () => mockProcessRunner(
             'git',
-            ['fetch'],
+            ['fetch', '--prune', '--prune-tags', '--force'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -2262,30 +2146,6 @@ version: 1.0.0
           () => mockProcessRunner(
             'git',
             ['reset', '--hard', 'origin/main'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProcessRunner(
-            'git',
-            ['tag', '-l'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-        when(
-          () => mockProcessRunner(
-            'git',
-            ['fetch', '--tags'],
-            workingDirectory: repoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProcessRunner(
-            'git',
-            ['fetch', '--prune', '--tags'],
             workingDirectory: repoDir.path,
             runInShell: true,
           ),
@@ -2862,7 +2722,7 @@ version: 1.0.0
       when(
         () => mockProc(
           'git',
-          ['fetch'],
+          ['fetch', '--prune', '--prune-tags', '--force'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -2879,30 +2739,6 @@ version: 1.0.0
         () => mockProc(
           'git',
           ['reset', '--hard', 'origin/main'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['tag', '-l'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--tags'],
-          workingDirectory: repoDir.path,
-          runInShell: true,
-        ),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-      when(
-        () => mockProc(
-          'git',
-          ['fetch', '--prune', '--tags'],
           workingDirectory: repoDir.path,
           runInShell: true,
         ),
@@ -4116,6 +3952,8 @@ version: 1.0.0
             ggLog: any(named: 'ggLog'),
             directories: any(named: 'directories'),
             workspacePath: any(named: 'workspacePath'),
+            mirrorTags: any(named: 'mirrorTags'),
+            onUpToDate: any(named: 'onUpToDate'),
           ),
         ).thenAnswer((invocation) async {
           final dirs =
@@ -4126,6 +3964,7 @@ version: 1.0.0
         runner = CommandRunner<void>('test', 'Test for AddCommand')
           ..addCommand(
             AddCommand(
+              gitVersion: const GitVersion.unknown(),
               ggLog: ggLog,
               gitCloner: mockGitCloner,
               processRunner: anyProcessRunner().call,
@@ -4140,6 +3979,86 @@ version: 1.0.0
         // Only the requested repo's closure is fetched, not the ticket's.
         expect(refreshed, contains('tx_other'));
         expect(refreshed, isNot(contains('tx_tooling')));
+      });
+
+      test('does not fetch a repo again that the refresh just brought to '
+          'its remote state', () async {
+        oceanRepo('tx_other');
+
+        final ticketDir = ticket('T_ONCE');
+        File(path.join(ticketDir.path, 'ticket.json'))
+            .writeAsStringSync('{"issue_id": "T_ONCE"}');
+
+        // The refresh reports every repo it was given as up to date.
+        final repoFreshness = MockRepoFreshness();
+        registerFallbackValue(<Directory>[]);
+        when(
+          () => repoFreshness.updateAll(
+            ggLog: any(named: 'ggLog'),
+            directories: any(named: 'directories'),
+            workspacePath: any(named: 'workspacePath'),
+            mirrorTags: any(named: 'mirrorTags'),
+            onUpToDate: any(named: 'onUpToDate'),
+          ),
+        ).thenAnswer((invocation) async {
+          final dirs =
+              invocation.namedArguments[#directories] as Iterable<Directory>;
+          final onUpToDate =
+              invocation.namedArguments[#onUpToDate]
+                  as void Function(Directory);
+          dirs.forEach(onUpToDate);
+        });
+
+        final gitCalls = <String>[];
+        Future<ProcessResult> recording(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool runInShell = true,
+        }) async {
+          if (executable == 'git') {
+            gitCalls.add(arguments.join(' '));
+          }
+          return ProcessResult(0, 0, '', '');
+        }
+
+        runner = CommandRunner<void>('test', 'Test for AddCommand')
+          ..addCommand(
+            AddCommand(
+              gitVersion: const GitVersion.unknown(),
+              ggLog: ggLog,
+              gitCloner: mockGitCloner,
+              processRunner: recording,
+              oceanWorkspacePath: oceanWorkspacePath,
+              executionPath: ticketDir.path,
+              repoFreshness: repoFreshness,
+              defaultBranch: fakeDefaultBranch(),
+            ),
+          );
+        await runner.run(['add', '--no-localize', '--verbose', 'tx_other']);
+
+        // The refresh fetched with the tags; the copy only resets.
+        final refresh = verify(
+          () => repoFreshness.updateAll(
+            ggLog: any(named: 'ggLog'),
+            directories: any(named: 'directories'),
+            workspacePath: any(named: 'workspacePath'),
+            mirrorTags: captureAny(named: 'mirrorTags'),
+            onUpToDate: any(named: 'onUpToDate'),
+          ),
+        );
+        expect(refresh.captured, everyElement(isTrue));
+        expect(gitCalls.where((call) => call.contains('fetch')), isEmpty);
+        expect(gitCalls, contains('reset --hard origin/main'));
+        expect(
+          logMessages,
+          contains('tx_other in ocean was fetched by this run already.'),
+        );
+        expect(
+          Directory(path.join(ticketDir.path, 'tx_other')).existsSync(),
+          isTrue,
+        );
       });
     });
 
@@ -4175,6 +4094,7 @@ version: 1.0.0
       final cmdRunner = CommandRunner<void>('test', 'Add with graph mock')
         ..addCommand(
           AddCommand(
+            gitVersion: const GitVersion.unknown(),
             ggLog: ggLog,
             gitCloner: mockGitCloner,
             oceanWorkspacePath: oceanWorkspacePath,
@@ -4484,7 +4404,7 @@ version: 1.0.0
         when(
           () => mockProc(
             'git',
-            ['fetch'],
+            ['fetch', '--prune', '--prune-tags', '--force'],
             workingDirectory: oceanRepoDir.path,
             runInShell: true,
           ),
@@ -4501,30 +4421,6 @@ version: 1.0.0
           () => mockProc(
             'git',
             ['reset', '--hard', 'origin/main'],
-            workingDirectory: oceanRepoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['tag', '-l'],
-            workingDirectory: oceanRepoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['fetch', '--tags'],
-            workingDirectory: oceanRepoDir.path,
-            runInShell: true,
-          ),
-        ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
-        when(
-          () => mockProc(
-            'git',
-            ['fetch', '--prune', '--tags'],
             workingDirectory: oceanRepoDir.path,
             runInShell: true,
           ),
@@ -5430,6 +5326,84 @@ version: 1.0.0
           Directory(path.join(ticketDir.path, repoName)).existsSync(),
           isTrue,
         );
+      });
+
+      group('talks to the remote of an ocean repo', () {
+        const repoName = 'syncedRepo';
+        late Directory oceanRepoDir;
+        late List<String> oceanGitCalls;
+
+        /// Answers every command with success and keeps the git calls that
+        /// ran in the ocean repo.
+        Future<ProcessResult> recording(
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool runInShell = true,
+        }) async {
+          if (executable == 'git' && workingDirectory == oceanRepoDir.path) {
+            oceanGitCalls.add(arguments.join(' '));
+          }
+          return ProcessResult(0, 0, '', '');
+        }
+
+        setUp(() {
+          oceanGitCalls = <String>[];
+          oceanRepoDir = Directory(path.join(oceanWorkspacePath, repoName))
+            ..createSync(recursive: true);
+          File(path.join(oceanRepoDir.path, 'file.txt')).writeAsStringSync('x');
+        });
+
+        test('once: a git that can do it fetches branches, tags and '
+            'origin/HEAD with one call', () async {
+          createRunner(
+            executionPath: ticketDir.path,
+            processRunner: recording,
+            systemCommit: anyDoCommit(),
+            gitVersion: const GitVersion.fixed(2, 48),
+          );
+
+          await runner.run(['add', '--verbose', repoName]);
+
+          expect(oceanGitCalls, [
+            'status --porcelain --untracked-files=no',
+            '-c remote.origin.followRemoteHEAD=always '
+                'fetch --prune --prune-tags --force',
+            'reset --hard origin/main',
+          ]);
+          expect(
+            logMessages,
+            contains('Executed git fetch in $repoName in ocean.'),
+          );
+          expect(
+            Directory(path.join(ticketDir.path, repoName)).existsSync(),
+            isTrue,
+          );
+        });
+
+        test('twice with an older git: the fetch, then the question for '
+            'the default branch', () async {
+          createRunner(
+            executionPath: ticketDir.path,
+            processRunner: recording,
+            systemCommit: anyDoCommit(),
+            gitVersion: const GitVersion.fixed(2, 47),
+          );
+
+          await runner.run(['add', '--verbose', repoName]);
+
+          expect(oceanGitCalls, [
+            'status --porcelain --untracked-files=no',
+            'fetch --prune --prune-tags --force',
+            'remote set-head origin --auto',
+            'reset --hard origin/main',
+          ]);
+          expect(
+            logMessages,
+            contains('Refreshed origin/HEAD in $repoName in ocean.'),
+          );
+        });
       });
     });
   });
