@@ -8,9 +8,7 @@
 
 ### Changed
 
-- Add only the requested repos with gg do add by default; --transitive or
-do.add.transitive = true in ~/.gg_rc adds the repos between
-- Tidy up the unreleased CHANGELOG entries
+- Add only the requested repos with gg do add by default; --transitive or ~/.gg_rc adds the repos between
 
 ## 4.25.0 - 2026-11-14
 
