@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.26.0 - 2026-11-14
+
+### Added
+
+- Add a blog post on adding only the requested repos, in English and German
+
+### Changed
+
+- Add only the requested repos with gg do add by default; --transitive or ~/.gg_rc adds the repos between
+
 ## 4.25.0 - 2026-11-14
 
 ### Changed

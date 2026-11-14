@@ -1011,7 +1011,7 @@ dev_dependencies:
         systemCommit: mockDoCommit,
       );
 
-      await runner.run(['add', existingRepoName]);
+      await runner.run(['add', '--transitive', existingRepoName]);
 
       // Org fallback: `github.com/<dep>/<dep>`, cloned over ssh.
       verify(
@@ -1092,7 +1092,7 @@ dev_dependencies:
         },
       );
 
-      await runner.run(['add', existingRepoName]);
+      await runner.run(['add', '--transitive', existingRepoName]);
 
       // Fetcher called; exception swallowed; cloner sees no phantom URL.
       expect(fetchCalls, greaterThanOrEqualTo(1));
@@ -1177,7 +1177,7 @@ dev_dependencies:
         fetchRepoUrl: (pkg) async => repoUrl,
       );
 
-      await runner.run(['add', existingRepoName]);
+      await runner.run(['add', '--transitive', existingRepoName]);
 
       verify(() => mockGitCloner.cloneRepo(cloneUrl, any())).called(1);
     });
@@ -1330,7 +1330,7 @@ dev_dependencies:
           gitHubPlatform: offering(['requested', 'org_dep']),
         );
 
-        await runner.run(['add', 'requested', '--no-localize']);
+        await runner.run(['add', '--transitive', 'requested', '--no-localize']);
 
         verify(
           () => mockGitCloner.cloneRepo(
@@ -1360,7 +1360,13 @@ dev_dependencies:
           defaultBranch: fakeDefaultBranch(),
         );
 
-        await runner.run(['add', 'other', '--no-localize', '--no-fetch']);
+        await runner.run([
+          'add',
+          '--transitive',
+          'other',
+          '--no-localize',
+          '--no-fetch',
+        ]);
 
         verify(
           () => mockGitCloner.cloneRepo('git@github.com:myorg/x.git', any()),
@@ -1394,7 +1400,12 @@ dev_dependencies:
             },
           );
 
-          await runner.run(['add', 'requested', '--no-localize']);
+          await runner.run([
+            'add',
+            '--transitive',
+            'requested',
+            '--no-localize',
+          ]);
 
           expect(offered, ['org_dep', 'myorg', 'otherorg']);
           verify(
@@ -1429,7 +1440,13 @@ dev_dependencies:
           gitHubPlatform: offering(['requested', 'c', 'bar']),
         );
 
-        await runner.run(['add', 'requested', '--no-localize', '--no-fetch']);
+        await runner.run([
+          'add',
+          '--transitive',
+          'requested',
+          '--no-localize',
+          '--no-fetch',
+        ]);
 
         verify(
           () => mockGitCloner.cloneRepo('git@github.com:myorg/c.git', any()),
@@ -1455,7 +1472,7 @@ dev_dependencies:
           gitHubPlatform: offering(['requested', 'org_dep']),
         );
 
-        await runner.run(['add', 'requested', '--no-localize']);
+        await runner.run(['add', '--transitive', 'requested', '--no-localize']);
 
         // Tried once — the fixpoint loop does not retry it forever.
         verify(
@@ -1499,7 +1516,7 @@ dev_dependencies:
           gitHubPlatform: offering(['requested', 'org_dep']),
         );
 
-        await runner.run(['add', 'requested', '--no-localize']);
+        await runner.run(['add', '--transitive', 'requested', '--no-localize']);
 
         expect(
           logMessages,
@@ -1520,7 +1537,7 @@ dev_dependencies:
           gitHubPlatform: broken,
         );
 
-        await runner.run(['add', 'requested', '--no-localize']);
+        await runner.run(['add', '--transitive', 'requested', '--no-localize']);
 
         // Once, after the last round, with the reason and what to try.
         expect(
@@ -1546,7 +1563,7 @@ dev_dependencies:
           pubDevPackageExists: (package) async => package != 'hidden_dep',
         );
 
-        await runner.run(['add', 'requested', '--no-localize']);
+        await runner.run(['add', '--transitive', 'requested', '--no-localize']);
 
         final manifest = path.join(
           oceanWorkspacePath,
@@ -2370,7 +2387,7 @@ version: 1.0.0
             systemCommit: mockDoCommit,
           );
 
-          await runner.run(['add', targetName]);
+          await runner.run(['add', '--transitive', targetName]);
 
           // The scoped dep of the known org is cloned (via org-fallback URL).
           verify(
@@ -2438,7 +2455,7 @@ version: 1.0.0
 
         createRunner(executionPath: ticketDir.path);
 
-        await runner.run(['add', targetName]);
+        await runner.run(['add', '--transitive', targetName]);
 
         final log = logMessages.join('\n');
         expect(
@@ -2505,7 +2522,7 @@ version: 1.0.0
           processRunner: mockProc.call,
         );
 
-        await runner.run(['add', targetName, '--no-fetch']);
+        await runner.run(['add', '--transitive', targetName, '--no-fetch']);
 
         expect(
           logMessages.join('\n'),
@@ -3053,7 +3070,7 @@ version: 1.0.0
           systemCommit: mockDoCommit,
         );
 
-        await runner.run(['add', '--verbose', 'a', 'c']);
+        await runner.run(['add', '--transitive', '--verbose', 'a', 'c']);
 
         expect(Directory(path.join(ticketDir.path, 'a')).existsSync(), isTrue);
         expect(Directory(path.join(ticketDir.path, 'b')).existsSync(), isTrue);
@@ -3331,6 +3348,45 @@ version: 1.0.0
         );
       });
 
+      test('leaves the repos between out by default, and says so', () async {
+        ticketRunner();
+
+        await runner.run(['add', 'a', 'c']);
+
+        expect(
+          [inTicket('a'), inTicket('b'), inTicket('c')],
+          [true, false, true],
+        );
+        expect(
+          logMessages,
+          contains(
+            'Skip adding transitive repos (default). A breaking release adds '
+            'them later: gg do add transitive for <repo>.',
+          ),
+        );
+      });
+
+      test('~/.gg_rc can add the repos between by default', () async {
+        ticketRunner(
+          ggRc: GgRc(
+            values: const {
+              'do': {
+                'add': {'transitive': true},
+              },
+            },
+            file: rcFile,
+          ),
+        );
+
+        await runner.run(['add', 'a', 'c']);
+
+        expect(
+          [inTicket('a'), inTicket('b'), inTicket('c')],
+          [true, true, true],
+        );
+        expect(logMessages, isNot(contains(startsWith('Skip adding'))));
+      });
+
       test('--transitive beats ~/.gg_rc', () async {
         ticketRunner(ggRc: lean);
 
@@ -3578,6 +3634,9 @@ version: 1.0.0
         File(path.join(existingC.path, 'pubspec.yaml'))
             .writeAsStringSync('name: c\nversion: 1.0.0\n');
 
+        // A ticket folder without manifest is looked up by its folder name.
+        Directory(path.join(ticketDir.path, 'notes')).createSync();
+
         final mockRunner = MockProcessRunner();
         when(
           () => mockRunner(
@@ -3640,7 +3699,7 @@ version: 1.0.0
           systemCommit: mockDoCommit,
         );
 
-        await runner.run(['add', '--verbose', 'a']);
+        await runner.run(['add', '--transitive', '--verbose', 'a']);
 
         expect(Directory(path.join(ticketDir.path, 'a')).existsSync(), isTrue);
         expect(Directory(path.join(ticketDir.path, 'b')).existsSync(), isTrue);
@@ -3867,7 +3926,7 @@ version: 1.0.0
           executionPath: ticketDir.path,
           processRunner: anyProcessRunner().call,
         );
-        await runner.run(['add', '--no-localize', 'd']);
+        await runner.run(['add', '--transitive', '--no-localize', 'd']);
 
         expect(Directory(path.join(ticketDir.path, 'c')).existsSync(), isTrue);
         expect(Directory(path.join(ticketDir.path, 'd')).existsSync(), isTrue);
@@ -3914,7 +3973,7 @@ version: 1.0.0
           executionPath: ticketDir.path,
           processRunner: anyProcessRunner().call,
         );
-        await runner.run(['add', '--no-localize', 'tx_other']);
+        await runner.run(['add', '--transitive', '--no-localize', 'tx_other']);
 
         verify(
           () => mockGitCloner.cloneRepo(
@@ -3974,7 +4033,7 @@ version: 1.0.0
               defaultBranch: fakeDefaultBranch(),
             ),
           );
-        await runner.run(['add', '--no-localize', 'tx_other']);
+        await runner.run(['add', '--transitive', '--no-localize', 'tx_other']);
 
         // Only the requested repo's closure is fetched, not the ticket's.
         expect(refreshed, contains('tx_other'));
@@ -4036,7 +4095,13 @@ version: 1.0.0
               defaultBranch: fakeDefaultBranch(),
             ),
           );
-        await runner.run(['add', '--no-localize', '--verbose', 'tx_other']);
+        await runner.run([
+          'add',
+          '--transitive',
+          '--no-localize',
+          '--verbose',
+          'tx_other',
+        ]);
 
         // The refresh fetched with the tags; the copy only resets.
         final refresh = verify(
@@ -4105,7 +4170,7 @@ version: 1.0.0
           ),
         );
 
-      await cmdRunner.run(['add', repoName]);
+      await cmdRunner.run(['add', '--transitive', repoName]);
 
       expect(
         logMessages.any(
@@ -4213,6 +4278,7 @@ version: 1.0.0
         );
         await runner.run([
           'add',
+          '--transitive',
           if (verbose) '--verbose',
           '--no-transitive',
           ...args,
