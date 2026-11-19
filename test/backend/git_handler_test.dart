@@ -205,6 +205,84 @@ void main() {
         expect(tempDir.existsSync(), isTrue);
       });
 
+      test('removes the half-filled clone of an ended git', () async {
+        // A clone gg ended — the remote turned it away — leaves its .git
+        // behind. The next run would take it for an added repository.
+        const repoUrl = 'https://git.example.com/org/repo.git';
+        final targetDirectory = path.join(tempDir.path, 'org', 'repo');
+
+        when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+          File(path.join(targetDirectory, '.git', 'HEAD'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync('ref: refs/heads/main');
+          return ProcessResult(
+            456,
+            128,
+            '',
+            'remote: VS403463: The conditional access policy …',
+          );
+        });
+
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(Directory(targetDirectory).existsSync(), isFalse);
+        expect(Directory(path.join(tempDir.path, 'org')).existsSync(), isFalse);
+      });
+
+      test('leaves the files of a clone it did not end', () async {
+        // Another clone into the same target filled it in the meantime;
+        // this one failed for that, not because gg ended it.
+        const repoUrl = 'https://git.example.com/org/repo.git';
+        final targetDirectory = path.join(tempDir.path, 'org', 'repo');
+        final head = File(path.join(targetDirectory, '.git', 'HEAD'));
+
+        when(() => mockProcessRunner('git', any())).thenAnswer((_) async {
+          head.createSync(recursive: true);
+          return ProcessResult(
+            456,
+            128,
+            '',
+            "fatal: destination path 'repo' already exists and is not an "
+                'empty directory.',
+          );
+        });
+
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(head.existsSync(), isTrue);
+      });
+
+      test('keeps a target that held files before the clone', () async {
+        // git refuses to clone into it; what it holds is not gg's.
+        const repoUrl = 'https://git.example.com/org/repo.git';
+        final targetDirectory = path.join(tempDir.path, 'org', 'repo');
+        final file = File(path.join(targetDirectory, 'notes.txt'))
+          ..createSync(recursive: true);
+
+        when(() => mockProcessRunner('git', any())).thenAnswer(
+          (_) async => ProcessResult(
+            456,
+            128,
+            '',
+            "fatal: destination path 'repo' already exists and is not an "
+                'empty directory.',
+          ),
+        );
+
+        await expectLater(
+          gitHandler.cloneRepo(repoUrl, targetDirectory),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(file.existsSync(), isTrue);
+      });
+
       test('keeps an existing org folder that holds other repos', () async {
         // Arrange: the org folder existed before and holds another repo, so
         // a failing clone must leave it untouched.
@@ -821,6 +899,72 @@ void main() {
       );
       verifyNever(() => sshHostKeys.scan(any()));
       expect(prompts.asked, isEmpty);
+    });
+
+    group('when Azure DevOps turns the request away', () {
+      const azureUrl = 'git@ssh.dev.azure.com:v3/mhk-carat/ds_cdm/ds_dna';
+      const conditionalAccess =
+          'remote: VS403463: The conditional access policy defined by your '
+          'Microsoft Entra administrator has failed.';
+
+      setUp(() {
+        when(
+          () => mockProcessRunner('git', any()),
+        ).thenAnswer((_) async => ProcessResult(0, 128, '', conditionalAccess));
+      });
+
+      test('a clone says to sign in again and is not retried', () async {
+        await expectLater(
+          handler().cloneRepo(azureUrl, targetDirectory),
+          throwsA(
+            isA<SshSetupException>()
+                // The policy is one organization's: the others on the
+                // host may still answer.
+                .having((e) => e.host, 'host', isNull)
+                .having(
+                  (e) => rmControls(e.message),
+                  'message',
+                  allOf(
+                    contains('VS403463'),
+                    contains(
+                      'Sign in to https://dev.azure.com/mhk-carat in the '
+                      'browser',
+                    ),
+                  ),
+                ),
+          ),
+        );
+        verify(() => mockProcessRunner('git', any())).called(1);
+        verifyNever(() => sshHostKeys.scan(any()));
+        expect(prompts.asked, isEmpty);
+      });
+
+      test('a lookup logs the next step once per organization', () async {
+        final gitHandler = handler();
+
+        expect(await gitHandler.remoteExists(azureUrl), isFalse);
+        expect(
+          await gitHandler.remoteExists(
+            'git@ssh.dev.azure.com:v3/mhk-carat/ds_cdm/other',
+          ),
+          isFalse,
+        );
+
+        expect(
+          await gitHandler.remoteExists(
+            'git@ssh.dev.azure.com:v3/other-org/p/r',
+          ),
+          isFalse,
+        );
+
+        final hints = messages
+            .map(rmControls)
+            .where((m) => m.startsWith('Azure DevOps turned the request away'))
+            .toList();
+        expect(hints, hasLength(2));
+        expect(hints[0], contains('https://dev.azure.com/mhk-carat '));
+        expect(hints[1], contains('https://dev.azure.com/other-org '));
+      });
     });
 
     group('remoteExists', () {

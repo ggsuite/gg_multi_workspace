@@ -317,10 +317,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_git
-      sha256: ff827e1e267bcd33d68b4009b3f7d2b8393db8c4e8ab32413419e3ee06e5bf82
+      sha256: a0b163eb9d52e3a4942114c5fde840dacaa4f2eabab5c94b9d1c8ee568f7d3c7
       url: "https://pub.dev"
     source: hosted
-    version: "4.9.0"
+    version: "4.10.0"
   gg_hash:
     dependency: transitive
     description:
@@ -341,10 +341,10 @@ packages:
     dependency: transitive
     description:
       name: gg_is_flutter
-      sha256: b93b62e0e46ba1ea1165c3813cc306c41f687d8ca99d7b5cb4986832a6d3f6c1
+      sha256: dae6905a70431511cf9755dc492191082368c2b0f7374037680e469a4284953a
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.5"
+    version: "2.3.0"
   gg_is_github:
     dependency: transitive
     description:
@@ -421,26 +421,26 @@ packages:
     dependency: transitive
     description:
       name: gg_one_commit
-      sha256: "8771cf1ede92410b4551e184cd507c7b399ed252c8b2261c8aaa7f01b00ed3cd"
+      sha256: "345b24be6ea3a7335e045837b89fbd167a3fd3543b30f9ff3ee4b1f8c1aab07c"
       url: "https://pub.dev"
     source: hosted
-    version: "2.10.0"
+    version: "2.10.1"
   gg_one_core:
     dependency: transitive
     description:
       name: gg_one_core
-      sha256: "9177fc932bfb3a8b82fbadde078ace0fe6e560ef90c1b4f966b99558cd76e551"
+      sha256: "5fade9f261d685c7fb5cfefb66bc1106053863cb3cb53ed1b35e5538ba820774"
       url: "https://pub.dev"
     source: hosted
-    version: "2.19.0"
+    version: "2.20.0"
   gg_one_do_publish:
     dependency: transitive
     description:
       name: gg_one_do_publish
-      sha256: e9e22770c9269b5914551b9a0663640d48e525e55a688a6e398564f4b68c4d6a
+      sha256: "4dfa4ac40ad0a1f930e87dce10fa1640d296dde66a4083ead5aba599aba2c8b7"
       url: "https://pub.dev"
     source: hosted
-    version: "2.12.0"
+    version: "2.13.0"
   gg_one_merge:
     dependency: transitive
     description:
@@ -453,10 +453,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_process
-      sha256: d617786addbc00fe417a512a3f18ea24eaf29771b2bbb3fd15903351b760d3d5
+      sha256: "0a51b2a50b134b7c287a6fe5219b84757659f42158dbfd1f957557dea61f949f"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.0"
+    version: "1.6.0"
   gg_project_root:
     dependency: transitive
     description:
@@ -485,10 +485,10 @@ packages:
     dependency: transitive
     description:
       name: gg_test
-      sha256: ec777a41821eaf5ae7eae70faa1f991fbaddc73036ec364c7df173808051d33e
+      sha256: c93590b793d5df7a201a2ed0eaab761493e8e9a2dd0c4aa8f2e909df8f02efb8
       url: "https://pub.dev"
     source: hosted
-    version: "3.4.0"
+    version: "3.5.0"
   gg_version:
     dependency: transitive
     description:
@@ -906,4 +906,4 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.13.0 <4.0.0"
+  dart: ">=3.14.0 <4.0.0"

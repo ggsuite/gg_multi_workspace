@@ -52,7 +52,10 @@ class SshSetupException implements Exception {
   /// What went wrong and what the developer does next.
   final String message;
 
-  /// The ssh host, as known_hosts names it, when the url names one.
+  /// The ssh host, as known_hosts names it, when the url names one and the
+  /// problem concerns the host. Null for a failed conditional access policy
+  /// of Azure DevOps: it applies to one organization, the other
+  /// organizations on the host may still answer.
   final String? host;
 
   @override
@@ -70,6 +73,10 @@ class GitHandler {
   ///
   /// The network commands (clone, ls-remote) are retried by [gitRetry] when
   /// the remote drops the connection; [ggLog] receives the notice of a retry.
+  /// The retry watches them too ([GitWatch]): a remote that turns them away
+  /// but keeps the connection open — Azure DevOps after a failed
+  /// conditional access policy — ends them at once, and a long silence is
+  /// reported to [ggLog].
   ///
   /// A clone that fails because ssh does not know the host yet shows the
   /// key the host presents and asks on the terminal whether to trust it.
@@ -116,6 +123,10 @@ class GitHandler {
     // created here is remembered and removed again below.
     final directory = Directory(targetDirectory);
     final createdRoot = _createParentDirectories(directory);
+    // A target that does not exist yet is created by this clone.
+    final newTarget =
+        FileSystemEntity.typeSync(targetDirectory) ==
+        FileSystemEntityType.notFound;
 
     // Run the git clone command using the injected process runner.
     Future<ProcessResult> clone() => _gitRetry.run(
@@ -133,9 +144,13 @@ class GitHandler {
     }
 
     if (result.exitCode != 0) {
-      _removeLeftovers(target: directory, createdRoot: createdRoot);
-
       final stderr = '${result.stderr}'.trim();
+      _removeLeftovers(
+        target: directory,
+        createdRoot: createdRoot,
+        endedClone: newTarget && GitWatch.isFatalRemoteMessage(stderr),
+      );
+
       final failure = 'Failed to clone repo from $repoUrl: $stderr';
       final hint = SshHostKeys.setupHint(
         repoUrl,
@@ -145,7 +160,9 @@ class GitHandler {
       if (hint != null) {
         throw SshSetupException(
           cError('$failure\n$hint'),
-          host: SshHostKeys.hostOf(repoUrl),
+          host: SshHostKeys.isConditionalAccessFailure(stderr)
+              ? null
+              : SshHostKeys.hostOf(repoUrl),
         );
       }
       throw Exception(cError(failure));
@@ -265,14 +282,25 @@ class GitHandler {
   /// created but did not fill it, and the folders [_createParentDirectories]
   /// made for it.
   ///
+  /// git removes what a failed clone created by itself — unless the clone
+  /// was ended because the remote turned it away ([endedClone], see
+  /// [GitWatch]). Then its half-filled `.git` stays in the target the clone
+  /// created, and the next run would take it for an added repository, so
+  /// the target is removed with all it holds.
+  ///
   /// Only the target folder is searched. Its parents are deleted one by one
   /// while they are empty and never searched: clones run in parallel, and a
   /// parent can hold the folder of another clone git is filling right now.
   void _removeLeftovers({
     required Directory target,
     required Directory? createdRoot,
+    required bool endedClone,
   }) {
-    _deleteEmptyTree(target);
+    if (endedClone) {
+      _deleteTree(target);
+    } else {
+      _deleteEmptyTree(target);
+    }
     if (createdRoot == null) {
       return;
     }
@@ -303,6 +331,16 @@ class GitHandler {
       return;
     }
     _deleteIfEmpty(directory);
+  }
+
+  /// Deletes [directory] with all it holds. A folder that cannot be deleted
+  /// is left as it is: a leftover must never hide the error of the clone.
+  void _deleteTree(Directory directory) {
+    try {
+      directory.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Missing already, or locked a moment after git ended.
+    }
   }
 
   /// Deletes [directory] when it is empty and returns whether it is gone.
@@ -355,14 +393,15 @@ class GitHandler {
   /// repositories of it fail.
   void _logSshHint(String repoUrl, String stderr) {
     final hint = SshHostKeys.setupHint(repoUrl, stderr);
-    final host = SshHostKeys.hostOf(repoUrl);
-    if (hint != null && _hintedHosts.add(host ?? repoUrl)) {
+    if (hint != null &&
+        _hintedScopes.add(SshHostKeys.hintScope(repoUrl, stderr))) {
       _ggLog(yellow(hint));
     }
   }
 
-  /// The hosts whose ssh hint was logged in this run.
-  final _hintedHosts = <String>{};
+  /// What the hints logged in this run were about, see
+  /// [SshHostKeys.hintScope].
+  final _hintedScopes = <String>{};
 
   /// Sets the url of the remote `origin` of the repository at [repoPath].
   /// Throws an exception if git cannot change the remote.
