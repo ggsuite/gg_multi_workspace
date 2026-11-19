@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 4.27.0 - 2026-11-19
 
 ### Removed
 
 - Explain a failed conditional access policy of Azure DevOps (VS403463) in do add, try the other organizations and remove the clone gg ended
+
 ## 4.26.1 - 2026-11-19
 
 ### Added
