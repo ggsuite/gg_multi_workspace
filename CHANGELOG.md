@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.27.0 - 2026-11-19
+
+### Removed
+
+- Remove the hooks and skill files from the workspace that a newer dna_gg no longer ships
+
 ## 4.26.1 - 2026-11-19
 
 ### Added

@@ -205,22 +205,33 @@ List<String> claudeLayerFilesIn(String dir) {
     ..sort();
 }
 
-/// The folder below `.claude/` holding the scripts the hooks run.
+/// The folder below `.claude/` holding the scripts the hooks run. It
+/// belongs to the DNA: the user's own hooks run scripts elsewhere.
 const String claudeHooksFolder = 'hooks';
+
+/// The folder below `.claude/` holding the skills.
+const String claudeSkillsFolder = 'skills';
 
 /// Copies everything in the `.claude/` folder [source] over [destination]
 /// — beside the user's own files, over those of the same name — except
 /// `settings.json`, which is merged by [mergeClaudeSettings]: the user's
 /// own settings and hooks in it stay.
+///
+/// What an earlier DNA placed goes first, so a hook or a skill file a
+/// newer DNA no longer ships does not stay behind: the whole `hooks`
+/// folder, every skill folder [source] ships and, in `settings.json`, the
+/// hook groups that run a script in `hooks` — also when [source] ships no
+/// `settings.json` any more.
 Future<void> _copyClaudeFolder(Directory source, Directory destination) async {
   destination.createSync(recursive: true);
+  _removeEarlierDna(source, destination);
   for (final entity in source.listSync(followLinks: false)) {
     final name = path.basename(entity.path);
     final target = path.join(destination.path, name);
-    if (entity is Directory) {
+    if (name == claudeSettingsFile && entity is File) {
+      continue;
+    } else if (entity is Directory) {
       await copyDirectory(entity, Directory(target), skipNames: const {});
-    } else if (name == claudeSettingsFile && entity is File) {
-      _mergeSettingsInto(entity, File(target), source);
     } else if (entity is Link) {
       final link = Link(target);
       if (link.existsSync()) link.deleteSync();
@@ -229,38 +240,61 @@ Future<void> _copyClaudeFolder(Directory source, Directory destination) async {
       entity.copySync(target);
     }
   }
+  _mergeSettingsInto(
+    File(path.join(source.path, claudeSettingsFile)),
+    File(path.join(destination.path, claudeSettingsFile)),
+  );
+}
+
+/// Removes from the `.claude/` folder [destination] the `hooks` folder and
+/// the skill folders the DNA in [source] ships — see [_copyClaudeFolder].
+void _removeEarlierDna(Directory source, Directory destination) {
+  final hooks = Directory(path.join(destination.path, claudeHooksFolder));
+  if (hooks.existsSync()) hooks.deleteSync(recursive: true);
+
+  final skills = Directory(path.join(source.path, claudeSkillsFolder));
+  if (!skills.existsSync()) return;
+  for (final skill in skills.listSync(followLinks: false)) {
+    final name = path.basename(skill.path);
+    final target = path.join(destination.path, claudeSkillsFolder, name);
+    switch (FileSystemEntity.typeSync(target, followLinks: false)) {
+      case FileSystemEntityType.directory:
+        Directory(target).deleteSync(recursive: true);
+      case FileSystemEntityType.notFound:
+        break;
+      default:
+        File(target).deleteSync();
+    }
+  }
 }
 
 /// Writes the DNA settings [dna] into [target], merged with what [target]
-/// holds. The hook scripts the DNA ships are the files in the `hooks`
-/// folder beside [dna] in [dnaClaude].
-void _mergeSettingsInto(File dna, File target, Directory dnaClaude) {
-  final hooks = Directory(path.join(dnaClaude.path, claudeHooksFolder));
-  final scripts = hooks.existsSync()
-      ? hooks.listSync().whereType<File>().map((f) => path.basename(f.path))
-      : const <String>[];
-  target.writeAsStringSync(
-    mergeClaudeSettings(
-      existing: target.existsSync() ? target.readAsStringSync() : null,
-      dna: dna.readAsStringSync(),
-      dnaHookScripts: scripts.toSet(),
-    ),
+/// holds. Without [dna], [target] keeps only the user's own settings and
+/// is removed when none are left.
+void _mergeSettingsInto(File dna, File target) {
+  final merged = mergeClaudeSettings(
+    existing: target.existsSync() ? target.readAsStringSync() : null,
+    dna: dna.existsSync() ? dna.readAsStringSync() : null,
   );
+  if (merged != null) {
+    target.writeAsStringSync(merged);
+  } else if (target.existsSync()) {
+    target.deleteSync();
+  }
 }
 
 /// The Claude Code settings [existing] with the DNA settings [dna] merged
 /// in. The keys of [existing] win, except for `hooks`: per event, the hook
-/// groups of [existing] that run one of the [dnaHookScripts] — what an
+/// groups of [existing] that run a script in `.claude/hooks/` — what an
 /// earlier DNA placed — are replaced by the groups of [dna]; the user's
 /// own groups stay. Without [existing], it is [dna]. An [existing] that is
-/// no JSON object is left as it is.
-String mergeClaudeSettings({
-  required String? existing,
-  required String dna,
-  required Set<String> dnaHookScripts,
-}) {
-  final dnaJson = jsonDecode(dna);
-  if (existing == null || dnaJson is! Map<String, dynamic>) return dna;
+/// no JSON object is left as it is. `null` when there is nothing to write:
+/// neither [existing] nor [dna], or no [dna] and nothing of the user's
+/// own left in [existing].
+String? mergeClaudeSettings({required String? existing, required String? dna}) {
+  if (existing == null) return dna;
+  final Object? dnaJson = dna == null ? <String, dynamic>{} : jsonDecode(dna);
+  if (dnaJson is! Map<String, dynamic>) return dna;
   final Object? own;
   try {
     own = jsonDecode(existing);
@@ -280,9 +314,7 @@ String mergeClaudeSettings({
     return hooks.any((hook) {
       final command = hook is Map ? hook['command'] : null;
       return command is String &&
-          dnaHookScripts.any(
-            (s) => command.contains('.claude/$claudeHooksFolder/$s'),
-          );
+          command.contains('.claude/$claudeHooksFolder/');
     });
   }
 
@@ -310,6 +342,7 @@ String mergeClaudeSettings({
   } else {
     merged['hooks'] = hooks;
   }
+  if (dna == null && merged.isEmpty) return null;
   return '${const JsonEncoder.withIndent('  ').convert(merged)}\n';
 }
 
@@ -503,7 +536,7 @@ Future<void> copyWorkspaceDna({
     }
   }
 
-  for (final folder in const ['skills', claudeHooksFolder]) {
+  for (final folder in const [claudeSkillsFolder, claudeHooksFolder]) {
     final source = Directory(path.join(root, '.claude', folder));
     if (source.existsSync()) {
       await copyDirectory(
@@ -519,7 +552,6 @@ Future<void> copyWorkspaceDna({
     _mergeSettingsInto(
       settings,
       File(path.join(ticketDir, '.claude', claudeSettingsFile)),
-      Directory(path.join(root, '.claude')),
     );
   }
 }
