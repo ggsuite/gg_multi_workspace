@@ -87,11 +87,11 @@ List<String> matchOceanRepoNames(
 }
 
 // #############################################################################
-/// The [AddReposBetween] `gg do review` is handed: adds the repos between
-/// [releases] and the ticket in [ticketDir] the way
+/// The [AddReposBetween] the ticket commands are handed: adds the repos
+/// between [releases] and the ticket in [ticketDir] the way
 /// `gg do add transitive for <releases>` does — `--no-fetch`, like
 /// [WorkspaceRepoHost.addWithAddCommand]: an ocean repo on a feature branch,
-/// or a network hiccup, must not fail a review that has pushed already.
+/// or a network hiccup, must not fail a commit, push or review half way.
 Future<List<String>> addReposBetweenWithAddCommand({
   required Directory ticketDir,
   required Set<String> releases,
@@ -120,7 +120,8 @@ Future<List<String>> addReposBetweenWithAddCommand({
 /// makes that the default. `gg do add transitive for <repo>…` adds them
 /// afterwards — only the repos above `<repo>`, which its breaking release
 /// strands (see [ReposBetween]); `gg do add transitive` without `for` asks
-/// about every ticket repo.
+/// about every ticket repo. The ticket commands do the former by themselves
+/// once a recorded release breaks, through [addReposBetweenWithAddCommand].
 class AddCommand extends Command<dynamic> {
   /// Constructor. [localizeRefs], [backupPublishTo], [systemCommit] and
   /// [processRunner] reach the localization only when [ticketLocalizer] is
@@ -566,8 +567,8 @@ class AddCommand extends Command<dynamic> {
           : 'default';
       ggLog(
         cDetail(
-          'Skip adding transitive repos ($why). A breaking release adds '
-          'them later: gg do add transitive for <repo>.',
+          'Skip adding transitive repos ($why). gg adds them once a release '
+          'breaks their dependents.',
         ),
       );
     }

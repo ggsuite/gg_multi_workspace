@@ -10,6 +10,7 @@ import 'package:args/command_runner.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_workspace/src/commands/do/localize.dart';
 import 'package:gg_status_printer/gg_status_printer.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
 
@@ -43,9 +44,19 @@ void main() {
     return dir;
   }
 
-  Future<void> run() async {
+  Future<void> run({AddReposBetween? addReposBetween}) async {
+    // The ocean repos are plain folders without a remote to refresh from.
+    final freshness = MockRepoFreshness();
+    when(
+      () => freshness.updateAll(
+        ggLog: any(named: 'ggLog'),
+        directories: any(named: 'directories'),
+        workspacePath: any(named: 'workspacePath'),
+      ),
+    ).thenAnswer((_) async {});
     final localizer = TicketLocalizer(
       ggLog: messages.add,
+      repoFreshness: freshness,
       processRunner:
           (
             executable,
@@ -63,6 +74,7 @@ void main() {
         DoLocalizeCommand(
           ggLog: (m) => messages.add(rmControls(m)),
           ticketLocalizer: localizer,
+          addReposBetween: addReposBetween,
         ),
       );
     await runner.run(['localize', '--input', ticketDir.path]);
@@ -110,9 +122,9 @@ void main() {
       expect(messages, contains('✓ All references are already localized.'));
     });
 
-    test('localizes and only warns about missing repos', () async {
-      // a reaches its ticket sibling d only through the ocean's c, and the
-      // recorded major release of d breaks c.
+    /// A ticket {a, b, d}: a depends on b and on the ocean's c, which
+    /// depends on d — and the recorded major release of d breaks c.
+    Future<Directory> ticketMissingC() async {
       final a = await repo('a', 'dependencies:\n  b: ^1.0.0\n  c: ^1.0.0\n');
       await repo('b', '');
       final d = await repo('d', '');
@@ -124,6 +136,40 @@ void main() {
       File(path.join(c.path, 'pubspec.yaml')).writeAsStringSync(
         'name: c\nversion: 1.0.0\ndependencies:\n  d: ^1.0.0\n',
       );
+      return a;
+    }
+
+    test('adds the repos between a breaking release to the ticket, then '
+        'localizes them too', () async {
+      final a = await ticketMissingC();
+      final calls = <Set<String>>[];
+
+      await run(
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              calls.add(releases);
+              await repo('c', 'dependencies:\n  d: ^1.0.0\n');
+              return ['c'];
+            },
+      );
+
+      expect(calls, [
+        {'d'},
+      ]);
+      expect(messages, [
+        rmControls(addingBetweenMessage(['d'])),
+        // In dependency order: a depends on c.
+        '✓ Localized the references of c',
+        '✓ Localized the references of a',
+      ]);
+      expect(
+        File(path.join(a.path, 'pubspec_overrides.yaml')).readAsStringSync(),
+        allOf(contains('path: ../b'), contains('path: ../c')),
+      );
+    });
+
+    test('localizes and only warns about missing repos', () async {
+      final a = await ticketMissingC();
 
       await run();
 
