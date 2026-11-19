@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.27.0 - 2026-11-19
 
 ### Removed
 
