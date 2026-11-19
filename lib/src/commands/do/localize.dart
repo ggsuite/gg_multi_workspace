@@ -16,7 +16,9 @@ import 'package:path/path.dart' as path;
 
 /// Localizes the references between the repositories of the current ticket:
 /// only out-of-sync repos are touched, gg's changes become `#gg:` commits.
-/// Repos missing between the ticket repos only warn with a `gg do add` hint.
+/// The ocean repos between a ticket repo and a recorded release that breaks
+/// its dependents are added to the ticket first with [AddReposBetween], when
+/// it is handed over; other missing repos are only warned about.
 class DoLocalizeCommand extends DirCommand<void> {
   /// Constructor.
   DoLocalizeCommand({
@@ -25,9 +27,11 @@ class DoLocalizeCommand extends DirCommand<void> {
     super.description = 'Localize the references between the ticket repos',
     SortedProcessingList? sortedProcessingList,
     TicketLocalizer? ticketLocalizer,
+    AddReposBetween? addReposBetween,
   }) : _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
-       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog);
+       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
+       _addBetween = addReposBetween;
 
   // ...........................................................................
   @override
@@ -50,8 +54,17 @@ class DoLocalizeCommand extends DirCommand<void> {
       );
     }
 
+    final ticketDir = Directory(ticketPath);
+
+    // A breaking release brings the repos between into the ticket first.
+    await _ticketLocalizer.addMissingBetween(
+      ticketDir: ticketDir,
+      addReposBetween: _addBetween,
+      ggLog: ggLog,
+    );
+
     final nodes = await _sortedProcessingList.get(
-      directory: Directory(ticketPath),
+      directory: ticketDir,
       ggLog: ggLog,
     );
     if (nodes.isEmpty) {
@@ -59,9 +72,9 @@ class DoLocalizeCommand extends DirCommand<void> {
       return;
     }
 
-    // Missing repos are only warned about; this cannot clone them.
+    // Other missing repos are only warned about.
     final localized = await _ticketLocalizer.localizeUnlocalized(
-      ticketDir: Directory(ticketPath),
+      ticketDir: ticketDir,
       repos: nodes,
       ggLog: ggLog,
     );
@@ -79,6 +92,9 @@ class DoLocalizeCommand extends DirCommand<void> {
 
   /// Checks, localizes and commits the references of the ticket repos.
   final TicketLocalizer _ticketLocalizer;
+
+  /// Adds the repos a breaking release strands; null adds none.
+  final AddReposBetween? _addBetween;
 }
 
 /// Mock for [DoLocalizeCommand].

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add the repos between a breaking release on localize
+
 ## 4.26.0 - 2026-11-14
 
 ### Added

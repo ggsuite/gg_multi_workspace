@@ -3323,8 +3323,8 @@ version: 1.0.0
           logMessages,
           contains(
             'Skip adding transitive repos (${rcFile.path}: '
-            'do.add.transitive = false). A breaking release adds them later: '
-            'gg do add transitive for <repo>.',
+            'do.add.transitive = false). gg adds them once a release breaks '
+            'their dependents.',
           ),
         );
       });
@@ -3360,8 +3360,8 @@ version: 1.0.0
         expect(
           logMessages,
           contains(
-            'Skip adding transitive repos (default). A breaking release adds '
-            'them later: gg do add transitive for <repo>.',
+            'Skip adding transitive repos (default). gg adds them once a '
+            'release breaks their dependents.',
           ),
         );
       });
