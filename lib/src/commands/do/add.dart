@@ -1743,13 +1743,15 @@ class AddCommand extends Command<dynamic> {
   void _logSshHint(Directory repoDir, String stderr, GgLog ggLog) {
     final url = RepoFolderResolver.remoteUrl(repoDir) ?? '';
     final hint = SshHostKeys.setupHint(url, stderr);
-    if (hint != null && _sshHintedHosts.add(SshHostKeys.hostOf(url) ?? url)) {
+    if (hint != null &&
+        _sshHintedScopes.add(SshHostKeys.hintScope(url, stderr))) {
       ggLog(cAction(hint));
     }
   }
 
-  /// The hosts whose ssh hint was logged in this run.
-  final _sshHintedHosts = <String>{};
+  /// What the ssh hints logged in this run were about, see
+  /// [SshHostKeys.hintScope].
+  final _sshHintedScopes = <String>{};
 
   /// Brings what [repoDir] knows about its remote to the state of the remote:
   /// the remote-tracking branches, the tags and `origin/HEAD`.

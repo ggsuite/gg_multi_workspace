@@ -1238,6 +1238,43 @@ void main() {
       );
     });
 
+    test('tries the other organizations of a host after a failed '
+        'conditional access policy', () async {
+      // The policy is one organization's; SshSetupException names no host.
+      final orgFile = File(path.join(workspacePath, '.organizations'));
+      orgFile.writeAsStringSync(
+        jsonEncode({
+          'first': 'git@ssh.dev.azure.com:v3/first/project/',
+          'second': 'git@ssh.dev.azure.com:v3/second/project/',
+        }),
+      );
+
+      const repoName = 'azureRepo';
+
+      final mockGitCloner = MockGitCloner();
+      when(() => mockGitCloner.remoteExists(any()))
+          .thenAnswer((_) async => false);
+      when(() => mockGitCloner.cloneRepo(any(), any()))
+          .thenThrow(Exception('repository not found'));
+      when(
+        () => mockGitCloner.cloneRepo(any(that: contains('/first/')), any()),
+      ).thenThrow(SshSetupException('Sign in to https://dev.azure.com/first'));
+      when(
+        () => mockGitCloner.cloneRepo(any(that: contains('/second/')), any()),
+      ).thenAnswer((_) async {});
+
+      await addRepositoryHelper(
+        targetArg: repoName,
+        ggLog: ggLog,
+        gitCloner: mockGitCloner,
+        workspacePath: workspacePath,
+      );
+
+      verify(
+        () => mockGitCloner.cloneRepo(any(that: contains('/second/')), any()),
+      ).called(1);
+    });
+
     test('skips GitHub fallback organizations registered by their https url '
         'once ssh failed for github.com', () async {
       // A GitHub organization is cloned over ssh, however it was registered,
