@@ -403,7 +403,7 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "4.20.1"
+    version: "4.20.2"
   gg_one:
     dependency: "direct main"
     description:
