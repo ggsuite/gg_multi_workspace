@@ -165,6 +165,100 @@ void main() {
       );
     });
 
+    test('removes the hooks and skill files a newer DNA no longer ships, '
+        'keeping the own ones', () async {
+      file(path.join('.claude', 'settings.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'hooks': {
+              'UserPromptSubmit': [
+                _group('node .claude/hooks/pm-prompts.mjs prompt'),
+                _group('echo mine'),
+              ],
+            },
+          }),
+        );
+      file(path.join('.claude', 'hooks', 'pm-prompts.mjs'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('// hook\n');
+      file(path.join('.claude', 'skills', 'gg', 'retired.md'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('old');
+      file(path.join('.claude', 'skills', 'mine', 'SKILL.md'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('# mine\n');
+      file(path.join('.claude', 'settings.local.json')).writeAsStringSync('{}');
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+      );
+
+      expect(
+        Directory(path.join(tempDir.path, '.claude', 'hooks')).existsSync(),
+        isFalse,
+      );
+      expect(
+        jsonDecode(
+          file(path.join('.claude', 'settings.json')).readAsStringSync(),
+        ),
+        {
+          'hooks': {
+            'UserPromptSubmit': [_group('echo mine')],
+          },
+        },
+      );
+      expect(
+        file(path.join('.claude', 'skills', 'gg', 'retired.md')).existsSync(),
+        isFalse,
+      );
+      expect(
+        file(path.join('.claude', 'skills', 'gg', 'SKILL.md')).existsSync(),
+        isTrue,
+      );
+      expect(
+        file(path.join('.claude', 'skills', 'mine', 'SKILL.md')).existsSync(),
+        isTrue,
+      );
+      expect(
+        file(path.join('.claude', 'settings.local.json')).existsSync(),
+        isTrue,
+      );
+    });
+
+    test('removes settings that held nothing but DNA hooks', () async {
+      file(path.join('.claude', 'settings.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(_dnaSettings);
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+      );
+
+      expect(file(path.join('.claude', 'settings.json')).existsSync(), isFalse);
+    });
+
+    test('replaces a skill the root holds as a file or a link', () async {
+      final skills = Directory(path.join(tempDir.path, '.claude', 'skills'))
+        ..createSync(recursive: true);
+      Link(path.join(skills.path, 'gg')).createSync('../elsewhere');
+
+      await instantiateWorkspaceDna(
+        root: tempDir.path,
+        runDna: fakeDna(),
+        ggLog: ggLog,
+      );
+
+      expect(
+        file(path.join('.claude', 'skills', 'gg', 'SKILL.md')).existsSync(),
+        isTrue,
+      );
+    });
+
     test('replaces a link of the same name', () async {
       Link(path.join(tempDir.path, '.claude', 'shared'))
           .createSync('../old', recursive: true);
@@ -763,11 +857,8 @@ void main() {
   });
 
   group('mergeClaudeSettings', () {
-    String merge(String? existing) => mergeClaudeSettings(
-      existing: existing,
-      dna: _dnaSettings,
-      dnaHookScripts: {'pm-prompts.mjs'},
-    );
+    String? merge(String? existing) =>
+        mergeClaudeSettings(existing: existing, dna: _dnaSettings);
 
     test('is the DNA settings without own ones', () {
       expect(merge(null), _dnaSettings);
@@ -783,8 +874,7 @@ void main() {
         mergeClaudeSettings(
           existing: '{"model": "mine"}',
           dna: '{"model": "dna", "env": {"A": "1"}}',
-          dnaHookScripts: const {},
-        ),
+        )!,
       );
       expect(merged, {
         'model': 'mine',
@@ -797,8 +887,7 @@ void main() {
         mergeClaudeSettings(
           existing: '{"hooks": {"Odd": "x", "Stop": [1, {"hooks": 2}]}}',
           dna: '{}',
-          dnaHookScripts: {'old.mjs'},
-        ),
+        )!,
       );
       expect(merged, {
         'hooks': {
@@ -820,8 +909,7 @@ void main() {
             },
           }),
           dna: '{}',
-          dnaHookScripts: {'old.mjs'},
-        ),
+        )!,
       );
       expect(merged, <String, dynamic>{});
     });
@@ -835,6 +923,54 @@ void main() {
         }),
       );
       expect(merge(once), once);
+    });
+
+    test('drops the hooks of any script in .claude/hooks', () {
+      final merged = jsonDecode(
+        mergeClaudeSettings(
+          existing: jsonEncode({
+            'hooks': {
+              'Stop': [
+                _group('node .claude/hooks/retired.mjs'),
+                _group('node tools/mine.mjs'),
+              ],
+            },
+          }),
+          dna: '{}',
+        )!,
+      );
+      expect(merged, {
+        'hooks': {
+          'Stop': [_group('node tools/mine.mjs')],
+        },
+      });
+    });
+
+    group('without DNA settings', () {
+      test('is null without own settings', () {
+        expect(mergeClaudeSettings(existing: null, dna: null), isNull);
+      });
+
+      test('is null when only DNA hooks were in them', () {
+        expect(mergeClaudeSettings(existing: _dnaSettings, dna: null), isNull);
+      });
+
+      test('keeps the own settings', () {
+        final merged = mergeClaudeSettings(
+          existing: jsonEncode({
+            'model': 'mine',
+            'hooks': {
+              'Stop': [_group('node .claude/hooks/old.mjs')],
+            },
+          }),
+          dna: null,
+        );
+        expect(jsonDecode(merged!), {'model': 'mine'});
+      });
+
+      test('leaves settings alone that are no JSON object', () {
+        expect(mergeClaudeSettings(existing: '[1]', dna: null), '[1]');
+      });
     });
   });
 
