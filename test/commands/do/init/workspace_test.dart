@@ -75,15 +75,15 @@ void main() {
       final runner = runnerFor(tempDir.path, runDna: runDna);
       await runner.run(['workspace']);
 
-      // init, add, build — in this order, all aimed at one temporary
-      // folder, never at the workspace root.
+      // init, then add — both aimed at one temporary folder, never at the
+      // workspace root. No build follows: add builds itself and removes
+      // the dna scaffold a build would need.
       final build = buildFolder();
-      // All three steps run quiet: the line below is the whole report a
+      // Both steps run quiet: the line below is the whole report a
       // workspace gets — no next steps from init either.
       expect(dnaCalls, [
         ['init', '--target', build, '--language', 'dart', '--quiet'],
         ['add', workspaceDnaLayer, '--target', build, '--workspace', '--quiet'],
-        ['build', '--target', build, '--workspace', '--quiet'],
       ]);
       expect(
         messages.last,
@@ -152,7 +152,7 @@ void main() {
 
         // The repetition is what brings a workspace without CLAUDE.md to
         // the current guides, so the DNA runs like on a fresh one.
-        expect(dnaCalls.map((c) => c.first), ['init', 'add', 'build']);
+        expect(dnaCalls.map((c) => c.first), ['init', 'add']);
         buildFolder();
         expect(
           messages.last,
@@ -181,7 +181,7 @@ void main() {
         messages.any((m) => m.contains('inside an existing Gg Multi')),
         isFalse,
       );
-      expect(dnaCalls.map((c) => c.first), ['init', 'add', 'build']);
+      expect(dnaCalls.map((c) => c.first), ['init', 'add']);
     });
 
     test('should not allow init inside non-empty directory', () async {
