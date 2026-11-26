@@ -4,13 +4,17 @@
 
 ### Added
 
-- Add a blog post on the workspace DNA instantiation
+- Add a blog post on the workspace DNA instantiation, in English and German
 
-In English and German
+### Changed
+
+- Require helix ^1.18.0: the placed DNA check calls checkDna
+- Name the link fix and the helix constraint in the changelog
 
 ### Fixed
 
-- Instantiate the workspace DNA without a second build
+- Instantiate the workspace DNA without a second build: gg dna add --workspace builds and removes the dna scaffold, and a gg dna build after it fails outside a git repository since helix 1.16.0
+- Remove a skill the workspace holds as a link without following the link
 
 ## 4.27.1 - 2026-11-19
 
