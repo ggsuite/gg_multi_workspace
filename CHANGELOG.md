@@ -8,8 +8,7 @@
 
 ### Changed
 
-- Require helix ^1.18.0: the placed DNA check calls checkDna
-- Name the link fix and the helix constraint in the changelog
+- Require helix ^1.18.0 for the placed DNA check
 
 ### Fixed
 
