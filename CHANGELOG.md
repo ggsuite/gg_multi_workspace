@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### Removed
+### Fixed
 
 - Instantiate the workspace DNA without a second build
 
