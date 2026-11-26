@@ -2,13 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Add a blog post on the workspace DNA instantiation
+
+In English and German
+
 ### Fixed
 
 - Instantiate the workspace DNA without a second build
-
-Run only gg dna init and gg dna add --workspace: add builds and removes the dna scaffold, and a gg dna build after it fails outside a git repository since helix 1.16.0
-Remove a skill the workspace holds as a link without following the link
-Require helix ^1.18.0: the placed DNA check calls checkDna
 
 ## 4.27.1 - 2026-11-19
 
