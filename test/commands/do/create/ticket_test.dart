@@ -34,23 +34,26 @@ void main() {
         .where((name) => name != 'CLAUDE.md' && name != '.claude')
         .toList();
 
-    /// Stands in for helix: `add` leaves the lock that resolved dna_gg
-    /// 0.5.1, `build` the managed block and a skill in the folder it
-    /// targets.
-    Future<void> runDna(List<String> args) async {
-      dnaCalls.add(args);
-      final target = args[args.indexOf('--target') + 1];
-      if (args.first == 'add') {
-        File(path.join(target, 'pubspec.lock'))
-            .writeAsStringSync('packages:\n  dna_gg:\n    version: "0.5.1"\n');
-      }
-      if (args.first != 'build') return;
-      File(path.join(target, 'CLAUDE.md')).writeAsStringSync(
+    /// Leaves in [dir] what the gg DNA places in a folder: the managed
+    /// block and a skill.
+    void placeDna(String dir) {
+      File(path.join(dir, 'CLAUDE.md')).writeAsStringSync(
         '$claudeMdStartMarker\n# gg workflow\n$claudeMdEndMarker\n',
       );
-      File(path.join(target, '.claude', 'skills', 'gg', 'SKILL.md'))
+      File(path.join(dir, '.claude', 'skills', 'gg', 'SKILL.md'))
         ..createSync(recursive: true)
         ..writeAsStringSync('# gg');
+    }
+
+    /// Stands in for helix: `add` leaves the lock that resolved dna_gg
+    /// 0.5.1 and the DNA in the folder it targets.
+    Future<void> runDna(List<String> args) async {
+      dnaCalls.add(args);
+      if (args.first != 'add') return;
+      final target = args[args.indexOf('--target') + 1];
+      File(path.join(target, 'pubspec.lock'))
+          .writeAsStringSync('packages:\n  dna_gg:\n    version: "0.5.1"\n');
+      placeDna(target);
     }
 
     setUp(() async {
@@ -70,8 +73,7 @@ void main() {
 
       // A workspace root that already carries the latest dna_gg: creating
       // a ticket only copies it, helix does not run.
-      await runDna(['build', '--target', tempDir.path]);
-      dnaCalls.clear();
+      placeDna(tempDir.path);
       File(path.join(tempDir.path, dnaVersionStampPath))
           .writeAsStringSync('0.5.1');
     });

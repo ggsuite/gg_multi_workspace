@@ -21,20 +21,25 @@ const String workspaceDnaLayer = 'dna_gg';
 
 // .............................................................................
 /// Places [workspaceDnaLayer] into the workspace [root] — the folder
-/// holding the ocean. The same three steps as by hand: `gg dna init`,
-/// `gg dna add dna_gg --workspace` and `gg dna build --workspace`. `add`
-/// resolves the latest `dna_gg`, so every call starts from the current
-/// guides and skills. `--workspace` instantiates only `.claude/` and the
-/// managed `CLAUDE.md` block — a workspace is no package of its own, so
-/// it never gets `doc/`, `scripts/`, `.github/` or a DNA manifest. `add`
-/// builds right after installing the layer (the same instantiation
-/// `build` performs), so it needs the flag as much as the explicit
-/// `build` call that follows it.
+/// holding the ocean. The same two steps as by hand: `gg dna init` and
+/// `gg dna add dna_gg --workspace`. `add` resolves the latest `dna_gg`,
+/// so every call starts from the current guides and skills, and builds
+/// right after installing the layer. `--workspace` instantiates only
+/// `.claude/` and the managed `CLAUDE.md` block — a workspace is no
+/// package of its own, so it never gets `doc/`, `scripts/`, `.github/`
+/// or a DNA manifest — and removes the `dna/` scaffold once that build
+/// is through.
 ///
-/// The three steps run in an empty temporary folder, never in [root]:
+/// No `gg dna build` follows `add`: without the scaffold helix has no
+/// layer left to build from. It then takes the managed block `add` just
+/// wrote for one nothing fills any more and empties it — and outside a
+/// git repository it fails instead, on the `CLAUDE.md` it would have to
+/// overwrite.
+///
+/// Both steps run in an empty temporary folder, never in [root]:
 /// `init` and `add` need a pub manifest, a lock, `.dart_tool/` and a
 /// `dna/` scaffold to resolve the layer, and a step that fails half way
-/// would leave them in the workspace. Only when all three steps are
+/// would leave them in the workspace. Only when both steps are
 /// through is the result taken over (see [_takeOver]): its `.claude/` is
 /// copied into [root] — over the files of the same name, beside the
 /// user's own — and its managed `CLAUDE.md` block replaces the one in the
@@ -79,7 +84,6 @@ Future<void> instantiateWorkspaceDna({
       '--workspace',
       '--quiet',
     ]);
-    await runDna(['build', '--target', target, '--workspace', '--quiet']);
     await _takeOver(build: build.path, root: root);
   } catch (e) {
     ggLog(cError('Could not instantiate $workspaceDnaLayer: $e'));
@@ -260,6 +264,10 @@ void _removeEarlierDna(Directory source, Directory destination) {
     switch (FileSystemEntity.typeSync(target, followLinks: false)) {
       case FileSystemEntityType.directory:
         Directory(target).deleteSync(recursive: true);
+      // A link is removed as a link: deleting it as a file follows it
+      // and fails on a link to a folder or to nothing.
+      case FileSystemEntityType.link:
+        Link(target).deleteSync();
       case FileSystemEntityType.notFound:
         break;
       default:
